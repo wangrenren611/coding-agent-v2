@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage
+coverage/
+.nyc_output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+*.test.ts
+.env
+# .env.local
+# .env.*.local
+.env.development
+node_modules
+dist
+.claude/backups
+.memory/*
+.agent-cache/*
+/doc/*
+/web/.next/
+/web/.next/*
+# data/*
+src/cli-tui/.coding-agent
+test-agent
+typescript
+apps/agent-cli-ink-v2/data/*
+
+/test-memory
+
+data
+data/agent-memory
+request.json
+coverage/
+plans
+logs
+.mcp.json
