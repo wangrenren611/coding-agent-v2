@@ -43,7 +43,11 @@ export {
   isRetryableError,
   isPermanentError,
   isAbortedError,
+  calculateBackoff,
+  DEFAULT_BACKOFF_CONFIG,
 } from './types';
+
+export type { BackoffConfig } from './types';
 
 // 类型定义
 export type {
