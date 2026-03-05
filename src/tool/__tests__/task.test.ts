@@ -136,7 +136,9 @@ function createAbortAwareBlockingProvider(): LLMProvider {
     generate: async () => {
       throw new Error('Not implemented in tests');
     },
+    // eslint-disable-next-line require-yield
     async *generateStream(_messages: LLMRequestMessage[], options?: { abortSignal?: AbortSignal }) {
+      // eslint-disable-next-line no-constant-condition
       while (true) {
         if (options?.abortSignal?.aborted) {
           throw new Error('aborted');

@@ -309,9 +309,24 @@ interface ZodDef {
 function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
   // 使用 unknown 作为中间类型来避免复杂的类型约束
   const schemaAny = schema as unknown;
+
+  // Zod v4 有内置的 toJSONSchema 方法
+  if (typeof (schemaAny as { toJSONSchema?: unknown }).toJSONSchema === 'function') {
+    try {
+      const result = (schemaAny as { toJSONSchema: () => Record<string, unknown> }).toJSONSchema();
+      if (result && typeof result === 'object') {
+        return result;
+      }
+    } catch {
+      // 如果内置方法失败，回退到手动转换
+    }
+  }
+
   const def = ((schemaAny as { _zod_def?: ZodDef })._zod_def ||
     (schemaAny as { _def?: ZodDef })._def) as ZodDef | undefined;
-  const typeName = def?.typeName;
+
+  // Zod v4 使用 _def.type 而不是 typeName
+  const typeName = def?.typeName || (def as { type?: string } | undefined)?.type;
 
   // 使用 typeName 字符串比较，兼容 zod v3 和 v4
   if (typeName === 'ZodObject' || typeName === 'Object') {

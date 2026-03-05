@@ -515,3 +515,121 @@ describe('ToolManager error normalization', () => {
     });
   });
 });
+
+describe('ToolManager toToolsSchema', () => {
+  it('should generate tool schema with correct parameters from Zod schema', () => {
+    const manager = new ToolManager();
+    manager.register(new EchoTool());
+
+    const schemas = manager.toToolsSchema();
+
+    expect(schemas).toHaveLength(1);
+    expect(schemas[0].type).toBe('function');
+    expect(schemas[0].function.name).toBe('echo');
+    expect(schemas[0].function.description).toBe('Echo input');
+    expect(schemas[0].function.parameters).toMatchObject({
+      type: 'object',
+      properties: {
+        text: {
+          type: 'string',
+        },
+      },
+      required: ['text'],
+    });
+  });
+
+  it('should generate schema for multiple tools', () => {
+    const manager = new ToolManager();
+    manager.register([new EchoTool(), new FailingTool()]);
+
+    const schemas = manager.toToolsSchema();
+
+    expect(schemas).toHaveLength(2);
+    expect(schemas.map((s) => s.function.name)).toContain('echo');
+    expect(schemas.map((s) => s.function.name)).toContain('failing');
+  });
+
+  it('should filter out disabled tools', () => {
+    class DisabledTool extends BaseTool<typeof emptySchema> {
+      get meta() {
+        return {
+          name: 'disabled',
+          description: 'Disabled tool',
+          parameters: emptySchema,
+          enabled: false,
+        };
+      }
+
+      async execute() {
+        return { success: true, data: {} };
+      }
+    }
+
+    const manager = new ToolManager();
+    manager.register([new EchoTool(), new DisabledTool()]);
+
+    const schemas = manager.toToolsSchema();
+
+    expect(schemas).toHaveLength(1);
+    expect(schemas[0].function.name).toBe('echo');
+  });
+
+  it('should include complex parameter types in schema', () => {
+    const complexSchema = z.object({
+      name: z.string().describe('The name'),
+      count: z.number().int().min(0).max(100),
+      enabled: z.boolean(),
+      tags: z.array(z.string()),
+      mode: z.enum(['auto', 'manual']),
+      optional: z.string().optional(),
+    });
+
+    class ComplexTool extends BaseTool<typeof complexSchema> {
+      get meta() {
+        return {
+          name: 'complex',
+          description: 'Complex parameter types',
+          parameters: complexSchema,
+        };
+      }
+
+      async execute() {
+        return { success: true, data: {} };
+      }
+    }
+
+    const manager = new ToolManager();
+    manager.register(new ComplexTool());
+
+    const schemas = manager.toToolsSchema();
+    const params = schemas[0].function.parameters as Record<string, unknown>;
+
+    expect(params).toMatchObject({
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'The name' },
+        count: { type: 'integer', minimum: 0, maximum: 100 },
+        enabled: { type: 'boolean' },
+        tags: { type: 'array', items: { type: 'string' } },
+        mode: { type: 'string', enum: ['auto', 'manual'] },
+      },
+    });
+
+    // optional field should not be in required
+    const required = params.required as string[];
+    expect(required).toContain('name');
+    expect(required).toContain('count');
+    expect(required).toContain('enabled');
+    expect(required).toContain('tags');
+    expect(required).toContain('mode');
+    expect(required).not.toContain('optional');
+  });
+
+  it('should return empty array when no tools registered', () => {
+    const manager = new ToolManager();
+
+    const schemas = manager.toToolsSchema();
+
+    expect(schemas).toEqual([]);
+  });
+});
