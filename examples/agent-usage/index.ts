@@ -29,7 +29,7 @@ const DEFAULT_MODEL: ModelId = 'glm-4.7';
 const DEFAULT_PROMPT = '初始化一个 Node.js + TypeScript + Vitest 项目，给出执行步骤。';
 const EXAMPLE_DEFAULT_LOG_DIR = './examples/agent-usage/logs';
 const EXAMPLE_DEFAULT_LOG_FILE = 'agent-example.log';
-const EXAMPLE_DEFAULT_MAX_STEPS = 24;
+const EXAMPLE_DEFAULT_MAX_STEPS = 10000;
 
 function applyExampleDefaultEnv(): void {
   // 示例默认开启文件日志；若用户已设置则尊重用户配置
@@ -228,8 +228,19 @@ async function main(): Promise<void> {
     const provider = ProviderRegistry.createFromEnv(modelId, {
       logger: logger.child('Provider'),
     });
+    console.log(`provider=${maxSteps}`);
     const toolManager = new ToolManager();
-    toolManager.register([new BashTool(), new FileTool(), new TaskTool(),new TaskCreateTool(),new TaskListTool(),new TaskGetTool(),new TaskUpdateTool(),new TaskOutputTool(),new TaskStopTool]);
+    toolManager.register([
+      new BashTool(),
+      new FileTool(),
+      new TaskTool(),
+      new TaskCreateTool(),
+      new TaskListTool(),
+      new TaskGetTool(),
+      new TaskUpdateTool(),
+      new TaskOutputTool(),
+      new TaskStopTool(),
+    ]);
     const sessionId = process.env.AGENT_SESSION_ID ?? `example-agent-${Date.now()}`;
 
     console.log('=== Runtime Config ===');

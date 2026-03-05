@@ -557,6 +557,7 @@ export class Logger {
 
     this.consoleTransport = new ConsoleTransport(this.config.console);
     this.fileTransport = new FileTransport(this.config.file);
+
     this.customTransports = config?.transports ?? [];
 
     // 默认上下文中间件

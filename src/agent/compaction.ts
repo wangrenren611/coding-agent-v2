@@ -13,7 +13,6 @@ import {
   processToolCallPairs,
   rebuildMessages,
 } from '../utils/message';
-import { estimateTokens } from '../utils/token';
 
 // =============================================================================
 // 类型定义
@@ -40,7 +39,7 @@ export interface CompactResult {
   /** 压缩后的消息列表 */
   messages: Message[];
   /** 摘要消息 */
-  summaryMessage: Message;
+  summaryMessage: Message | null;
   /** 被丢弃的消息 ID 列表 */
   removedMessageIds: string[];
 }
@@ -49,7 +48,39 @@ export interface CompactResult {
 // Token 估算工具函数
 // =============================================================================
 
-export { estimateTokens };
+/**
+ * 估算文本 Token 数（改进版）
+ *
+ * 算法说明：
+ * - 中文字符（Unicode \u4e00-\u9fa5）：1 字符 ≈ 1.5 token
+ * - 其他字符（英文，数字、符号等）：1 字符 ≈ 0.25 token
+ *
+ * 此估算基于常见 LLM（GPT、GLM 等）的 BPE 分词特点：
+ * - 中文通常每个字为 1-2 个 token，平均约 1.5
+ * - 英文单词平均为 0.5-1 个 token，按字符算是约 0.25
+ *
+ * @param text 要估算的文本
+ * @returns 估算的 token 数
+ */
+export function estimateTokens(text: string): number {
+  if (!text) return 0;
+
+  let cnCount = 0;
+  let otherCount = 0;
+
+  for (const char of text) {
+    // 判断是否为中文字符（CJK 统一表意文字范围）
+    if (char >= '\u4e00' && char <= '\u9fa5') {
+      cnCount++;
+    } else {
+      otherCount++;
+    }
+  }
+
+  // 中文：1.5 token/字符，其他：0.25 token/字符
+  const totalTokens = cnCount * 1.5 + otherCount * 0.25;
+  return Math.ceil(totalTokens);
+}
 
 /**
  * 估算消息列表的 Token 数
@@ -60,11 +91,11 @@ export { estimateTokens };
  */
 export function estimateMessagesTokens(messages: Message[], tools?: Tool[]): number {
   const messagesTotal = messages.reduce((acc, m) => {
-    return acc + estimateTokens(JSON.stringify(m)) + 4;
+    // 使用改进的 token 估算
+    const content = JSON.stringify(m);
+    return acc + estimateTokens(content) + 4; // 每条消息约 4 token 的 overhead
   }, 0);
-
   const toolsTotal = tools ? estimateTokens(JSON.stringify(tools)) : 0;
-
   return messagesTotal + toolsTotal;
 }
 
@@ -77,23 +108,8 @@ function isSummaryMessage(message: Message): boolean {
   return text.startsWith('[Conversation Summary]') || text.startsWith('[对话摘要]');
 }
 
-function buildSummaryPrompt(language = 'English'): string {
-  return `You are an expert conversation compressor. Compress conversation history into a structured summary organized in following 8 sections:
-1. **Primary Request and Intent**: What is user's core goal?
-2. **Key Technical Concepts**: Frameworks, libraries, tech stacks, etc.
-3. **Files and Code Sections**: All file paths mentioned or modified.
-4. **Errors and Fixes**: Record error messages and solutions.
-5. **Problem Solving**: The thought process and decision path.
-6. **All User Messages**: Preserve key instructions and feedback.
-7. **Pending Tasks**: Work items that remain unfinished.
-8. **Current Work**: The progress at the point conversation was interrupted.
-
-## Requirements:
-- Maintain high density and accuracy of information
-- Highlight key technical decisions and solutions
-- Ensure continuity of context
-- Retain all important file paths
-- Use concise ${language} expression`;
+function buildSummaryPrompt(): string {
+  return `You are an expert AI conversation compressor. Compress the conversation history into a structured memory summary with the following sections: 1. Primary Request and Intent 2. Key Technical Concepts 3. Files and Code Sections (preserve exact file paths) 4. Errors and Fixes (include exact error messages) 5. Problem Solving Process 6. Important User Instructions and Constraints 7. Pending Tasks 8. Current Work State Requirements: - Preserve critical technical details - Keep exact file paths and commands - Remove redundant or conversational text - Maintain task continuity for future steps - Keep the summary concise but information-dense`;
 }
 
 // =============================================================================
@@ -111,39 +127,31 @@ export async function compact(
   messages: Message[],
   options: CompactOptions
 ): Promise<CompactResult> {
-  const { provider, keepMessagesNum, logger, language = 'English' } = options;
-
+  const { provider, keepMessagesNum, logger } = options;
   // 分离消息区域
   const { systemMessage, pending, active } = splitMessages(messages, keepMessagesNum);
-
   // 处理工具调用配对
   const { pending: finalPending, active: finalActive } = processToolCallPairs(pending, active);
-
   // 收集被丢弃的消息 ID
   const removedMessageIds = collectRemovedMessageIds(messages, new Set(finalActive), systemMessage);
-
   // 生成摘要
   const summaryContent = await generateSummary({
     provider,
     pendingMessages: finalPending,
     sourceMessages: messages,
-    activeMessages: finalActive,
-    language,
     logger,
   });
-
-  const summaryMessage: Message = {
-    messageId: crypto.randomUUID(),
-    role: 'assistant',
-    type: 'summary',
-    content: `[Conversation Summary]\n${summaryContent}`,
-  };
-
+  const summaryMessage = summaryContent
+    ? {
+        messageId: crypto.randomUUID(),
+        role: 'assistant' as const,
+        type: 'summary' as const,
+        content: `[Conversation Summary]\n${summaryContent}`,
+      }
+    : null;
   // 重组消息
   const newMessages = rebuildMessages(systemMessage, summaryMessage, finalActive);
-
   logger?.info(`[Compaction] Completed. messages=${messages.length}->${newMessages.length}`);
-
   return { messages: newMessages, summaryMessage, removedMessageIds };
 }
 
@@ -156,7 +164,6 @@ function collectRemovedMessageIds(
   systemMessage?: Message
 ): string[] {
   const removedIds: string[] = [];
-
   for (const msg of allMessages) {
     // 跳过 system 消息
     if (msg === systemMessage) continue;
@@ -167,7 +174,6 @@ function collectRemovedMessageIds(
       }
     }
   }
-
   return removedIds;
 }
 
@@ -179,14 +185,12 @@ async function generateSummary(input: {
   provider: LLMProvider;
   pendingMessages: Message[];
   sourceMessages: Message[];
-  activeMessages: Message[];
-  language: string;
   logger?: Logger;
 }): Promise<string> {
-  const { provider, pendingMessages, sourceMessages, activeMessages, language, logger } = input;
+  const { provider, pendingMessages, sourceMessages, logger } = input;
 
   if (pendingMessages.length === 0) {
-    return 'No messages to summarize.';
+    return '';
   }
 
   let previousSummary = '';
@@ -194,25 +198,18 @@ async function generateSummary(input: {
     previousSummary = contentToText(pendingMessages[0].content);
   }
 
-  const summaryPrompt = buildSummaryPrompt(language);
+  const summaryPrompt = buildSummaryPrompt();
   const previousSummaryBlock = previousSummary
     ? `\n<previous_summary>\n${previousSummary}\n</previous_summary>\n`
     : '';
 
   const compactionMessage = `<compaction-message>
-${summaryPrompt}
-
-Compaction constraints:
-- Summarize earlier historical context in this conversation.
-- Keep the most recent ${activeMessages.length} messages untouched (they remain in active context).
-- Return plain summary text only; do NOT call tools.
-- Preserve key decisions, file paths, unresolved tasks, and user constraints.
-${previousSummaryBlock}
-</compaction-message>`;
+   ${sourceMessages.map((m) => `${m.role}: ${contentToText(m.content)}`).join('\n')}
+  </compaction-message>`;
 
   const requestMessages = [
-    ...sourceMessages,
-    { role: 'user' as const, content: compactionMessage },
+    { role: 'system' as const, content: summaryPrompt },
+    { role: 'user' as const, content: `${compactionMessage}\n${previousSummaryBlock}` },
   ];
 
   const options: { max_tokens: number; model?: string; abortSignal?: AbortSignal } = {
@@ -239,15 +236,15 @@ ${previousSummaryBlock}
 
     if (!response || typeof response !== 'object' || !('choices' in response)) {
       logger?.warn('[Compaction] Summary generation returned invalid response');
-      return previousSummary || 'Summary generation failed.';
+      return '';
     }
 
     const choice = (response as LLMResponse).choices?.[0];
 
     const content = contentToText(choice?.message?.content || '').trim();
-    return content || previousSummary || 'Summary generation failed.';
+    return content || '';
   } catch (error) {
     logger?.warn('[Compaction] Summary generation failed:', { error: String(error) });
-    return previousSummary || 'Summary generation failed.';
+    return '';
   }
 }

@@ -2,7 +2,7 @@
  * Coding Agent V2 public exports
  */
 
-// Core types (共享类型)
+// Core types
 export * from './core';
 
 // Providers
@@ -19,3 +19,6 @@ export * from './logger';
 
 // Runtime config
 export * from './config';
+
+// CLI runtime API
+export { runCli } from './cli/index';

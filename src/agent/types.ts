@@ -55,12 +55,12 @@ export interface AgentConfig {
 
   /** 是否启用压缩 */
   enableCompaction?: boolean;
-  /** 压缩触发的 token 阈值 */
-  compactionThreshold?: number;
   /** 压缩时保留的最近消息数 */
   compactionKeepMessages?: number;
   /** 摘要语言 */
   summaryLanguage?: string;
+  /** 触发压缩的阈值比例（默认 0.9，即达到可用限制的 90% 时触发） */
+  compactionTriggerRatio?: number;
 
   // ---------------------------------------------------------------------------
   // 其他配置

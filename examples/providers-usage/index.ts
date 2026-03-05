@@ -121,7 +121,11 @@ async function runStream(modelId: ModelId, prompt: string): Promise<void> {
   }
 }
 
-async function runStreamTimeoutDemo(modelId: ModelId, prompt: string, timeoutMs: number): Promise<void> {
+async function runStreamTimeoutDemo(
+  modelId: ModelId,
+  prompt: string,
+  timeoutMs: number
+): Promise<void> {
   requireEnvApiKey(modelId);
   const provider = ProviderRegistry.createFromEnv(modelId);
 

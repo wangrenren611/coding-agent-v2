@@ -213,14 +213,18 @@ export function processToolCallPairs(
  */
 export function rebuildMessages(
   systemMessage: Message | undefined,
-  summaryMessage: Message,
+  summaryMessage: Message | null,
   active: Message[]
 ): Message[] {
   const messages: Message[] = [];
   if (systemMessage) {
     messages.push(systemMessage);
   }
-  messages.push(summaryMessage);
+
+  if (summaryMessage) {
+    messages.push(summaryMessage);
+  }
+
   messages.push(...active);
   return messages;
 }

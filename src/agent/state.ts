@@ -18,9 +18,9 @@ export const DEFAULT_AGENT_CONFIG = {
   maxRetries: 10,
   debug: false,
   enableCompaction: false,
-  compactionThreshold: 100000,
-  compactionKeepMessages: 10,
+  compactionKeepMessages: 40,
   summaryLanguage: 'English',
+  compactionTriggerRatio: 0.9,
   useDefaultCompletionDetector: true,
   memoryManager: undefined,
 } as const;

@@ -19,9 +19,9 @@ describe('DEFAULT_AGENT_CONFIG', () => {
     expect(DEFAULT_AGENT_CONFIG.maxRetries).toBe(10);
     expect(DEFAULT_AGENT_CONFIG.debug).toBe(false);
     expect(DEFAULT_AGENT_CONFIG.enableCompaction).toBe(false);
-    expect(DEFAULT_AGENT_CONFIG.compactionThreshold).toBe(100000);
-    expect(DEFAULT_AGENT_CONFIG.compactionKeepMessages).toBe(10);
+    expect(DEFAULT_AGENT_CONFIG.compactionKeepMessages).toBe(40);
     expect(DEFAULT_AGENT_CONFIG.summaryLanguage).toBe('English');
+    expect(DEFAULT_AGENT_CONFIG.compactionTriggerRatio).toBe(0.9);
     expect(DEFAULT_AGENT_CONFIG.useDefaultCompletionDetector).toBe(true);
     expect(DEFAULT_AGENT_CONFIG.memoryManager).toBeUndefined();
   });
@@ -118,8 +118,7 @@ describe('mergeAgentConfig', () => {
     expect(merged.maxRetries).toBe(10);
     expect(merged.debug).toBe(false);
     expect(merged.enableCompaction).toBe(false);
-    expect(merged.compactionThreshold).toBe(100000);
-    expect(merged.compactionKeepMessages).toBe(10);
+    expect(merged.compactionKeepMessages).toBe(40);
     expect(merged.summaryLanguage).toBe('English');
     expect(merged.useDefaultCompletionDetector).toBe(true);
     expect(merged.provider).toBe(mockProvider);
@@ -134,7 +133,6 @@ describe('mergeAgentConfig', () => {
       maxRetries: 5,
       debug: true,
       enableCompaction: true,
-      compactionThreshold: 50000,
       compactionKeepMessages: 20,
       summaryLanguage: 'Chinese',
       useDefaultCompletionDetector: false,
@@ -147,7 +145,6 @@ describe('mergeAgentConfig', () => {
     expect(merged.maxRetries).toBe(5);
     expect(merged.debug).toBe(true);
     expect(merged.enableCompaction).toBe(true);
-    expect(merged.compactionThreshold).toBe(50000);
     expect(merged.compactionKeepMessages).toBe(20);
     expect(merged.summaryLanguage).toBe('Chinese');
     expect(merged.useDefaultCompletionDetector).toBe(false);

@@ -221,8 +221,8 @@ export class BashTool extends BaseTool<typeof schema> {
 
       // 处理输出
       const truncated = this.resultTruncation(this.sanitizeOutput(result.output), {
-        headLength: 10000,
-        tailLength: 10000,
+        headLength: 3000,
+        tailLength: 3000,
         marker: '[... Output Truncated for Brevity ...]',
       });
       const output = truncated.output;
@@ -402,9 +402,5 @@ export class BashTool extends BaseTool<typeof schema> {
     });
   }
 }
-
-// =============================================================================
-// 导出
-// =============================================================================
 
 export default BashTool;

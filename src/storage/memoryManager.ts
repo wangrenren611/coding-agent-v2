@@ -538,14 +538,17 @@ export class MemoryManager {
 
       const now = Date.now();
       const recordId = randomUUID();
+      let summaryMessage: HistoryMessage | null = null;
 
-      // 创建摘要消息
-      const summaryMessage: HistoryMessage = {
-        ...options.summaryMessage,
-        sequence: this.getNextSequenceFromHistory(history),
-        isSummary: true,
-        createdAt: now,
-      };
+      if (options.summaryMessage) {
+        // 创建摘要消息
+        summaryMessage = {
+          ...options.summaryMessage,
+          sequence: this.getNextSequenceFromHistory(history),
+          isSummary: true,
+          createdAt: now,
+        };
+      }
 
       // 标记历史中被归档的消息
       const archivedIdSet = new Set(options.removedMessageIds);
@@ -557,8 +560,10 @@ export class MemoryManager {
         }
       }
 
-      // 添加摘要到历史
-      history.push(summaryMessage);
+      if (summaryMessage) {
+        // 添加摘要到历史
+        history.push(summaryMessage);
+      }
 
       // 更新上下文 - 移除被归档的消息，添加摘要
       const systemMessage = context.messages.find((m) => m.role === 'system');
@@ -568,9 +573,12 @@ export class MemoryManager {
       if (systemMessage) {
         context.messages.unshift(systemMessage);
       }
-      // 在 system 消息后插入摘要
-      const insertIndex = systemMessage ? 1 : 0;
-      context.messages.splice(insertIndex, 0, summaryMessage);
+
+      if (summaryMessage) {
+        // 在 system 消息后插入摘要
+        const insertIndex = systemMessage ? 1 : 0;
+        context.messages.splice(insertIndex, 0, summaryMessage);
+      }
 
       context.version += 1;
       context.lastCompactionId = recordId;
@@ -594,7 +602,7 @@ export class MemoryManager {
         messageCountBefore: history.length - 1, // 减去新添加的摘要
         messageCountAfter: context.messages.length,
         archivedMessageIds: options.removedMessageIds,
-        summaryMessageId: summaryMessage.messageId,
+        summaryMessageId: summaryMessage?.messageId || '',
         reason: options.reason ?? 'manual',
         metadata: {
           tokenCountBefore: options.tokenCountBefore,

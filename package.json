@@ -5,6 +5,10 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "coding-agent-v2": "./bin/coding-agent-v2.cjs",
+    "cav2": "./bin/coding-agent-v2.cjs"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -13,8 +17,10 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:cli": "tsx src/cli.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "start:cli": "tsx src/cli.ts",
     "example:agent": "tsx examples/agent-usage/index.ts",
     "example:providers": "tsx examples/providers-usage/index.ts",
     "example:providers:manual": "tsx examples/providers-usage/manual-provider.ts",
@@ -23,8 +29,9 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\" \"src/**/*.tsx\" \"examples/**/*.ts\" \"*.json\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"src/**/*.tsx\" \"examples/**/*.ts\" \"*.json\"",
+    "format:fix": "prettier --write \"src/**/*.ts\" \"src/**/*.tsx\" \"examples/**/*.ts\" --end-of-line lf",
     "typecheck": "tsc --noEmit",
     "ci:check": "pnpm format:check && pnpm typecheck && pnpm lint && pnpm test:run",
     "prepare": "husky install"
@@ -39,13 +46,16 @@
   "devDependencies": {
     "@types/diff": "^8.0.0",
     "@types/node": "^20.10.0",
+    "@types/react": "^19.2.14",
     "@types/shell-quote": "^1.7.5",
+    "@types/strip-ansi": "^5.2.1",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "@vitest/coverage-v8": "^1.1.0",
     "cross-env": "^7.0.3",
     "eslint": "^8.56.0",
     "husky": "^8.0.3",
+    "lint-staged": "^16.3.2",
     "prettier": "^3.1.1",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
@@ -54,10 +64,20 @@
   "engines": {
     "node": ">=20.0.0"
   },
+  "lint-staged": {
+    "*.ts": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  },
   "dependencies": {
     "diff": "^8.0.3",
-    "execa": "^9.6.1",
+    "ink": "^6.8.0",
     "minimatch": "^10.2.4",
+    "react": "^19.2.4",
     "shell-quote": "^1.8.3",
     "strip-ansi": "^7.2.0",
     "zod": "^4.3.6"

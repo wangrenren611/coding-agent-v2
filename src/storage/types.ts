@@ -223,7 +223,7 @@ export interface CompactContextOptions {
   /** 保留最近 N 条非 system 消息 */
   keepLastN: number;
   /** 摘要消息（由 Agent 的 compact 函数生成） */
-  summaryMessage: Message;
+  summaryMessage: Message | null;
   /** 被丢弃的消息 ID 列表（由 Agent 的 compact 函数返回） */
   removedMessageIds: string[];
   /** 压缩原因 */

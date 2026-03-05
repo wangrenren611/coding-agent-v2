@@ -633,3 +633,427 @@ describe('ToolManager toToolsSchema', () => {
     expect(schemas).toEqual([]);
   });
 });
+
+// =============================================================================
+// 取消和异常场景测试
+// =============================================================================
+
+describe('ToolManager cancellation and exception scenarios', () => {
+  // ---------------------------------------------------------------------
+  // 超时取消测试
+  // ---------------------------------------------------------------------
+
+  it('should cancel tool execution when manager timeout is reached', async () => {
+    class VerySlowTool extends BaseTool<typeof emptySchema> {
+      get meta() {
+        return {
+          name: 'very-slow-timeout',
+          description: 'Very slow tool for timeout test',
+          parameters: emptySchema,
+        };
+      }
+
+      async execute() {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return { success: true, data: { done: true } };
+      }
+    }
+
+    const manager = new ToolManager({ timeout: 50 });
+    manager.register(new VerySlowTool());
+
+    const startTime = Date.now();
+    const [result] = await manager.executeTools(
+      [createToolCall('very-slow-timeout', '{}')],
+      batchContext
+    );
+    const elapsed = Date.now() - startTime;
+
+    expect(result.result.success).toBe(false);
+    expect(result.result.error).toContain('TOOL_TIMEOUT');
+    // 应该接近超时时间
+    expect(elapsed).toBeLessThan(300);
+  });
+
+  it('should cancel tool execution via AbortController', async () => {
+    const manager = new ToolManager();
+    const abortController = new AbortController();
+
+    class AbortSignalTool extends BaseTool<typeof emptySchema> {
+      get meta() {
+        return {
+          name: 'abort-signal-tool',
+          description: 'Check abort signal',
+          parameters: emptySchema,
+        };
+      }
+
+      async execute(_args: z.infer<typeof emptySchema>, context: ToolExecutionContext) {
+        await new Promise((_, reject) => {
+          const timer = setTimeout(() => reject(new Error('timeout')), 1000);
+          context.toolAbortSignal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(new Error('aborted'));
+          });
+        });
+        return { success: true, data: {} };
+      }
+    }
+
+    manager.register(new AbortSignalTool());
+
+    // 启动执行后立即取消
+    const executePromise = manager.executeTool(
+      'abort-signal-tool',
+      {},
+      {
+        ...executeContext,
+        toolAbortSignal: abortController.signal,
+      }
+    );
+
+    setTimeout(() => abortController.abort(), 50);
+
+    const result = await executePromise;
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('aborted');
+  });
+
+  it('should handle zero timeout as no timeout', async () => {
+    const manager = new ToolManager({ timeout: 0 });
+    manager.register(new SlowTool());
+
+    const result = await manager.executeTool('slow', {}, executeContext);
+    // 0 超时应被视为无超时
+    expect(result.success).toBe(true);
+  });
+
+  it('should handle very long timeout gracefully', async () => {
+    const manager = new ToolManager({ timeout: 600000 }); // 10分钟
+    manager.register(new SlowTool());
+
+    const result = await manager.executeTool('slow', {}, executeContext);
+    expect(result.success).toBe(true);
+  });
+
+  // ---------------------------------------------------------------------
+  // 工具执行取消测试
+  // ---------------------------------------------------------------------
+
+  it('should handle tool execution error with stack trace', async () => {
+    const manager = new ToolManager();
+    manager.register(
+      new ThrowTool(() => {
+        const error = new Error('Test error with stack');
+        error.stack = 'Error: Test error with stack\n    at test (test.ts:1:1)';
+        return error;
+      })
+    );
+
+    const result = await manager.executeTool('thrower', {}, executeContext);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Test error with stack');
+  });
+
+  it('should handle multiple sequential tool failures', async () => {
+    const manager = new ToolManager();
+    manager.register(new FailingTool());
+
+    const result1 = await manager.executeTool('failing', {}, executeContext);
+    expect(result1.success).toBe(false);
+
+    const result2 = await manager.executeTool('failing', {}, executeContext);
+    expect(result2.success).toBe(false);
+  });
+
+  it('should handle concurrent tool executions', async () => {
+    const manager = new ToolManager();
+    manager.register(new EchoTool());
+
+    const results = await Promise.all([
+      manager.executeTool('echo', { text: 'one' }, executeContext),
+      manager.executeTool('echo', { text: 'two' }, executeContext),
+      manager.executeTool('echo', { text: 'three' }, executeContext),
+    ]);
+
+    expect(results.every((r) => r.success)).toBe(true);
+    expect(results[0].data).toMatchObject({ text: 'one' });
+    expect(results[1].data).toMatchObject({ text: 'two' });
+    expect(results[2].data).toMatchObject({ text: 'three' });
+  });
+
+  it('should handle partial failure in batch execution', async () => {
+    const manager = new ToolManager();
+    manager.register([new EchoTool(), new FailingTool()]);
+
+    const results = await manager.executeTools(
+      [
+        createToolCall('echo', '{"text":"ok"}'),
+        createToolCall('failing', '{}'),
+        createToolCall('echo', '{"text":"also ok"}'),
+      ],
+      batchContext
+    );
+
+    expect(results[0].result.success).toBe(true);
+    expect(results[1].result.success).toBe(false);
+    expect(results[2].result.success).toBe(true);
+  });
+
+  // ---------------------------------------------------------------------
+  // 异常场景测试
+  // ---------------------------------------------------------------------
+
+  it('should handle tool that returns null data', async () => {
+    class NullDataTool extends BaseTool<typeof emptySchema> {
+      get meta() {
+        return {
+          name: 'null-data',
+          description: 'Returns null data',
+          parameters: emptySchema,
+        };
+      }
+
+      async execute() {
+        return { success: true, data: null as unknown as Record<string, unknown> };
+      }
+    }
+
+    const manager = new ToolManager();
+    manager.register(new NullDataTool());
+
+    const result = await manager.executeTool('null-data', {}, executeContext);
+    expect(result.success).toBe(true);
+    expect(result.data).toBeNull();
+  });
+
+  it('should handle tool that returns undefined', async () => {
+    class UndefinedTool extends BaseTool<typeof emptySchema> {
+      get meta() {
+        return {
+          name: 'undefined-tool',
+          description: 'Returns undefined',
+          parameters: emptySchema,
+        };
+      }
+
+      async execute() {
+        return undefined as unknown as ToolResult;
+      }
+    }
+
+    const manager = new ToolManager();
+    manager.register(new UndefinedTool());
+
+    const result = await manager.executeTool('undefined-tool', {}, executeContext);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('TOOL_EXECUTION_ERROR');
+  });
+
+  it('should handle tool that returns non-object', async () => {
+    class NonObjectTool extends BaseTool<typeof emptySchema> {
+      get meta() {
+        return {
+          name: 'non-object',
+          description: 'Returns non-object',
+          parameters: emptySchema,
+        };
+      }
+
+      async execute() {
+        return 'string result' as unknown as ToolResult;
+      }
+    }
+
+    const manager = new ToolManager();
+    manager.register(new NonObjectTool());
+
+    const result = await manager.executeTool('non-object', {}, executeContext);
+    expect(result.success).toBe(false);
+  });
+
+  it('should handle tool that throws non-Error', async () => {
+    const manager = new ToolManager();
+    manager.register(new ThrowTool(() => 'string error'));
+
+    const result = await manager.executeTool('thrower', {}, executeContext);
+    expect(result.success).toBe(false);
+  });
+
+  it('should handle tool that throws null', async () => {
+    const manager = new ToolManager();
+    manager.register(new ThrowTool(() => null));
+
+    const result = await manager.executeTool('thrower', {}, executeContext);
+    expect(result.success).toBe(false);
+    expect(result.error).toBeDefined();
+  });
+
+  it('should handle tool that throws undefined', async () => {
+    const manager = new ToolManager();
+    manager.register(new ThrowTool(() => undefined));
+
+    const result = await manager.executeTool('thrower', {}, executeContext);
+    expect(result.success).toBe(false);
+  });
+
+  it('should handle empty arguments object', async () => {
+    const manager = new ToolManager();
+    manager.register(new EchoTool());
+
+    const result = await manager.executeTool('echo', {}, executeContext);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('TOOL_VALIDATION_ERROR');
+  });
+
+  it('should handle missing required arguments', async () => {
+    const manager = new ToolManager();
+    manager.register(new EchoTool());
+
+    const result = await manager.executeTool('echo', { notText: 'value' }, executeContext);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('TOOL_VALIDATION_ERROR');
+  });
+
+  it('should handle invalid argument types', async () => {
+    const manager = new ToolManager();
+    manager.register(new EchoTool());
+
+    const result = await manager.executeTool('echo', { text: 123 }, executeContext);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('TOOL_VALIDATION_ERROR');
+  });
+
+  it('should handle tool name with special characters', async () => {
+    const manager = new ToolManager();
+    manager.register(new EchoTool());
+
+    const result = await manager.executeTool('ec\0ho', {}, executeContext);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('TOOL_NOT_FOUND');
+  });
+
+  it('should handle tool lookup case sensitivity', async () => {
+    const manager = new ToolManager();
+    manager.register(new EchoTool());
+
+    const result = await manager.executeTool('ECHO', {}, executeContext);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('TOOL_NOT_FOUND');
+  });
+
+  it('should handle very long tool name', async () => {
+    const manager = new ToolManager();
+    manager.register(new EchoTool());
+
+    const longName = 'e'.repeat(1000);
+    const result = await manager.executeTool(longName, {}, executeContext);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('TOOL_NOT_FOUND');
+  });
+
+  it('should handle tool execution in quick succession', async () => {
+    const manager = new ToolManager();
+    manager.register(new EchoTool());
+
+    // 快速连续执行多个工具
+    for (let i = 0; i < 10; i++) {
+      const result = await manager.executeTool('echo', { text: `test-${i}` }, executeContext);
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('should handle batch execution with many tools', async () => {
+    const manager = new ToolManager();
+    manager.register(new EchoTool());
+
+    // 创建大量工具调用
+    const toolCalls = Array(50)
+      .fill(null)
+      .map((_, i) => createToolCall('echo', `{"text":"test-${i}"}`));
+
+    const results = await manager.executeTools(toolCalls, batchContext);
+
+    expect(results).toHaveLength(50);
+    expect(results.every((r) => r.result.success)).toBe(true);
+  });
+
+  it('should handle tool that takes very long to execute beyond timeout', async () => {
+    class VerySlowTool extends BaseTool<typeof emptySchema> {
+      get meta() {
+        return {
+          name: 'very-slow-long',
+          description: 'Very slow tool',
+          parameters: emptySchema,
+        };
+      }
+
+      async execute() {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return { success: true, data: {} };
+      }
+    }
+
+    const manager = new ToolManager({ timeout: 100 });
+    manager.register(new VerySlowTool());
+
+    const startTime = Date.now();
+    const [result] = await manager.executeTools(
+      [createToolCall('very-slow-long', '{}')],
+      batchContext
+    );
+    const elapsed = Date.now() - startTime;
+
+    expect(result.result.success).toBe(false);
+    expect(result.result.error).toContain('TOOL_TIMEOUT');
+    // 应该在大约100ms后超时
+    expect(elapsed).toBeLessThan(500);
+  }, 10000);
+
+  it('should handle tool returning success with empty data', async () => {
+    class EmptyDataTool extends BaseTool<typeof emptySchema> {
+      get meta() {
+        return {
+          name: 'empty-data',
+          description: 'Returns empty data',
+          parameters: emptySchema,
+        };
+      }
+
+      async execute() {
+        return { success: true, data: {} };
+      }
+    }
+
+    const manager = new ToolManager();
+    manager.register(new EmptyDataTool());
+
+    const result = await manager.executeTool('empty-data', {}, executeContext);
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({});
+  });
+
+  it('should handle tool with circular reference in returned data', async () => {
+    class CircularTool extends BaseTool<typeof emptySchema> {
+      get meta() {
+        return {
+          name: 'circular',
+          description: 'Returns circular data',
+          parameters: emptySchema,
+        };
+      }
+
+      async execute() {
+        const obj: Record<string, unknown> = { value: 'test' };
+        obj.self = obj;
+        return { success: true, data: obj };
+      }
+    }
+
+    const manager = new ToolManager();
+    manager.register(new CircularTool());
+
+    const result = await manager.executeTool('circular', {}, executeContext);
+    expect(result.success).toBe(true);
+  });
+});
