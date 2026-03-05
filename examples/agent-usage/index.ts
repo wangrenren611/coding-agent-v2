@@ -240,7 +240,7 @@ async function main(): Promise<void> {
       toolManager,
       memoryManager,
       logger,
-      // sessionId:"example-agent-1772704577922",
+      sessionId:"example-agent-1772706899743",
       systemPrompt: 'You are a practical coding assistant. Respond in Chinese with concise steps.',
       maxSteps,
       plugins: [createConsoleStreamPlugin()],
