@@ -149,6 +149,8 @@ export interface ToolExecutionContext {
   agentContext?: AgentToolContext;
   /** 工具流式事件发射器（可选） */
   emitToolEvent?: (event: ToolStreamEventInput) => void | Promise<void>;
+  /** 工具执行中断信号（超时/取消时触发） */
+  toolAbortSignal?: AbortSignal;
 }
 
 // =============================================================================

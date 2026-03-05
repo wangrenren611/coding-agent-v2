@@ -13,6 +13,13 @@ import { createInterface } from 'node:readline/promises';
 import {
   BashTool,
   FileTool,
+  TaskCreateTool,
+  TaskGetTool,
+  TaskListTool,
+  TaskOutputTool,
+  TaskStopTool,
+  TaskTool,
+  TaskUpdateTool,
   ToolManager,
   type ToolConfirmDecision,
   type ToolConfirmRequest,
@@ -222,7 +229,7 @@ async function main(): Promise<void> {
       logger: logger.child('Provider'),
     });
     const toolManager = new ToolManager();
-    toolManager.register([new BashTool(), new FileTool()]);
+    toolManager.register([new BashTool(), new FileTool(), new TaskTool(),new TaskCreateTool(),new TaskListTool(),new TaskGetTool(),new TaskUpdateTool(),new TaskOutputTool(),new TaskStopTool]);
     const sessionId = process.env.AGENT_SESSION_ID ?? `example-agent-${Date.now()}`;
 
     console.log('=== Runtime Config ===');
@@ -240,7 +247,7 @@ async function main(): Promise<void> {
       toolManager,
       memoryManager,
       logger,
-      sessionId:"example-agent-1772706899743",
+      sessionId,
       systemPrompt: 'You are a practical coding assistant. Respond in Chinese with concise steps.',
       maxSteps,
       plugins: [createConsoleStreamPlugin()],

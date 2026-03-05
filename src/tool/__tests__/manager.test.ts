@@ -142,6 +142,54 @@ class ToolDefaultTimeoutTool extends BaseTool<typeof emptySchema> {
   }
 }
 
+class ToolLongTimeoutTool extends BaseTool<typeof emptySchema> {
+  protected timeout = 1000;
+
+  get meta() {
+    return {
+      name: 'tool-long-timeout',
+      description: 'Uses explicit long timeout',
+      parameters: emptySchema,
+    };
+  }
+
+  async execute() {
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    return { success: true, data: { done: true } };
+  }
+}
+
+class AbortAwareSlowTool extends BaseTool<typeof emptySchema> {
+  constructor(private readonly state: { aborted: boolean }) {
+    super();
+  }
+
+  get meta() {
+    return {
+      name: 'abort-aware-slow',
+      description: 'Listens to tool abort signal',
+      parameters: emptySchema,
+    };
+  }
+
+  async execute(_args: z.infer<typeof emptySchema>, context: ToolExecutionContext) {
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 200);
+      const onAbort = () => {
+        this.state.aborted = true;
+        clearTimeout(timer);
+        resolve();
+      };
+      if (context.toolAbortSignal?.aborted) {
+        onAbort();
+        return;
+      }
+      context.toolAbortSignal?.addEventListener('abort', onAbort, { once: true });
+    });
+    return { success: true, data: { aborted: this.state.aborted } };
+  }
+}
+
 class OnErrorCrashTool extends BaseTool<typeof emptySchema> {
   get meta() {
     return {
@@ -345,6 +393,34 @@ describe('ToolManager error normalization', () => {
       code: 'TOOL_TIMEOUT',
       stage: 'timeout',
     });
+  });
+
+  it('should honor explicit long tool timeout over manager timeout', async () => {
+    const manager = new ToolManager({ timeout: 10 });
+    manager.register(new ToolLongTimeoutTool());
+
+    const [result] = await manager.executeTools(
+      [createToolCall('tool-long-timeout', '{}')],
+      batchContext
+    );
+    expect(result.result.success).toBe(true);
+    expect(result.result.data).toMatchObject({ done: true });
+  });
+
+  it('should abort running tool when timeout is reached', async () => {
+    const manager = new ToolManager({ timeout: 10 });
+    const state = { aborted: false };
+    manager.register(new AbortAwareSlowTool(state));
+
+    const [result] = await manager.executeTools(
+      [createToolCall('abort-aware-slow', '{}')],
+      batchContext
+    );
+    expect(result.result.success).toBe(false);
+    expect(result.result.error).toContain('TOOL_TIMEOUT');
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(state.aborted).toBe(true);
   });
 
   it('should normalize onError hook failures', async () => {

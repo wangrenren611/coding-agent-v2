@@ -47,6 +47,8 @@ class ToolExecutionTimeoutError extends Error implements ToolErrorLike {
   recoverable = true;
 }
 
+const BASE_TOOL_DEFAULT_TIMEOUT_MS = 60_000;
+
 export class ToolManager {
   private tools: Map<string, BaseTool<ToolParameterSchema>> = new Map();
   private config: Required<ToolManagerConfig>;
@@ -356,6 +358,7 @@ export class ToolManager {
     callbacks?: ToolExecutionCallbacks
   ): Promise<{ toolCallId: string; result: ToolResult }> {
     const emitToolEvent = this.createToolEventEmitter(toolCall, callbacks);
+    const timeoutController = new AbortController();
     const fullContext: ToolExecutionContext = {
       ...context,
       toolCallId: toolCall.id,
@@ -366,6 +369,7 @@ export class ToolManager {
         emitToolEvent,
       },
       emitToolEvent,
+      toolAbortSignal: timeoutController.signal,
     };
 
     try {
@@ -382,7 +386,8 @@ export class ToolManager {
       const result = await this.withTimeout(
         this.executeTool(toolCall.function.name, args, fullContext, callbacks),
         timeoutMs,
-        toolCall.function.name
+        toolCall.function.name,
+        () => timeoutController.abort()
       );
 
       if (!result.success) {
@@ -466,16 +471,21 @@ export class ToolManager {
 
   private resolveTimeoutMs(toolName: string, args: Record<string, unknown>): number {
     const tool = this.tools.get(toolName);
-    const toolTimeout =
-      tool && Number.isFinite(tool.getTimeoutMs()) && tool.getTimeoutMs() > 0
-        ? Math.floor(tool.getTimeoutMs())
-        : this.config.timeout;
+    const toolTimeout = tool?.getTimeoutMs();
+    const normalizedToolTimeout =
+      typeof toolTimeout === 'number' && Number.isFinite(toolTimeout) && toolTimeout > 0
+        ? Math.floor(toolTimeout)
+        : undefined;
+    const hasCustomToolTimeout =
+      normalizedToolTimeout !== undefined && normalizedToolTimeout !== BASE_TOOL_DEFAULT_TIMEOUT_MS;
 
-    let timeoutMs = Math.min(this.config.timeout, toolTimeout);
+    let timeoutMs = hasCustomToolTimeout ? normalizedToolTimeout : this.config.timeout;
+
     const rawTimeout = args['timeout'];
     if (typeof rawTimeout === 'number' && Number.isFinite(rawTimeout) && rawTimeout > 0) {
       timeoutMs = Math.min(timeoutMs, Math.floor(rawTimeout));
     }
+
     return timeoutMs;
   }
 
@@ -553,9 +563,20 @@ export class ToolManager {
   /**
    * 带超时的 Promise 执行
    */
-  private async withTimeout<T>(promise: Promise<T>, ms: number, toolName: string): Promise<T> {
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    ms: number,
+    toolName: string,
+    onTimeout?: () => void
+  ): Promise<T> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
+        // 通知工具尽快停止内部执行（若工具支持信号中断）
+        try {
+          onTimeout?.();
+        } catch {
+          // ignore timeout hook errors
+        }
         reject(
           new ToolExecutionTimeoutError(`Tool "${toolName}" execution timed out after ${ms}ms`)
         );

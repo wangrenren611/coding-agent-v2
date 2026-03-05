@@ -10,6 +10,24 @@ export { ToolManager, createToolManager } from './manager';
 // 内置工具
 export { BashTool } from './bash';
 export { FileTool } from './file-tool';
+export { GlobTool } from './glob';
+export { GrepTool } from './grep';
+export { SkillTool, createSkillTool, defaultSkillTool, simpleSkillTool } from './skill-tool';
+export {
+  TaskTool,
+  TaskCreateTool,
+  TaskGetTool,
+  TaskListTool,
+  TaskUpdateTool,
+  TaskStopTool,
+  TaskOutputTool,
+  clearTaskState,
+  getDefaultTaskRuntime,
+  TaskRuntime,
+  type TaskRuntimeOptions,
+  type SubagentType,
+  type ModelHint,
+} from './task-tools';
 export {
   evaluateBashPolicy,
   getBashAllowedCommands,
@@ -42,3 +60,13 @@ export type { Tool } from '../providers';
 
 // Runtime capabilities
 export * from './runtime';
+
+// Skill capability exports
+export type {
+  Skill,
+  SkillMetadata,
+  SkillLoaderOptions,
+  SkillToolResult,
+  SkillFrontmatter,
+} from './skill';
+export { SkillLoader, getSkillLoader, initializeSkillLoader, resetSkillLoader } from './skill';
