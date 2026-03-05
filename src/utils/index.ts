@@ -12,3 +12,5 @@ export {
   processToolCallPairs,
   rebuildMessages,
 } from './message';
+
+export { estimateTokens } from './token';

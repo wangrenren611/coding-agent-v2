@@ -7,19 +7,31 @@ export { Agent, createAgent } from './agent.js';
 
 // 类型导出
 export type {
-  AgentEventType,
-  AgentEvent,
-  AgentEventCallback,
-  ToolExecutor,
-  ToolExecutionContext,
-  ToolResult,
   CompletionResult,
-  AgentLoopState,
   AgentConfig,
   CompletionDetector,
   AgentStepResult,
   AgentResult,
 } from './types';
+
+// 从 core 重新导出共享类型
+export type {
+  ToolCall,
+  FinishReason,
+  Usage,
+  Message,
+  MessageType,
+  ToolResult,
+  ToolStreamEventType,
+  ToolStreamEvent,
+  ToolStreamEventInput,
+  AgentToolContext,
+  ToolExecutionContext,
+  AgentLoopState,
+} from '../core/types';
+
+// 重新导出 Plugin 类型（方便使用）
+export type { Plugin } from '../hook';
 
 // 错误类
 export { AgentLoopExceededError, AgentAbortedError, AgentMaxRetriesExceededError } from './errors';
@@ -33,12 +45,7 @@ export {
 } from './state';
 
 // 完成检测器
-export {
-  createTextCompletionDetector,
-  createToolCompletionDetector,
-  combineCompletionDetectors,
-  defaultCompletionDetector,
-} from './completion';
+export { defaultCompletionDetector } from './completion';
 
 // 上下文压缩器
 export { compact, estimateTokens, estimateMessagesTokens } from './compaction';

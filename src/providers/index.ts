@@ -8,7 +8,7 @@ export type { ProviderType, ModelId } from './registry';
 
 // Provider 相关
 export { LLMProvider } from './types';
-export type { BaseProviderConfig } from './types';
+export type { BaseProviderConfig, ProviderLogger } from './types';
 
 // OpenAI Compatible Provider
 export { OpenAICompatibleProvider } from './openai-compatible';

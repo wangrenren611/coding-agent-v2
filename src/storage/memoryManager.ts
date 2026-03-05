@@ -14,7 +14,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import type { Message } from '../agent/types';
+import type { Message } from '../core/types';
 import type { IStorageBundle } from './interfaces';
 import type {
   HistoryMessage,
@@ -67,6 +67,7 @@ function createMemoryCache(): MemoryCache {
 export class MemoryManager {
   private initialized = false;
   private initializePromise: Promise<void> | null = null;
+  private mutationQueue: Promise<void> = Promise.resolve();
   private readonly cache = createMemoryCache();
 
   constructor(private readonly stores: IStorageBundle) {}
@@ -135,72 +136,76 @@ export class MemoryManager {
    * 创建新会话
    */
   async createSession(sessionId: string | undefined, systemPrompt: string): Promise<string> {
-    this.ensureInitialized();
+    return this.enqueueMutation(async () => {
+      this.ensureInitialized();
 
-    const sid = sessionId ?? randomUUID();
-    if (this.cache.sessions.has(sid)) {
-      throw new Error(`Session already exists: ${sid}`);
-    }
+      const sid = sessionId ?? randomUUID();
+      if (this.cache.sessions.has(sid)) {
+        throw new Error(`Session already exists: ${sid}`);
+      }
 
-    const now = Date.now();
-    const contextId = randomUUID();
+      const now = Date.now();
+      const contextId = randomUUID();
 
-    // 创建会话数据
-    const session: SessionData = {
-      sessionId: sid,
-      systemPrompt,
-      currentContextId: contextId,
-      totalMessages: 1,
-      compactionCount: 0,
-      totalUsage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-      status: 'active',
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    // 创建系统消息
-    const systemMessage: HistoryMessage = {
-      messageId: randomUUID(),
-      role: 'system',
-      content: systemPrompt,
-      sequence: 1,
-      turn: 0,
-      createdAt: now,
-    };
-
-    // 创建上下文
-    const context: ContextData = {
-      contextId,
-      sessionId: sid,
-      systemPrompt,
-      messages: [systemMessage],
-      version: 1,
-      stats: {
-        totalMessagesInHistory: 1,
+      // 创建会话数据
+      const session: SessionData = {
+        sessionId: sid,
+        systemPrompt,
+        currentContextId: contextId,
+        totalMessages: 1,
         compactionCount: 0,
-      },
-      createdAt: now,
-      updatedAt: now,
-    };
+        totalUsage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+      };
 
-    // 创建历史
-    const history: HistoryMessage[] = [systemMessage];
+      // 创建系统消息
+      const systemMessage: HistoryMessage = {
+        messageId: randomUUID(),
+        role: 'system',
+        content: systemPrompt,
+        sequence: 1,
+        turn: 0,
+        createdAt: now,
+      };
 
-    // 更新缓存
-    this.cache.sessions.set(sid, session);
-    this.cache.contexts.set(sid, context);
-    this.cache.histories.set(sid, history);
-    this.cache.compactions.set(sid, []);
+      // 创建上下文
+      const context: ContextData = {
+        contextId,
+        sessionId: sid,
+        systemPrompt,
+        messages: [systemMessage],
+        version: 1,
+        stats: {
+          totalMessagesInHistory: 1,
+          compactionCount: 0,
+        },
+        createdAt: now,
+        updatedAt: now,
+      };
 
-    // 持久化
-    await Promise.all([
-      this.stores.sessions.save(sid, session),
-      this.stores.contexts.save(sid, context),
-      this.stores.histories.save(sid, history),
-      this.stores.compactions.save(sid, []),
-    ]);
+      // 创建历史
+      const history: HistoryMessage[] = [systemMessage];
+      const records: CompactionRecord[] = [];
 
-    return sid;
+      await this.withBundleTransaction(async () => {
+        await Promise.all([
+          this.stores.sessions.save(sid, session),
+          this.stores.contexts.save(sid, context),
+          this.stores.histories.save(sid, history),
+          this.stores.compactions.save(sid, records),
+        ]);
+      });
+
+      // 仅在持久化成功后更新缓存
+      this.cache.sessions.set(sid, session);
+      this.cache.contexts.set(sid, context);
+      this.cache.histories.set(sid, history);
+      this.cache.compactions.set(sid, records);
+
+      return sid;
+    });
   }
 
   /**
@@ -236,7 +241,12 @@ export class MemoryManager {
     const orderDirection = options?.orderDirection ?? 'desc';
     sessions.sort((a, b) => {
       const comparison = a[orderBy] - b[orderBy];
-      return orderDirection === 'asc' ? comparison : -comparison;
+      if (comparison !== 0) {
+        return orderDirection === 'asc' ? comparison : -comparison;
+      }
+
+      const tie = a.sessionId.localeCompare(b.sessionId);
+      return orderDirection === 'asc' ? tie : -tie;
     });
 
     const offset = options?.offset ?? 0;
@@ -269,9 +279,11 @@ export class MemoryManager {
         messageId: m.messageId,
         role: m.role,
         content: m.content,
+        reasoning_content: m.reasoning_content,
         tool_calls: m.tool_calls,
         tool_call_id: m.tool_call_id,
         name: m.name,
+        id: m.id,
         type: m.type,
         finish_reason: m.finish_reason,
         usage: m.usage,
@@ -286,52 +298,59 @@ export class MemoryManager {
     messages: Message[],
     options?: { addToHistory?: boolean }
   ): Promise<void> {
-    this.ensureInitialized();
+    await this.enqueueMutation(async () => {
+      this.ensureInitialized();
 
-    if (messages.length === 0) return;
+      if (messages.length === 0) return;
 
-    const session = this.requireSession(sessionId);
-    const context = this.requireContext(sessionId);
-    const now = Date.now();
+      const session = this.clone(this.requireSession(sessionId));
+      const context = this.clone(this.requireContext(sessionId));
+      const now = Date.now();
+      const shouldAddToHistory = options?.addToHistory !== false;
+      const history = shouldAddToHistory
+        ? this.clone(this.cache.histories.get(sessionId) ?? [])
+        : null;
 
-    // 转换为 HistoryMessage
-    const historyMessages: HistoryMessage[] = messages.map((msg, idx) => ({
-      ...msg,
-      sequence: this.getNextSequence(sessionId) + idx,
-      turn: context.stats.compactionCount + 1,
-      createdAt: now,
-    }));
+      const nextSequence = this.getNextSequenceFromHistory(
+        history ?? this.cache.histories.get(sessionId) ?? []
+      );
+      const historyMessages: HistoryMessage[] = messages.map((msg, idx) => ({
+        ...msg,
+        sequence: nextSequence + idx,
+        turn: context.stats.compactionCount + 1,
+        createdAt: now,
+      }));
 
-    // 更新内存缓存
-    context.messages.push(...historyMessages);
-    context.version += 1;
-    context.updatedAt = now;
+      context.messages.push(...historyMessages);
+      context.version += 1;
+      context.updatedAt = now;
+      session.updatedAt = now;
 
-    const shouldAddToHistory = options?.addToHistory !== false;
-    let historyChanged = false;
+      if (history) {
+        history.push(...historyMessages);
+        session.totalMessages = history.length;
+        context.stats.totalMessagesInHistory = history.length;
+      }
 
-    if (shouldAddToHistory) {
-      const history = this.ensureHistory(sessionId);
-      history.push(...historyMessages);
-      historyChanged = true;
-      session.totalMessages = history.length;
-      context.stats.totalMessagesInHistory = history.length;
-    }
+      await this.withBundleTransaction(async () => {
+        const writes: Promise<void>[] = [
+          this.stores.contexts.save(sessionId, context),
+          this.stores.sessions.save(sessionId, session),
+        ];
 
-    session.updatedAt = now;
+        if (history) {
+          writes.push(this.stores.histories.save(sessionId, history));
+        }
 
-    // 持久化
-    const writes: Promise<void>[] = [
-      this.stores.contexts.save(sessionId, context),
-      this.stores.sessions.save(sessionId, session),
-    ];
+        await Promise.all(writes);
+      });
 
-    if (historyChanged) {
-      const history = this.cache.histories.get(sessionId) || [];
-      writes.push(this.stores.histories.save(sessionId, history));
-    }
-
-    await Promise.all(writes);
+      this.cache.contexts.set(sessionId, context);
+      this.cache.sessions.set(sessionId, session);
+      if (history) {
+        this.cache.histories.set(sessionId, history);
+      }
+    });
   }
 
   /**
@@ -342,52 +361,64 @@ export class MemoryManager {
     messageId: string,
     updates: Partial<HistoryMessage>
   ): Promise<void> {
-    this.ensureInitialized();
+    await this.enqueueMutation(async () => {
+      this.ensureInitialized();
 
-    const session = this.requireSession(sessionId);
-    const context = this.requireContext(sessionId);
+      const session = this.clone(this.requireSession(sessionId));
+      const context = this.clone(this.requireContext(sessionId));
 
-    const contextIndex = context.messages.findIndex((m) => m.messageId === messageId);
-    if (contextIndex === -1) {
-      throw new Error(`Message not found in context: ${messageId}`);
-    }
-
-    const safeUpdates = this.clone(updates);
-    delete (safeUpdates as Record<string, unknown>).messageId;
-    delete (safeUpdates as Record<string, unknown>).sequence;
-
-    context.messages[contextIndex] = {
-      ...context.messages[contextIndex],
-      ...safeUpdates,
-    };
-
-    const history = this.cache.histories.get(sessionId);
-    let historyChanged = false;
-    if (history) {
-      const historyIndex = history.findIndex((h) => h.messageId === messageId);
-      if (historyIndex !== -1) {
-        history[historyIndex] = {
-          ...history[historyIndex],
-          ...safeUpdates,
-        };
-        historyChanged = true;
+      const contextIndex = context.messages.findIndex((m) => m.messageId === messageId);
+      if (contextIndex === -1) {
+        throw new Error(`Message not found in context: ${messageId}`);
       }
-    }
 
-    const now = Date.now();
-    context.updatedAt = now;
-    session.updatedAt = now;
+      const safeUpdates = this.clone(updates);
+      delete (safeUpdates as Record<string, unknown>).messageId;
+      delete (safeUpdates as Record<string, unknown>).sequence;
 
-    const writes: Promise<void>[] = [
-      this.stores.contexts.save(sessionId, context),
-      this.stores.sessions.save(sessionId, session),
-    ];
+      context.messages[contextIndex] = {
+        ...context.messages[contextIndex],
+        ...safeUpdates,
+      };
 
-    if (historyChanged && history) {
-      writes.push(this.stores.histories.save(sessionId, history));
-    }
+      const history = this.cache.histories.has(sessionId)
+        ? this.clone(this.cache.histories.get(sessionId) ?? [])
+        : null;
+      let historyChanged = false;
+      if (history) {
+        const historyIndex = history.findIndex((h) => h.messageId === messageId);
+        if (historyIndex !== -1) {
+          history[historyIndex] = {
+            ...history[historyIndex],
+            ...safeUpdates,
+          };
+          historyChanged = true;
+        }
+      }
 
-    await Promise.all(writes);
+      const now = Date.now();
+      context.updatedAt = now;
+      session.updatedAt = now;
+
+      await this.withBundleTransaction(async () => {
+        const writes: Promise<void>[] = [
+          this.stores.contexts.save(sessionId, context),
+          this.stores.sessions.save(sessionId, session),
+        ];
+
+        if (historyChanged && history) {
+          writes.push(this.stores.histories.save(sessionId, history));
+        }
+
+        await Promise.all(writes);
+      });
+
+      this.cache.contexts.set(sessionId, context);
+      this.cache.sessions.set(sessionId, session);
+      if (historyChanged && history) {
+        this.cache.histories.set(sessionId, history);
+      }
+    });
   }
 
   /**
@@ -398,74 +429,94 @@ export class MemoryManager {
     messageId: string,
     reason: ContextExclusionReason = 'manual'
   ): Promise<boolean> {
-    this.ensureInitialized();
+    return this.enqueueMutation(async () => {
+      this.ensureInitialized();
 
-    const session = this.requireSession(sessionId);
-    const context = this.requireContext(sessionId);
-    const history = this.cache.histories.get(sessionId);
+      const session = this.clone(this.requireSession(sessionId));
+      const context = this.clone(this.requireContext(sessionId));
+      const history = this.cache.histories.has(sessionId)
+        ? this.clone(this.cache.histories.get(sessionId) ?? [])
+        : null;
 
-    const contextIndex = context.messages.findIndex((m) => m.messageId === messageId);
-    const historyIndex = history ? history.findIndex((h) => h.messageId === messageId) : -1;
+      const contextIndex = context.messages.findIndex((m) => m.messageId === messageId);
+      const historyIndex = history ? history.findIndex((h) => h.messageId === messageId) : -1;
 
-    if (contextIndex === -1) return false;
+      if (contextIndex === -1) return false;
 
-    const target = context.messages[contextIndex];
-    if (target.role === 'system') return false;
+      const target = context.messages[contextIndex];
+      if (target.role === 'system') return false;
 
-    context.messages.splice(contextIndex, 1);
-    context.version += 1;
+      context.messages.splice(contextIndex, 1);
+      context.version += 1;
 
-    let historyChanged = false;
-    if (history && historyIndex !== -1) {
-      const historyItem = history[historyIndex];
-      if (historyItem.role !== 'system') {
-        history[historyIndex] = {
-          ...historyItem,
-          excludedFromContext: true,
-          excludedReason: reason,
-        };
-        historyChanged = true;
+      let historyChanged = false;
+      if (history && historyIndex !== -1) {
+        const historyItem = history[historyIndex];
+        if (historyItem.role !== 'system') {
+          history[historyIndex] = {
+            ...historyItem,
+            excludedFromContext: true,
+            excludedReason: reason,
+          };
+          historyChanged = true;
+        }
       }
-    }
 
-    const now = Date.now();
-    context.updatedAt = now;
-    session.updatedAt = now;
+      const now = Date.now();
+      context.updatedAt = now;
+      session.updatedAt = now;
 
-    const writes: Promise<void>[] = [
-      this.stores.contexts.save(sessionId, context),
-      this.stores.sessions.save(sessionId, session),
-    ];
+      await this.withBundleTransaction(async () => {
+        const writes: Promise<void>[] = [
+          this.stores.contexts.save(sessionId, context),
+          this.stores.sessions.save(sessionId, session),
+        ];
 
-    if (historyChanged && history) {
-      writes.push(this.stores.histories.save(sessionId, history));
-    }
+        if (historyChanged && history) {
+          writes.push(this.stores.histories.save(sessionId, history));
+        }
 
-    await Promise.all(writes);
-    return true;
+        await Promise.all(writes);
+      });
+
+      this.cache.contexts.set(sessionId, context);
+      this.cache.sessions.set(sessionId, session);
+      if (historyChanged && history) {
+        this.cache.histories.set(sessionId, history);
+      }
+
+      return true;
+    });
   }
 
   /**
    * 清空上下文（保留系统消息）
    */
   async clearContext(sessionId: string): Promise<void> {
-    this.ensureInitialized();
+    await this.enqueueMutation(async () => {
+      this.ensureInitialized();
 
-    const session = this.requireSession(sessionId);
-    const context = this.requireContext(sessionId);
+      const session = this.clone(this.requireSession(sessionId));
+      const context = this.clone(this.requireContext(sessionId));
 
-    const systemMessage = context.messages.find((m) => m.role === 'system');
-    context.messages = systemMessage ? [systemMessage] : [];
-    context.version += 1;
+      const systemMessage = context.messages.find((m) => m.role === 'system');
+      context.messages = systemMessage ? [systemMessage] : [];
+      context.version += 1;
 
-    const now = Date.now();
-    context.updatedAt = now;
-    session.updatedAt = now;
+      const now = Date.now();
+      context.updatedAt = now;
+      session.updatedAt = now;
 
-    await Promise.all([
-      this.stores.contexts.save(sessionId, context),
-      this.stores.sessions.save(sessionId, session),
-    ]);
+      await this.withBundleTransaction(async () => {
+        await Promise.all([
+          this.stores.contexts.save(sessionId, context),
+          this.stores.sessions.save(sessionId, session),
+        ]);
+      });
+
+      this.cache.contexts.set(sessionId, context);
+      this.cache.sessions.set(sessionId, session);
+    });
   }
 
   /**
@@ -477,94 +528,99 @@ export class MemoryManager {
     sessionId: string,
     options: CompactContextOptions
   ): Promise<CompactionRecord> {
-    this.ensureInitialized();
+    return this.enqueueMutation(async () => {
+      this.ensureInitialized();
 
-    const session = this.requireSession(sessionId);
-    const context = this.requireContext(sessionId);
-    const history = this.ensureHistory(sessionId);
+      const session = this.clone(this.requireSession(sessionId));
+      const context = this.clone(this.requireContext(sessionId));
+      const history = this.clone(this.cache.histories.get(sessionId) ?? []);
+      const records = this.clone(this.cache.compactions.get(sessionId) ?? []);
 
-    const now = Date.now();
-    const recordId = randomUUID();
+      const now = Date.now();
+      const recordId = randomUUID();
 
-    // 创建摘要消息
-    const summaryMessage: HistoryMessage = {
-      ...options.summaryMessage,
-      sequence: this.getNextSequence(sessionId),
-      isSummary: true,
-      createdAt: now,
-    };
+      // 创建摘要消息
+      const summaryMessage: HistoryMessage = {
+        ...options.summaryMessage,
+        sequence: this.getNextSequenceFromHistory(history),
+        isSummary: true,
+        createdAt: now,
+      };
 
-    // 标记历史中被归档的消息
-    const archivedIdSet = new Set(options.removedMessageIds);
-    for (const msg of history) {
-      if (archivedIdSet.has(msg.messageId)) {
-        msg.archivedBy = recordId;
-        msg.excludedFromContext = true;
-        msg.excludedReason = 'compression';
+      // 标记历史中被归档的消息
+      const archivedIdSet = new Set(options.removedMessageIds);
+      for (const msg of history) {
+        if (archivedIdSet.has(msg.messageId)) {
+          msg.archivedBy = recordId;
+          msg.excludedFromContext = true;
+          msg.excludedReason = 'compression';
+        }
       }
-    }
 
-    // 添加摘要到历史
-    history.push(summaryMessage);
+      // 添加摘要到历史
+      history.push(summaryMessage);
 
-    // 更新上下文 - 移除被归档的消息，添加摘要
-    const systemMessage = context.messages.find((m) => m.role === 'system');
-    context.messages = context.messages.filter(
-      (m) => !archivedIdSet.has(m.messageId) && m.role !== 'system'
-    );
-    if (systemMessage) {
-      context.messages.unshift(systemMessage);
-    }
-    // 在 system 消息后插入摘要
-    const insertIndex = systemMessage ? 1 : 0;
-    context.messages.splice(insertIndex, 0, summaryMessage);
+      // 更新上下文 - 移除被归档的消息，添加摘要
+      const systemMessage = context.messages.find((m) => m.role === 'system');
+      context.messages = context.messages.filter(
+        (m) => !archivedIdSet.has(m.messageId) && m.role !== 'system'
+      );
+      if (systemMessage) {
+        context.messages.unshift(systemMessage);
+      }
+      // 在 system 消息后插入摘要
+      const insertIndex = systemMessage ? 1 : 0;
+      context.messages.splice(insertIndex, 0, summaryMessage);
 
-    context.version += 1;
-    context.lastCompactionId = recordId;
-    context.updatedAt = now;
-    context.stats = {
-      totalMessagesInHistory: history.length,
-      compactionCount: session.compactionCount + 1,
-      lastCompactionAt: now,
-    };
+      context.version += 1;
+      context.lastCompactionId = recordId;
+      context.updatedAt = now;
+      context.stats = {
+        totalMessagesInHistory: history.length,
+        compactionCount: session.compactionCount + 1,
+        lastCompactionAt: now,
+      };
 
-    // 更新会话
-    session.compactionCount += 1;
-    session.totalMessages = history.length;
-    session.updatedAt = now;
+      // 更新会话
+      session.compactionCount += 1;
+      session.totalMessages = history.length;
+      session.updatedAt = now;
 
-    // 创建压缩记录
-    const record: CompactionRecord = {
-      recordId,
-      sessionId,
-      compactedAt: now,
-      messageCountBefore: history.length - 1, // 减去新添加的摘要
-      messageCountAfter: context.messages.length,
-      archivedMessageIds: options.removedMessageIds,
-      summaryMessageId: summaryMessage.messageId,
-      reason: options.reason ?? 'manual',
-      metadata: {
-        tokenCountBefore: options.tokenCountBefore,
-        tokenCountAfter: options.tokenCountAfter,
-        triggerMessageId: options.triggerMessageId,
-      },
-      createdAt: now,
-    };
+      // 创建压缩记录
+      const record: CompactionRecord = {
+        recordId,
+        sessionId,
+        compactedAt: now,
+        messageCountBefore: history.length - 1, // 减去新添加的摘要
+        messageCountAfter: context.messages.length,
+        archivedMessageIds: options.removedMessageIds,
+        summaryMessageId: summaryMessage.messageId,
+        reason: options.reason ?? 'manual',
+        metadata: {
+          tokenCountBefore: options.tokenCountBefore,
+          tokenCountAfter: options.tokenCountAfter,
+          triggerMessageId: options.triggerMessageId,
+        },
+        createdAt: now,
+      };
+      records.push(record);
 
-    // 更新压缩记录缓存
-    const records = this.cache.compactions.get(sessionId) || [];
-    records.push(record);
-    this.cache.compactions.set(sessionId, records);
+      await this.withBundleTransaction(async () => {
+        await Promise.all([
+          this.stores.contexts.save(sessionId, context),
+          this.stores.histories.save(sessionId, history),
+          this.stores.sessions.save(sessionId, session),
+          this.stores.compactions.save(sessionId, records),
+        ]);
+      });
 
-    // 持久化
-    await Promise.all([
-      this.stores.contexts.save(sessionId, context),
-      this.stores.histories.save(sessionId, history),
-      this.stores.sessions.save(sessionId, session),
-      this.stores.compactions.append(sessionId, record),
-    ]);
+      this.cache.contexts.set(sessionId, context);
+      this.cache.histories.set(sessionId, history);
+      this.cache.sessions.set(sessionId, session);
+      this.cache.compactions.set(sessionId, records);
 
-    return this.clone(record);
+      return this.clone(record);
+    });
   }
 
   // ===========================================================================
@@ -639,23 +695,51 @@ export class MemoryManager {
     return context;
   }
 
-  private ensureHistory(sessionId: string): HistoryMessage[] {
-    let history = this.cache.histories.get(sessionId);
-    if (!history) {
-      history = [];
-      this.cache.histories.set(sessionId, history);
-    }
-    return history;
-  }
-
-  private getNextSequence(sessionId: string): number {
-    const history = this.cache.histories.get(sessionId);
+  private getNextSequenceFromHistory(history: HistoryMessage[]): number {
     if (!history || history.length === 0) return 1;
     return Math.max(...history.map((m) => m.sequence)) + 1;
   }
 
+  private async withBundleTransaction<T>(fn: () => Promise<T>): Promise<T> {
+    const tx = this.stores.withTransaction;
+    if (typeof tx === 'function') {
+      return tx(fn);
+    }
+    return fn();
+  }
+
+  private enqueueMutation<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.mutationQueue.then(fn, fn);
+    this.mutationQueue = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
+  }
+
+  /**
+   * 安全克隆对象
+   *
+   * 优先使用 structuredClone，失败时回退到 JSON 序列化
+   */
   private clone<T>(obj: T): T {
-    return JSON.parse(JSON.stringify(obj));
+    // 优先使用 structuredClone（支持更多类型）
+    if (typeof structuredClone === 'function') {
+      try {
+        return structuredClone(obj);
+      } catch {
+        // 回退到 JSON 方式
+      }
+    }
+
+    // JSON 序列化方式（不支持 Function、Symbol、undefined 等）
+    try {
+      return JSON.parse(JSON.stringify(obj));
+    } catch (error) {
+      throw new Error(
+        `Failed to clone data: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 }
 

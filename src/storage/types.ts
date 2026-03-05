@@ -7,17 +7,16 @@
  * 3. Compaction（压缩记录）- 记录何时发生了压缩以及影响范围
  * 4. Session（会话）- 会话元数据
  *
- * 消息类型使用 Agent 的 Message 类型
+ * 消息类型使用共享的 Message 类型
  */
 
-import type { Message } from '../agent/types';
-import type { Usage } from '../providers';
+import type { Message, Usage } from '../core/types';
 
 // =============================================================================
-// 重新导出 Agent 的 Message 类型
+// 重新导出共享类型
 // =============================================================================
 
-export type { Message } from '../agent/types';
+export type { Message } from '../core/types';
 
 // =============================================================================
 // 历史消息类型

@@ -30,6 +30,9 @@ export function createFileStorageBundle(basePath: string): IStorageBundle {
     histories,
     compactions,
     sessions,
+    async withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+      return fn();
+    },
     async close(): Promise<void> {
       await io.close();
     },

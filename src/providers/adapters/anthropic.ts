@@ -17,6 +17,7 @@ import type {
   MessageContent,
   ToolCall,
 } from '../types';
+import type { ProviderLogger } from '../types';
 
 /**
  * Anthropic content block
@@ -100,6 +101,11 @@ interface AnthropicStreamEvent {
   };
 }
 
+interface ToolCallStreamState {
+  id: string;
+  name: string;
+}
+
 /**
  * Anthropic API Adapter
  */
@@ -107,12 +113,21 @@ export class AnthropicAdapter extends BaseAPIAdapter {
   readonly endpointPath: string;
   readonly defaultModel: string;
   readonly apiVersion: string;
+  readonly logger?: ProviderLogger;
 
-  constructor(options: { endpointPath?: string; defaultModel?: string; apiVersion?: string } = {}) {
+  constructor(
+    options: {
+      endpointPath?: string;
+      defaultModel?: string;
+      apiVersion?: string;
+      logger?: ProviderLogger;
+    } = {}
+  ) {
     super();
     this.endpointPath = options.endpointPath ?? '/v1/messages';
     this.defaultModel = options.defaultModel ?? 'claude-opus-4-6-20250528';
     this.apiVersion = options.apiVersion ?? '2023-06-01';
+    this.logger = options.logger?.child('AnthropicAdapter');
   }
 
   /**
@@ -245,6 +260,7 @@ export class AnthropicAdapter extends BaseAPIAdapter {
   async *parseStreamAsync(reader: ReadableStreamDefaultReader<Uint8Array>): AsyncGenerator<Chunk> {
     const decoder = new TextDecoder();
     let buffer = '';
+    const toolCallStates = new Map<number, ToolCallStreamState>();
 
     const baseChunk: Partial<Chunk> = {};
     try {
@@ -277,7 +293,7 @@ export class AnthropicAdapter extends BaseAPIAdapter {
             return;
           }
           // parse event
-          const chunk = this.parseStreamEvent(event, baseChunk);
+          const chunk = this.parseStreamEvent(event, baseChunk, toolCallStates);
           if (chunk) {
             yield chunk;
           }
@@ -294,7 +310,11 @@ export class AnthropicAdapter extends BaseAPIAdapter {
   /**
    * Parse stream event to standard Chunk
    */
-  parseStreamEvent(event: AnthropicStreamEvent, baseChunk: Partial<Chunk>): Chunk | null {
+  parseStreamEvent(
+    event: AnthropicStreamEvent,
+    baseChunk: Partial<Chunk>,
+    toolCallStates?: Map<number, ToolCallStreamState>
+  ): Chunk | null {
     switch (event.type) {
       case 'message_start':
         return {
@@ -313,9 +333,16 @@ export class AnthropicAdapter extends BaseAPIAdapter {
         };
       case 'content_block_start':
         if (event.content_block?.type === 'tool_use') {
+          const toolIndex = event.index ?? 0;
+          const toolState: ToolCallStreamState = {
+            id: event.content_block.id || `tool_call_${toolIndex}`,
+            name: event.content_block.name || '',
+          };
+          toolCallStates?.set(toolIndex, toolState);
+
           return {
             ...baseChunk,
-            index: event.index ?? 0,
+            index: toolIndex,
             choices: [
               {
                 index: 0,
@@ -323,11 +350,11 @@ export class AnthropicAdapter extends BaseAPIAdapter {
                   role: 'assistant',
                   tool_calls: [
                     {
-                      id: event.content_block.id || '',
+                      id: toolState.id,
                       type: 'function',
-                      index: event.index ?? 0,
+                      index: toolIndex,
                       function: {
-                        name: event.content_block.name || '',
+                        name: toolState.name,
                         arguments: '',
                       },
                     },
@@ -353,9 +380,11 @@ export class AnthropicAdapter extends BaseAPIAdapter {
             ],
           } as Chunk;
         } else if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
+          const toolIndex = event.index ?? 0;
+          const toolState = toolCallStates?.get(toolIndex);
           return {
             ...baseChunk,
-            index: event.index ?? 0,
+            index: toolIndex,
             choices: [
               {
                 index: 0,
@@ -363,11 +392,11 @@ export class AnthropicAdapter extends BaseAPIAdapter {
                   role: 'assistant',
                   tool_calls: [
                     {
-                      id: '',
+                      id: toolState?.id || `tool_call_${toolIndex}`,
                       type: 'function',
-                      index: event.index ?? 0,
+                      index: toolIndex,
                       function: {
-                        name: '',
+                        name: toolState?.name || '',
                         arguments: event.delta.partial_json,
                       },
                     },
@@ -487,9 +516,7 @@ export class AnthropicAdapter extends BaseAPIAdapter {
             });
           }
         } else {
-          console.warn(
-            'Anthropic does not support image URLs directly. Please use base64 encoding.'
-          );
+          this.logger?.warn('Anthropic does not support image URLs directly; expected base64 data');
         }
       }
     }

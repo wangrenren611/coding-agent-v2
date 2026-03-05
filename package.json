@@ -15,6 +15,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "example:agent": "tsx examples/agent-usage/index.ts",
     "example:providers": "tsx examples/providers-usage/index.ts",
     "example:providers:manual": "tsx examples/providers-usage/manual-provider.ts",
     "test": "vitest",
@@ -37,8 +38,10 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "@types/shell-quote": "^1.7.5",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
+    "@vitest/coverage-v8": "^1.1.0",
     "cross-env": "^7.0.3",
     "eslint": "^8.56.0",
     "husky": "^8.0.3",
@@ -51,6 +54,9 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "execa": "^9.6.1",
+    "shell-quote": "^1.8.3",
+    "strip-ansi": "^7.2.0",
     "zod": "^4.3.6"
   }
 }

@@ -32,7 +32,12 @@ export type {
 } from './api';
 
 // 配置相关类型
-export type { BaseAPIConfig, BaseProviderConfig, OpenAICompatibleConfig } from './config';
+export type {
+  BaseAPIConfig,
+  BaseProviderConfig,
+  OpenAICompatibleConfig,
+  ProviderLogger,
+} from './config';
 
 // Provider 相关类型
 export { LLMProvider } from './provider';

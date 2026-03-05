@@ -161,4 +161,11 @@ export interface IStorageBundle {
    * 关闭存储，释放资源
    */
   close(): Promise<void>;
+
+  /**
+   * 可选事务能力（支持的后端可实现）
+   *
+   * 注意：该能力是可选的，调用方应提供降级逻辑。
+   */
+  withTransaction?<T>(fn: () => Promise<T>): Promise<T>;
 }

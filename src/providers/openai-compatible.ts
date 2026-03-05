@@ -46,6 +46,7 @@ import {
   LLMRequestMessage,
   LLMResponse,
 } from './types';
+import type { ProviderLogger } from './types';
 
 /** Provider 默认超时时间（毫秒），作为 Agent.requestTimeout 的回退值 */
 const PROVIDER_DEFAULT_TIMEOUT = 1000 * 60 * 10; // 10分钟
@@ -62,6 +63,7 @@ export class OpenAICompatibleProvider extends LLMProvider {
   declare config: OpenAICompatibleConfig;
   readonly httpClient: HTTPClient;
   readonly adapter: BaseAPIAdapter;
+  readonly logger?: ProviderLogger;
 
   /**
    * 默认请求超时（毫秒）
@@ -75,13 +77,17 @@ export class OpenAICompatibleProvider extends LLMProvider {
     // 规范化 baseURL（移除末尾斜杠）
     const normalizedBaseURL = config.baseURL.replace(/\/$/, '');
     this.config = { ...config, baseURL: normalizedBaseURL };
+    this.logger = config.logger?.child('OpenAICompatibleProvider', {
+      model: config.model,
+      baseURL: normalizedBaseURL,
+    });
 
     // 保存默认超时（供 Agent 回退使用）
     this.defaultTimeout = config.timeout ?? PROVIDER_DEFAULT_TIMEOUT;
 
     // 初始化 HTTP 客户端（standalone 调用时使用 provider timeout 兜底）
     this.httpClient = new HTTPClient({
-      debug: config.debug ?? false,
+      logger: this.logger,
       defaultTimeoutMs: this.defaultTimeout,
     });
 
@@ -105,6 +111,11 @@ export class OpenAICompatibleProvider extends LLMProvider {
     messages: LLMRequestMessage[],
     options?: LLMGenerateOptions
   ): Promise<LLMResponse> {
+    this.logger?.debug('generate() called', {
+      messageCount: messages.length,
+      hasOptions: Boolean(options),
+      stream: options?.stream ?? false,
+    });
     this.ensureMessages(messages);
     if (options?.stream === true) {
       throw new LLMBadRequestError(
@@ -127,6 +138,11 @@ export class OpenAICompatibleProvider extends LLMProvider {
     messages: LLMRequestMessage[],
     options?: LLMGenerateOptions
   ): AsyncGenerator<Chunk> {
+    this.logger?.debug('generateStream() called', {
+      messageCount: messages.length,
+      hasOptions: Boolean(options),
+      stream: options?.stream ?? true,
+    });
     this.ensureMessages(messages);
     if (options?.stream === false) {
       throw new LLMBadRequestError(
@@ -234,6 +250,10 @@ export class OpenAICompatibleProvider extends LLMProvider {
     headers: Headers;
     abortSignal?: AbortSignal;
   }): Promise<LLMResponse> {
+    this.logger?.debug('Sending non-stream request', {
+      url: params.url,
+      hasAbortSignal: Boolean(params.abortSignal),
+    });
     const response = await this.httpClient.fetch(params.url, {
       method: 'POST',
       headers: params.headers,
@@ -245,12 +265,18 @@ export class OpenAICompatibleProvider extends LLMProvider {
     try {
       data = await response.json();
     } catch (error) {
+      this.logger?.error('Failed to parse non-stream response JSON', error, {
+        url: params.url,
+      });
       throw new LLMError(
         `Failed to parse response as JSON: ${error instanceof Error ? error.message : String(error)}`,
         'INVALID_JSON'
       );
     }
 
+    this.logger?.debug('Non-stream response parsed', {
+      url: params.url,
+    });
     return this.adapter.transformResponse(data);
   }
 
@@ -265,6 +291,10 @@ export class OpenAICompatibleProvider extends LLMProvider {
     headers: Headers;
     abortSignal?: AbortSignal;
   }): AsyncGenerator<Chunk> {
+    this.logger?.debug('Sending stream request', {
+      url: params.url,
+      hasAbortSignal: Boolean(params.abortSignal),
+    });
     const response = await this.httpClient.fetch(params.url, {
       method: 'POST',
       headers: params.headers,
@@ -273,6 +303,9 @@ export class OpenAICompatibleProvider extends LLMProvider {
     });
 
     if (!response.body) {
+      this.logger?.error('Stream response has no readable body', undefined, {
+        url: params.url,
+      });
       throw new LLMError('Response body is not readable', 'NO_BODY');
     }
 
@@ -280,13 +313,26 @@ export class OpenAICompatibleProvider extends LLMProvider {
       ? this.adapter.parseStreamAsync(response.body.getReader())
       : StreamParser.parseAsync(response.body.getReader());
 
+    let chunkCount = 0;
     for await (const chunk of streamIterator) {
+      chunkCount++;
       const chunkError = this.extractStreamChunkError(chunk);
       if (chunkError) {
+        this.logger?.warn('Stream chunk error detected', {
+          url: params.url,
+          chunkId: chunk.id,
+          code: chunkError.code,
+          type: chunkError.type,
+        });
         throw this.createStreamChunkError(chunkError, chunk.id);
       }
       yield chunk;
     }
+
+    this.logger?.debug('Stream request completed', {
+      url: params.url,
+      chunkCount,
+    });
   }
 
   private extractStreamChunkError(chunk: Chunk): NonNullable<Chunk['error']> | null {

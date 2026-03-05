@@ -13,6 +13,7 @@ import {
   processToolCallPairs,
   rebuildMessages,
 } from '../utils/message';
+import { estimateTokens } from '../utils/token';
 
 // =============================================================================
 // 类型定义
@@ -48,33 +49,7 @@ export interface CompactResult {
 // Token 估算工具函数
 // =============================================================================
 
-/**
- * 估算文本 Token 数
- *
- * 算法说明：
- * - 中文字符（Unicode \u4e00-\u9fa5）：1 字符 ≈ 1.5 token
- * - 其他字符（英文、数字、符号等）：1 字符 ≈ 0.25 token
- *
- * @param text 要估算的文本
- * @returns 估算的 token 数
- */
-export function estimateTokens(text: string): number {
-  if (!text) return 0;
-
-  let cnCount = 0;
-  let otherCount = 0;
-
-  for (const char of text) {
-    if (char >= '\u4e00' && char <= '\u9fa5') {
-      cnCount++;
-    } else {
-      otherCount++;
-    }
-  }
-
-  const totalTokens = cnCount * 1.5 + otherCount * 0.25;
-  return Math.ceil(totalTokens);
-}
+export { estimateTokens };
 
 /**
  * 估算消息列表的 Token 数
@@ -240,8 +215,7 @@ ${previousSummaryBlock}
     { role: 'user' as const, content: compactionMessage },
   ];
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const options: any = {
+  const options: { max_tokens: number; model?: string; abortSignal?: AbortSignal } = {
     max_tokens: 1024,
   };
 

@@ -3,6 +3,9 @@
  *
  * 统一的配置类型，包括基础配置、Provider 配置和 OpenAI 兼容配置
  */
+import type { ChildLogger, Logger } from '../../logger';
+
+export type ProviderLogger = Logger | ChildLogger;
 
 /**
  * 基础 API 配置接口
@@ -22,8 +25,8 @@ export interface BaseAPIConfig {
   timeout?: number;
   /** 最大重试次数（由上层重试策略使用） */
   maxRetries?: number;
-  /** 启用调试日志 */
-  debug?: boolean;
+  /** 可选日志器（建议注入 Agent 的 child logger） */
+  logger?: ProviderLogger;
 }
 
 /**

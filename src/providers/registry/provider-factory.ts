@@ -49,7 +49,7 @@ export class ProviderFactory {
       LLMMAX_TOKENS: overrides?.LLMMAX_TOKENS ?? modelConfig.LLMMAX_TOKENS,
       timeout: overrides?.timeout,
       maxRetries: overrides?.maxRetries,
-      debug: overrides?.debug,
+      logger: overrides?.logger,
       organization: overrides?.organization,
       chatCompletionsPath: overrides?.chatCompletionsPath ?? modelConfig.endpointPath,
       enableStreamUsage: overrides?.enableStreamUsage,
@@ -57,7 +57,7 @@ export class ProviderFactory {
       thinking: overrides?.thinking ?? modelConfig.thinking,
     };
 
-    const adapter = ProviderFactory.createAdapter(modelId);
+    const adapter = ProviderFactory.createAdapter(modelId, finalConfig.logger);
 
     return new OpenAICompatibleProvider(finalConfig, adapter);
   }
@@ -75,7 +75,7 @@ export class ProviderFactory {
       throw new Error(`Unknown model: ${modelId}`);
     }
 
-    const adapter = ProviderFactory.createAdapter(modelId);
+    const adapter = ProviderFactory.createAdapter(modelId, config.logger);
     return new OpenAICompatibleProvider(config as OpenAICompatibleConfig, adapter);
   }
 
@@ -85,27 +85,29 @@ export class ProviderFactory {
    * @param modelId 模型唯一标识
    * @returns API 适配器实例
    */
-  static createAdapter(modelId: ModelId): BaseAPIAdapter {
+  static createAdapter(
+    modelId: ModelId,
+    logger?: OpenAICompatibleConfig['logger']
+  ): BaseAPIAdapter {
     const modelConfig = MODEL_DEFINITIONS[modelId];
-    // 按模型选择适配器
-    switch (modelId) {
-      case 'claude-opus-4.6':
-        return new AnthropicAdapter({
-          defaultModel: modelConfig.model,
-          endpointPath: modelConfig.endpointPath || '/v1/messages',
-        });
-      case 'kimi-k2.5':
-      case 'qwen-kimi-k2.5':
-      case 'glm-5':
-        return new KimiAdapter({
-          defaultModel: modelConfig.model,
-          endpointPath: modelConfig.endpointPath || '/chat/completions',
-        });
-      default:
-        return new StandardAdapter({
-          defaultModel: modelConfig.model,
-          endpointPath: modelConfig.endpointPath || '/chat/completions',
-        });
+    if (modelConfig.provider === 'anthropic') {
+      return new AnthropicAdapter({
+        defaultModel: modelConfig.model,
+        endpointPath: modelConfig.endpointPath || '/v1/messages',
+        logger,
+      });
     }
+
+    if (modelConfig.provider === 'kimi') {
+      return new KimiAdapter({
+        defaultModel: modelConfig.model,
+        endpointPath: modelConfig.endpointPath || '/chat/completions',
+      });
+    }
+
+    return new StandardAdapter({
+      defaultModel: modelConfig.model,
+      endpointPath: modelConfig.endpointPath || '/chat/completions',
+    });
   }
 }

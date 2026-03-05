@@ -2,127 +2,31 @@
  * Agent 类型定义
  */
 
-import type {
-  LLMGenerateOptions,
-  LLMRequestMessage,
-  Chunk,
-  Usage,
-  BackoffConfig,
+import type { LLMGenerateOptions, LLMRequestMessage, Chunk, BackoffConfig } from '../providers';
+
+// 从 core 重新导出共享类型
+export type {
   ToolCall,
   FinishReason,
-  Role,
-  MessageContent,
-  BaseLLMMessage,
-} from '../providers';
+  Usage,
+  Message,
+  MessageType,
+  ToolResult,
+  ToolExecutionContext,
+  AgentLoopState,
+} from '../core/types';
 
-// 从 providers 重新导出需要使用的类型
-export type { ToolCall, FinishReason } from '../providers';
+// 从 core 导入类型供内部使用
+import type { ToolCall, FinishReason, Usage, ToolResult, AgentLoopState } from '../core/types';
+
 import type { MemoryManager } from '../storage';
 import type { ToolManager } from '../tool';
+import type { Plugin } from '../hook';
+import type { Logger } from '../logger';
 
 // =============================================================================
-// 事件类型
+// Agent 配置类型
 // =============================================================================
-
-/**
- * Agent 循环事件类型
- */
-export type AgentEventType =
-  | 'text-delta' // 文本增量
-  | 'text-complete' // 文本完成
-  | 'tool-call' // 工具调用开始
-  | 'tool-result' // 工具执行结果
-  | 'error' // 错误发生
-  | 'step-start' // 步骤开始
-  | 'step-complete' // 步骤完成
-  | 'loop-start' // 循环开始
-  | 'loop-complete' // 循环完成
-  | 'retry' // 重试
-  | 'usage' // Token 使用信息
-  | 'compaction' // 上下文压缩
-  | 'abort'; // 中止
-
-/**
- * Agent 事件
- */
-export interface AgentEvent {
-  type: AgentEventType;
-  data?: unknown;
-  timestamp: number;
-  loopIndex: number;
-  stepIndex: number;
-}
-
-/**
- * Agent 事件回调
- */
-export type AgentEventCallback = (event: AgentEvent) => void | Promise<void>;
-
-// =============================================================================
-// 工具相关类型
-// =============================================================================
-
-/**
- * 工具执行器函数类型
- */
-export type ToolExecutor = (
-  name: string,
-  args: Record<string, unknown>,
-  context: ToolExecutionContext
-) => Promise<ToolResult>;
-
-/**
- * 工具执行上下文
- */
-export interface ToolExecutionContext {
-  toolCallId: string;
-  loopIndex: number;
-  stepIndex: number;
-  agent: import('./agent').Agent;
-}
-
-/**
- * 工具执行结果
- */
-export interface ToolResult {
-  success: boolean;
-  data?: unknown;
-  error?: string;
-  /** 元数据（如执行时间等） */
-  metadata?: Record<string, unknown>;
-}
-
-// =============================================================================
-// 状态与配置类型
-// =============================================================================
-
-/**
- * Agent 循环状态
- */
-export interface AgentLoopState {
-  /** 当前循环索引 */
-  loopIndex: number;
-  /** 当前步骤索引 */
-  stepIndex: number;
-  /** 当前累积的文本 */
-  currentText: string;
-  /** 当前步骤的工具调用 */
-  currentToolCalls: ToolCall[];
-  /** 累积的 Token 使用 */
-  totalUsage: Usage;
-  /** 当前步骤的 Token 使用 */
-  stepUsage: Usage;
-  /** 重试次数 */
-  retryCount: number;
-  /** 最后一次错误 */
-  lastError?: Error;
-  /** 是否需要重试 */
-  needsRetry: boolean;
-  /** 是否已中止 */
-  aborted: boolean;
-  /** 循环结果状态 */
-  resultStatus: 'continue' | 'compact' | 'stop';
-}
 
 /**
  * Agent 配置
@@ -161,8 +65,6 @@ export interface AgentConfig {
   // 其他配置
   // ---------------------------------------------------------------------------
 
-  /** 最大循环次数 */
-  maxLoops?: number;
   /** 最大步骤次数（每次LLM调用为一个步骤） */
   maxSteps?: number;
   /** 最大重试次数 */
@@ -173,10 +75,12 @@ export interface AgentConfig {
   generateOptions?: LLMGenerateOptions;
   /** 完成检测器 */
   completionDetector?: CompletionDetector;
-  /** 事件回调 */
-  onEvent?: AgentEventCallback;
+  /** 插件列表 */
+  plugins?: Plugin[];
   /** 调试模式 */
   debug?: boolean;
+  /** 日志记录器 */
+  logger?: Logger;
   /** 会话 ID（用于消息存储） */
   sessionId?: string;
   /** 内存管理器（用于消息存储） */
@@ -246,15 +150,3 @@ export interface AgentResult {
   /** 循环次数 */
   loopCount: number;
 }
-export type MessageType = 'text' | 'tool-call' | 'tool-result' | 'summary';
-
-export type Message = {
-  messageId: string; //agent相关都使用这个消息id
-  role: Role;
-  content: MessageContent;
-  type?: MessageType;
-  finish_reason?: FinishReason;
-  id?: string; //程序不用，大模型要用
-  /** 该消息的 Token 使用情况 */
-  usage?: Usage;
-} & BaseLLMMessage;

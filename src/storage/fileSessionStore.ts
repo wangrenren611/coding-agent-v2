@@ -2,55 +2,21 @@
  * 文件会话存储实现
  */
 
-import * as path from 'path';
 import type { SessionData, QueryOptions, SessionFilter } from './types';
 import type { ISessionStorage } from './interfaces';
-import { AtomicJsonStore } from './atomic-json';
-import { encodeEntityFileName, safeDecodeEntityFileName } from './filename-codec';
+import { BaseFileStore } from './base';
 
-export class FileSessionStore implements ISessionStorage {
-  private readonly dirPath: string;
-  private readonly io: AtomicJsonStore;
-
-  constructor(basePath: string, io?: AtomicJsonStore) {
-    this.dirPath = path.join(basePath, 'sessions');
-    this.io = io ?? new AtomicJsonStore();
+/**
+ * 文件会话存储
+ */
+export class FileSessionStore extends BaseFileStore<SessionData> implements ISessionStorage {
+  constructor(basePath: string, io?: import('./atomic-json').AtomicJsonStore) {
+    super({ basePath, subDir: 'sessions', io });
   }
 
-  async prepare(): Promise<void> {
-    await this.io.ensureDir(this.dirPath);
-  }
-
-  async loadAll(): Promise<Map<string, SessionData>> {
-    const items = new Map<string, SessionData>();
-    const files = await this.io.listJsonFiles(this.dirPath);
-
-    for (const fileName of files) {
-      const sessionId = safeDecodeEntityFileName(fileName);
-      if (!sessionId) continue;
-
-      const filePath = this.filePath(sessionId);
-      try {
-        const session = await this.io.readJsonFile<SessionData>(filePath);
-        if (session) {
-          items.set(sessionId, session);
-        }
-      } catch (error) {
-        console.error(`Error loading session ${sessionId}:`, error);
-      }
-    }
-
-    return items;
-  }
-
-  async save(sessionId: string, session: SessionData): Promise<void> {
-    await this.io.writeJsonFile(this.filePath(sessionId), session);
-  }
-
-  async delete(sessionId: string): Promise<void> {
-    await this.io.deleteFileIfExists(this.filePath(sessionId));
-  }
-
+  /**
+   * 列出会话（支持过滤和分页）
+   */
   async list(options?: QueryOptions, filter?: SessionFilter): Promise<SessionData[]> {
     const all = await this.loadAll();
     let sessions = Array.from(all.values());
@@ -64,12 +30,10 @@ export class FileSessionStore implements ISessionStorage {
         sessions = sessions.filter((s) => s.status === filter.status);
       }
       if (filter.startTime !== undefined) {
-        const startTime = filter.startTime;
-        sessions = sessions.filter((s) => s.createdAt >= startTime);
+        sessions = sessions.filter((s) => s.createdAt >= filter.startTime!);
       }
       if (filter.endTime !== undefined) {
-        const endTime = filter.endTime;
-        sessions = sessions.filter((s) => s.createdAt <= endTime);
+        sessions = sessions.filter((s) => s.createdAt <= filter.endTime!);
       }
     }
 
@@ -78,16 +42,17 @@ export class FileSessionStore implements ISessionStorage {
     const orderDirection = options?.orderDirection ?? 'desc';
     sessions.sort((a, b) => {
       const comparison = a[orderBy] - b[orderBy];
-      return orderDirection === 'asc' ? comparison : -comparison;
+      if (comparison !== 0) {
+        return orderDirection === 'asc' ? comparison : -comparison;
+      }
+
+      const tie = a.sessionId.localeCompare(b.sessionId);
+      return orderDirection === 'asc' ? tie : -tie;
     });
 
     // 分页
     const offset = options?.offset ?? 0;
     const limit = options?.limit ?? sessions.length;
     return sessions.slice(offset, offset + limit);
-  }
-
-  private filePath(sessionId: string): string {
-    return path.join(this.dirPath, encodeEntityFileName(sessionId));
   }
 }

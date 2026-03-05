@@ -6,14 +6,16 @@
 
 import { z } from 'zod';
 import type { Tool } from '../providers';
-import type { ToolCall, ToolResult, ToolExecutionContext } from '../agent/types';
+import type { ToolCall, ToolResult, ToolExecutionContext } from '../core/types';
 import { BaseTool } from './base';
 import type {
   ToolManagerConfig,
+  ToolExecutionCallbacks,
   ToolMeta,
   ToolMiddleware,
   ToolExecutionInfo,
   ToolParameterSchema,
+  ToolStreamEventInput,
 } from './types';
 
 // =============================================================================
@@ -105,7 +107,7 @@ const timingMiddleware: ToolMiddleware = async (info, next) => {
  * ```
  */
 export class ToolManager {
-  private tools: Map<string, BaseTool<any>> = new Map();
+  private tools: Map<string, BaseTool<ToolParameterSchema>> = new Map();
   private middlewares: ToolMiddleware[] = [];
   private config: Required<ToolManagerConfig>;
 
@@ -149,7 +151,8 @@ export class ToolManager {
   /**
    * 批量注册工具
    */
-  registerMany(tools: BaseTool<any>[]): this {
+
+  registerList(tools: BaseTool<ToolParameterSchema>[]): this {
     for (const tool of tools) {
       this.register(tool);
     }
@@ -180,7 +183,7 @@ export class ToolManager {
   getTool<T extends ToolParameterSchema = ToolParameterSchema>(
     name: string
   ): BaseTool<T> | undefined {
-    return this.tools.get(name);
+    return this.tools.get(name) as BaseTool<T> | undefined;
   }
 
   /**
@@ -200,7 +203,8 @@ export class ToolManager {
   /**
    * 获取所有工具
    */
-  getTools(): BaseTool<any>[] {
+
+  getTools(): BaseTool<ToolParameterSchema>[] {
     return Array.from(this.tools.values());
   }
 
@@ -214,28 +218,32 @@ export class ToolManager {
   /**
    * 按分类获取工具
    */
-  getToolsByCategory(category: string): BaseTool<any>[] {
+
+  getToolsByCategory(category: string): BaseTool<ToolParameterSchema>[] {
     return this.getTools().filter((tool) => tool.meta.category === category);
   }
 
   /**
    * 按标签获取工具
    */
-  getToolsByTag(tag: string): BaseTool<any>[] {
+
+  getToolsByTag(tag: string): BaseTool<ToolParameterSchema>[] {
     return this.getTools().filter((tool) => tool.meta.tags?.includes(tag));
   }
 
   /**
    * 获取危险工具
    */
-  getDangerousTools(): BaseTool<any>[] {
+
+  getDangerousTools(): BaseTool<ToolParameterSchema>[] {
     return this.getTools().filter((tool) => tool.meta.dangerous);
   }
 
   /**
    * 获取启用的工具
    */
-  getEnabledTools(): BaseTool<any>[] {
+
+  getEnabledTools(): BaseTool<ToolParameterSchema>[] {
     return this.getTools().filter((tool) => tool.meta.enabled !== false);
   }
 
@@ -292,9 +300,12 @@ export class ToolManager {
     } catch (error) {
       let errorMessage: string;
       if (error instanceof z.ZodError) {
-        // zod v3/v4 兼容
-        const issues = (error as any).issues || (error as any).errors || [];
-        errorMessage = `Invalid arguments: ${issues.map((e: any) => e.message).join(', ')}`;
+        // zod v3/v4 兼容 - access internal properties that differ between versions
+        type ZodIssueLike = { message: string };
+        const errorWithIssues = error as { issues?: ZodIssueLike[]; errors?: ZodIssueLike[] };
+        const issues = errorWithIssues.issues ?? errorWithIssues.errors ?? [];
+
+        errorMessage = `Invalid arguments: ${issues.map((e) => e.message).join(', ')}`;
       } else if (error instanceof Error) {
         errorMessage = error.message;
       } else {
@@ -345,7 +356,8 @@ export class ToolManager {
    */
   async executeTools(
     toolCalls: ToolCall[],
-    context: Omit<ToolExecutionContext, 'toolCallId'>
+    context: Omit<ToolExecutionContext, 'toolCallId'>,
+    callbacks?: ToolExecutionCallbacks
   ): Promise<Array<{ toolCallId: string; result: ToolResult }>> {
     if (toolCalls.length === 0) {
       return [];
@@ -353,14 +365,14 @@ export class ToolManager {
 
     // 如果工具数量小于等于最大并发数，直接并发执行
     if (toolCalls.length <= this.config.maxConcurrency) {
-      return this.executeToolBatch(toolCalls, context);
+      return this.executeToolBatch(toolCalls, context, callbacks);
     }
 
     // 分批执行
     const results: Array<{ toolCallId: string; result: ToolResult }> = [];
     for (let i = 0; i < toolCalls.length; i += this.config.maxConcurrency) {
       const batch = toolCalls.slice(i, i + this.config.maxConcurrency);
-      const batchResults = await this.executeToolBatch(batch, context);
+      const batchResults = await this.executeToolBatch(batch, context, callbacks);
       results.push(...batchResults);
     }
 
@@ -372,10 +384,11 @@ export class ToolManager {
    */
   private async executeToolBatch(
     toolCalls: ToolCall[],
-    context: Omit<ToolExecutionContext, 'toolCallId'>
+    context: Omit<ToolExecutionContext, 'toolCallId'>,
+    callbacks?: ToolExecutionCallbacks
   ): Promise<Array<{ toolCallId: string; result: ToolResult }>> {
     const promises = toolCalls.map((toolCall) =>
-      this.executeSingleToolWithTimeout(toolCall, context)
+      this.executeSingleToolWithTimeout(toolCall, context, callbacks)
     );
     const results = await Promise.all(promises);
     return results.map((r) => ({ toolCallId: r.toolCallId, result: r.result }));
@@ -386,23 +399,71 @@ export class ToolManager {
    */
   private async executeSingleToolWithTimeout(
     toolCall: ToolCall,
-    context: Omit<ToolExecutionContext, 'toolCallId'>
+    context: Omit<ToolExecutionContext, 'toolCallId'>,
+    callbacks?: ToolExecutionCallbacks
   ): Promise<{ toolCallId: string; result: ToolResult }> {
+    const emitToolEvent = this.createToolEventEmitter(toolCall, callbacks);
     const fullContext: ToolExecutionContext = {
       ...context,
       toolCallId: toolCall.id,
+      agentContext: {
+        sessionId: context.agentContext?.sessionId ?? context.agent.getSessionId(),
+        loopIndex: context.loopIndex,
+        stepIndex: context.stepIndex,
+        emitToolEvent,
+      },
+      emitToolEvent,
     };
 
     try {
+      await this.safeEmitToolEvent(emitToolEvent, {
+        type: 'start',
+        data: {
+          toolName: toolCall.function.name,
+          arguments: toolCall.function.arguments,
+        },
+      });
+
       const args = this.parseToolArgs(toolCall.function.arguments);
       const result = await this.withTimeout(
         this.executeTool(toolCall.function.name, args, fullContext),
         this.config.timeout,
         `Tool "${toolCall.function.name}" execution timed out after ${this.config.timeout}ms`
       );
+
+      if (!result.success) {
+        await this.safeEmitToolEvent(emitToolEvent, {
+          type: 'error',
+          data: {
+            error: result.error ?? `Tool "${toolCall.function.name}" failed`,
+            result,
+          },
+        });
+      }
+      await this.safeEmitToolEvent(emitToolEvent, {
+        type: 'end',
+        data: {
+          success: result.success,
+          result,
+        },
+      });
+
       return { toolCallId: toolCall.id, result };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
+      await this.safeEmitToolEvent(emitToolEvent, {
+        type: 'error',
+        data: {
+          error: err.message,
+        },
+      });
+      await this.safeEmitToolEvent(emitToolEvent, {
+        type: 'end',
+        data: {
+          success: false,
+          error: err.message,
+        },
+      });
       return {
         toolCallId: toolCall.id,
         result: { success: false, error: err.message },
@@ -418,6 +479,54 @@ export class ToolManager {
       return JSON.parse(argsString);
     } catch {
       return {};
+    }
+  }
+
+  private createToolEventEmitter(
+    toolCall: ToolCall,
+    callbacks?: ToolExecutionCallbacks
+  ): ((event: ToolStreamEventInput) => Promise<void>) | undefined {
+    const onToolEvent = callbacks?.onToolEvent;
+    if (!onToolEvent) {
+      return undefined;
+    }
+
+    let sequence = 0;
+    return async (event: ToolStreamEventInput) => {
+      const providedSequence = event.sequence;
+      if (
+        typeof providedSequence === 'number' &&
+        Number.isFinite(providedSequence) &&
+        providedSequence > sequence
+      ) {
+        sequence = providedSequence;
+      } else {
+        sequence += 1;
+      }
+
+      await onToolEvent({
+        toolCallId: toolCall.id,
+        toolName: toolCall.function.name,
+        type: event.type,
+        sequence,
+        timestamp: event.timestamp ?? Date.now(),
+        content: event.content,
+        data: event.data,
+      });
+    };
+  }
+
+  private async safeEmitToolEvent(
+    emitToolEvent: ((event: ToolStreamEventInput) => Promise<void>) | undefined,
+    event: ToolStreamEventInput
+  ): Promise<void> {
+    if (!emitToolEvent) {
+      return;
+    }
+    try {
+      await emitToolEvent(event);
+    } catch {
+      // 工具流事件失败不应影响主流程
     }
   }
 

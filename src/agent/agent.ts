@@ -13,33 +13,38 @@ import {
   isAbortedError,
   calculateBackoff,
 } from '../providers';
+import type { AgentConfig, AgentStepResult, AgentResult, CompletionResult } from './types';
 import type {
-  AgentConfig,
-  AgentLoopState,
-  AgentEvent,
-  AgentStepResult,
-  AgentResult,
-  CompletionResult,
+  Message,
   ToolResult,
   ToolCall,
   FinishReason,
-} from './types';
-import type { Message } from './types';
-import { AgentLoopExceededError, AgentAbortedError, AgentMaxRetriesExceededError } from './errors';
+  AgentLoopState,
+  HookContext,
+  ToolStreamEvent,
+} from '../core/types';
+import { AgentAbortedError, AgentMaxRetriesExceededError } from './errors';
 import { createInitialState, mergeAgentConfig } from './state';
 import { defaultCompletionDetector } from './completion';
 import { compact, estimateMessagesTokens } from './compaction';
+import {
+  createPersistenceState,
+  flushPendingMessages,
+  getInProgressAssistantMessage,
+  persistInProgressAssistantMessage,
+  resetStreamPersistence,
+  ensureInProgressAssistantMessage,
+} from './persistence';
 import type { ToolManager } from '../tool';
-
-// =============================================================================
-// Agent 类
-// =============================================================================
+import { HookManager } from '../hook';
+import type { Logger } from '../logger';
+import { contentToText } from '../utils';
 
 /**
  * Agent 核心类
  */
 export class Agent {
-  private readonly config: ReturnType<typeof mergeAgentConfig>;
+  private config: ReturnType<typeof mergeAgentConfig>;
   private state: AgentLoopState;
   private messages: Message[] = [];
   private steps: AgentStepResult[] = [];
@@ -47,17 +52,36 @@ export class Agent {
   private sessionId: string;
   private toolManager: ToolManager;
   private currentTools?: Tool[];
+  private hookManager: HookManager;
+  private logger?: Logger;
+  private persistenceState = createPersistenceState();
+  private currentReasoningContent = '';
 
   constructor(config: AgentConfig) {
     this.config = mergeAgentConfig(config);
     this.state = createInitialState();
     this.sessionId = config.sessionId ?? crypto.randomUUID();
     this.toolManager = config.toolManager!;
+    this.logger = config.logger;
+
+    // 初始化 HookManager 并注册 plugins
+    this.hookManager = new HookManager();
+    if (config.plugins && config.plugins.length > 0) {
+      this.hookManager.useMany(config.plugins);
+    }
   }
 
-  // ===========================================================================
-  // 公共 API
-  // ===========================================================================
+  /**
+   * 获取 Hook 上下文
+   */
+  private getHookContext(): HookContext {
+    return {
+      loopIndex: this.state.loopIndex,
+      stepIndex: this.state.stepIndex,
+      sessionId: this.sessionId,
+      state: { ...this.state },
+    };
+  }
 
   /**
    * 获取会话 ID
@@ -85,9 +109,17 @@ export class Agent {
    */
   getLLMMessages(): LLMRequestMessage[] {
     return this.messages.map((m) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { messageId, type, finish_reason, usage, ...llmMsg } = m;
-      return llmMsg as LLMRequestMessage;
+      // 提取 LLM 需要的字段，忽略 Agent 内部字段
+      const { role, content, name, tool_calls, tool_call_id, reasoning_content, id } = m;
+      return {
+        role,
+        content,
+        name,
+        tool_calls,
+        tool_call_id,
+        reasoning_content,
+        id,
+      } as LLMRequestMessage;
     });
   }
 
@@ -120,10 +152,6 @@ export class Agent {
     this.messages.push(message);
   }
 
-  // ===========================================================================
-  // 消息存储
-  // ===========================================================================
-
   /**
    * 从存储恢复消息历史
    */
@@ -139,13 +167,15 @@ export class Agent {
   /**
    * 保存当前消息历史到存储
    */
-  async saveMessages(): Promise<void> {
+  async saveMessages(startIndex = 0): Promise<void> {
     if (!this.config.memoryManager) return;
+    if (startIndex < 0 || startIndex >= this.messages.length) {
+      return;
+    }
 
-    const messagesToSave: Message[] = this.messages.map((msg, index) => ({
+    const messagesToSave: Message[] = this.messages.slice(startIndex).map((msg) => ({
       ...msg,
       messageId: msg.messageId ?? crypto.randomUUID(),
-      usage: index === this.messages.length - 1 ? this.state.totalUsage : msg.usage,
     }));
 
     await this.config.memoryManager.addMessages(this.sessionId, messagesToSave);
@@ -158,11 +188,6 @@ export class Agent {
     if (!this.config.memoryManager) return;
     await this.config.memoryManager.clearContext(this.sessionId);
   }
-
-  // ===========================================================================
-  // 压缩功能
-  // ===========================================================================
-
   /**
    * 检查是否需要压缩
    */
@@ -207,18 +232,7 @@ export class Agent {
       tokenCountBefore,
       tokenCountAfter: estimateMessagesTokens(result.messages, this.currentTools),
     });
-
-    // 发出压缩事件
-    await this.emitEvent('compaction', {
-      messagesBefore: tokenCountBefore,
-      messagesAfter: estimateMessagesTokens(this.messages, this.currentTools),
-      removedCount: result.removedMessageIds.length,
-    });
   }
-
-  // ===========================================================================
-  // 主运行方法
-  // ===========================================================================
 
   /**
    * 主运行方法
@@ -231,57 +245,116 @@ export class Agent {
     this.state = createInitialState();
     this.steps = [];
     this.abortController = new AbortController();
+    await this.applyConfigHooks();
 
-    // 设置初始消息
-    if (typeof userMessage === 'string') {
-      this.messages = this.buildInitialMessages(userMessage);
-    } else {
-      this.messages = this.buildInitialMessages(userMessage.content);
-    }
-
-    // 获取工具 schema（优先使用 toolManager）
-    const tools = this.getToolsSchema(options?.tools);
-    this.currentTools = tools;
-
-    // 合并选项
-    const mergedOptions: LLMGenerateOptions = {
-      ...this.config.generateOptions,
-      ...options,
-      abortSignal: options?.abortSignal ?? this.abortController.signal,
-      tools,
-    };
-
-    // 发出循环开始事件
-    await this.emitEvent('loop-start', { messages: this.getLLMMessages() });
+    // 设置初始消息并接入 memory
+    const userContent = typeof userMessage === 'string' ? userMessage : userMessage.content;
+    const saveFromIndex = await this.prepareMessages(userContent);
+    this.persistenceState.persistCursor = saveFromIndex;
+    let runError: unknown;
+    let runResult: AgentResult | undefined;
 
     try {
-      await this.runLoop(mergedOptions);
+      await flushPendingMessages({
+        state: this.persistenceState,
+        messagesLength: this.messages.length,
+        saveMessages: (startIndex) => this.saveMessages(startIndex),
+      });
+      this.logger?.info('[Agent] Starting run', { sessionId: this.sessionId });
+
+      // 获取工具 schema（优先使用 toolManager）
+      let tools = this.getToolsSchema(options?.tools);
+
+      // 应用 tools hooks
+      if (tools && tools.length > 0) {
+        tools = await this.hookManager.executeToolsHooks(tools, this.getHookContext());
+      }
+      this.currentTools = tools;
+
+      // 合并选项
+      const mergedOptions: LLMGenerateOptions = {
+        ...this.config.generateOptions,
+        ...options,
+        abortSignal: options?.abortSignal ?? this.abortController.signal,
+        tools,
+      };
+
+      // 发出循环开始事件（通过 loop hooks）
+      await this.hookManager.executeLoopHooks(
+        { loopIndex: this.state.loopIndex, steps: 0 },
+        this.getHookContext()
+      );
+
+      try {
+        await this.runLoop(mergedOptions);
+      } catch (error) {
+        if (error instanceof AgentAbortedError || this.state.aborted) {
+          this.logger?.warn('[Agent] Run aborted by user');
+          // 发出停止事件
+          await this.hookManager.executeStopHooks(
+            { reason: 'user_abort', message: 'Agent was aborted by user' },
+            this.getHookContext()
+          );
+        } else {
+          throw error;
+        }
+      }
+
+      // 发出循环完成事件
+      await this.hookManager.executeLoopHooks(
+        { loopIndex: this.state.loopIndex, steps: this.steps.length },
+        this.getHookContext()
+      );
+
+      // 构建结果
+      const completionResult = await this.evaluateCompletion();
+
+      this.logger?.info('[Agent] Run completed', {
+        reason: completionResult.reason,
+        loops: this.state.loopIndex,
+        steps: this.steps.length,
+        totalTokens: this.state.totalUsage.total_tokens,
+      });
+
+      // 发出停止事件
+      await this.hookManager.executeStopHooks(
+        { reason: completionResult.reason, message: completionResult.message },
+        this.getHookContext()
+      );
+
+      runResult = {
+        text: this.state.currentText,
+        messages: this.getLLMMessages(),
+        steps: this.steps,
+        totalUsage: this.state.totalUsage,
+        completionReason: completionResult.reason,
+        completionMessage: completionResult.message,
+        loopCount: this.state.loopIndex,
+      };
     } catch (error) {
-      if (error instanceof AgentAbortedError || this.state.aborted) {
-        await this.emitEvent('abort', { reason: 'user_abort' });
-      } else {
-        throw error;
+      runError = error;
+    }
+
+    try {
+      await flushPendingMessages({
+        state: this.persistenceState,
+        messagesLength: this.messages.length,
+        saveMessages: (startIndex) => this.saveMessages(startIndex),
+      });
+    } catch (saveError) {
+      this.logger?.error('[Agent] Failed to persist messages', saveError, {
+        sessionId: this.sessionId,
+        saveFromIndex: this.persistenceState.persistCursor,
+      });
+      if (!runError) {
+        throw saveError;
       }
     }
 
-    // 发出循环完成事件
-    await this.emitEvent('loop-complete', {
-      steps: this.steps.length,
-      usage: this.state.totalUsage,
-    });
-
-    // 构建结果
-    const completionResult = await this.evaluateCompletion();
-
-    return {
-      text: this.state.currentText,
-      messages: this.getLLMMessages(),
-      steps: this.steps,
-      totalUsage: this.state.totalUsage,
-      completionReason: completionResult.reason,
-      completionMessage: completionResult.message,
-      loopCount: this.state.loopIndex,
-    };
+    if (runError) {
+      throw runError;
+    }
+    return runResult as AgentResult;
   }
 
   /**
@@ -306,8 +379,12 @@ export class Agent {
    * 主循环
    */
   private async runLoop(options: LLMGenerateOptions): Promise<void> {
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
+    // 使用状态变量控制循环，避免 while(true)
+    const checkContinue = (): boolean => {
+      return !this.state.aborted && this.canContinue();
+    };
+
+    while (checkContinue()) {
       // 1. 中止检测
       if (this.state.aborted) {
         throw new AgentAbortedError();
@@ -321,28 +398,34 @@ export class Agent {
 
       // 3. 检查是否需要压缩
       if (this.needsCompaction()) {
+        this.logger?.info('[Agent] Starting compaction', {
+          messageCount: this.messages.length,
+          tokenEstimate: estimateMessagesTokens(this.messages, this.currentTools),
+        });
         await this.performCompaction();
       }
 
       // 4. 重试检查和处理
       if (this.state.needsRetry) {
-        const shouldContinue = await this.handleRetry();
-        if (!shouldContinue) {
+        const canContinue = await this.handleRetry();
+        if (!canContinue) {
           return;
         }
       }
 
       // 5. 循环计数和限制检查
       this.state.loopIndex++;
-      if (!this.canContinue()) {
-        throw new AgentLoopExceededError(this.config.maxLoops, this.state.loopIndex);
-      }
 
       // 6. 执行步骤
       try {
         await this.executeStep(options);
         this.state.retryCount = 0;
         this.state.needsRetry = false;
+        this.logger?.debug('[Agent] Step completed', {
+          loopIndex: this.state.loopIndex,
+          stepIndex: this.state.stepIndex,
+          toolCalls: this.state.currentToolCalls.length,
+        });
       } catch (error) {
         await this.handleLoopError(error as Error);
       }
@@ -355,10 +438,10 @@ export class Agent {
   private async executeStep(options: LLMGenerateOptions): Promise<void> {
     this.state.stepIndex++;
     this.state.currentText = '';
+    this.currentReasoningContent = '';
     this.state.currentToolCalls = [];
     this.state.stepUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-
-    await this.emitEvent('step-start', { stepIndex: this.state.stepIndex });
+    resetStreamPersistence(this.persistenceState);
 
     const rawChunks: Chunk[] = [];
     let finishReason = null;
@@ -383,7 +466,7 @@ export class Agent {
 
       await this.finalizeStep(rawChunks, finishReason, options);
     } catch (error) {
-      await this.emitEvent('error', { error });
+      this.logger?.error('[Agent] Step error', error);
       throw error;
     }
   }
@@ -396,19 +479,39 @@ export class Agent {
     if (!choice) return;
 
     const delta = choice.delta;
+    const ctx = this.getHookContext();
+    const streamMessage = await ensureInProgressAssistantMessage({
+      state: this.persistenceState,
+      messages: this.messages,
+      memoryManager: this.config.memoryManager,
+      sessionId: this.sessionId,
+      currentText: this.state.currentText,
+      currentReasoningContent: this.currentReasoningContent,
+      currentToolCalls: this.state.currentToolCalls,
+      stepUsage: this.state.stepUsage,
+      flushPending: async () =>
+        flushPendingMessages({
+          state: this.persistenceState,
+          messagesLength: this.messages.length,
+          saveMessages: (startIndex) => this.saveMessages(startIndex),
+        }),
+      logger: this.logger,
+      stepIndex: this.state.stepIndex,
+    });
 
     // 处理文本增量
     if (delta.content && typeof delta.content === 'string') {
       this.state.currentText += delta.content;
-      await this.emitEvent('text-delta', { text: delta.content });
+      await this.hookManager.executeTextDeltaHooks({ text: delta.content }, ctx);
     }
 
     // 处理推理内容
     if (delta.reasoning_content) {
-      await this.emitEvent('text-delta', {
-        text: delta.reasoning_content,
-        isReasoning: true,
-      });
+      this.currentReasoningContent += delta.reasoning_content;
+      await this.hookManager.executeTextDeltaHooks(
+        { text: delta.reasoning_content, isReasoning: true },
+        ctx
+      );
     }
 
     // 处理工具调用
@@ -424,12 +527,35 @@ export class Agent {
       this.state.totalUsage.prompt_tokens += chunk.usage.prompt_tokens;
       this.state.totalUsage.completion_tokens += chunk.usage.completion_tokens;
       this.state.totalUsage.total_tokens += chunk.usage.total_tokens;
-      await this.emitEvent('usage', { usage: chunk.usage });
+    }
+
+    if (streamMessage) {
+      streamMessage.content = this.state.currentText;
+      streamMessage.reasoning_content = this.currentReasoningContent || undefined;
+      streamMessage.tool_calls =
+        this.state.currentToolCalls.length > 0 ? [...this.state.currentToolCalls] : undefined;
+      streamMessage.usage = { ...this.state.stepUsage };
     }
 
     // 处理错误
     if (chunk.error) {
-      await this.emitEvent('error', { error: chunk.error });
+      this.logger?.error('[Agent] Stream chunk error', chunk.error);
+    }
+
+    if (streamMessage) {
+      try {
+        await persistInProgressAssistantMessage({
+          state: this.persistenceState,
+          messages: this.messages,
+          memoryManager: this.config.memoryManager,
+          sessionId: this.sessionId,
+        });
+      } catch (error) {
+        this.logger?.error('[Agent] Failed to persist stream progress', error, {
+          sessionId: this.sessionId,
+          stepIndex: this.state.stepIndex,
+        });
+      }
     }
   }
 
@@ -437,15 +563,38 @@ export class Agent {
    * 处理工具调用增量
    */
   private async handleToolCallDelta(toolCall: ToolCall): Promise<void> {
-    const existing = this.state.currentToolCalls.find((tc) => tc.id === toolCall.id);
+    const index = Number.isFinite(toolCall?.index) ? toolCall.index : 0;
+    const incomingId =
+      typeof toolCall?.id === 'string' && toolCall.id.trim().length > 0 ? toolCall.id : '';
+    const incomingName = typeof toolCall?.function?.name === 'string' ? toolCall.function.name : '';
+    const incomingArguments =
+      typeof toolCall?.function?.arguments === 'string' ? toolCall.function.arguments : '';
+
+    const existing =
+      (incomingId ? this.state.currentToolCalls.find((tc) => tc.id === incomingId) : undefined) ??
+      this.state.currentToolCalls.find((tc) => tc.index === index);
 
     if (!existing) {
-      this.state.currentToolCalls.push(toolCall);
-      await this.emitEvent('tool-call', { toolCall, index: toolCall.index });
-    } else {
-      if (toolCall.function.arguments) {
-        existing.function.arguments += toolCall.function.arguments;
-      }
+      this.state.currentToolCalls.push({
+        id: incomingId || `tool_call_${this.state.stepIndex}_${index}`,
+        type: toolCall?.type || 'function',
+        index,
+        function: {
+          name: incomingName,
+          arguments: incomingArguments,
+        },
+      });
+      return;
+    }
+
+    if (incomingId && existing.id !== incomingId) {
+      existing.id = incomingId;
+    }
+    if (incomingName) {
+      existing.function.name = existing.function.name || incomingName;
+    }
+    if (incomingArguments) {
+      existing.function.arguments += incomingArguments;
     }
   }
 
@@ -457,31 +606,59 @@ export class Agent {
     finishReason: FinishReason,
     _options: LLMGenerateOptions
   ): Promise<void> {
+    const ctx = this.getHookContext();
+
     // 发送文本完成事件
     if (this.state.currentText) {
-      await this.emitEvent('text-complete', { text: this.state.currentText });
+      await this.hookManager.executeTextCompleteHooks(this.state.currentText, ctx);
     }
 
     // 并发执行工具调用
     const toolResults: Array<{ toolCallId: string; result: ToolResult }> = [];
 
     if (this.state.currentToolCalls.length > 0) {
+      this.logger?.info('[Agent] Executing tools', {
+        count: this.state.currentToolCalls.length,
+        tools: this.state.currentToolCalls.map((tc) => tc.function.name),
+      });
+
       const context = {
         loopIndex: this.state.loopIndex,
         stepIndex: this.state.stepIndex,
         agent: this,
+        agentContext: {
+          sessionId: this.sessionId,
+          loopIndex: this.state.loopIndex,
+          stepIndex: this.state.stepIndex,
+        },
       };
+
+      // 应用 toolUse hooks
+      const processedToolCalls: ToolCall[] = [];
+      for (const toolCall of this.state.currentToolCalls) {
+        const processed = await this.hookManager.executeToolUseHooks(toolCall, ctx);
+        processedToolCalls.push(processed);
+      }
 
       // 使用 toolManager 执行工具
       toolResults.push(
-        ...(await this.toolManager!.executeTools(this.state.currentToolCalls, context))
+        ...(await this.toolManager!.executeTools(processedToolCalls, context, {
+          onToolEvent: async (event) => {
+            await this.handleToolStreamEvent(event, ctx);
+          },
+        }))
       );
 
-      // 发送工具结果事件
-      for (const { toolCallId, result } of toolResults) {
-        const toolCall = this.state.currentToolCalls.find((tc) => tc.id === toolCallId);
+      // 应用 toolResult hooks 并发送事件
+      for (let i = 0; i < toolResults.length; i++) {
+        const { toolCallId, result } = toolResults[i];
+        const toolCall = processedToolCalls.find((tc) => tc.id === toolCallId);
         if (toolCall) {
-          await this.emitEvent('tool-result', { toolCall, result });
+          const processedResult = await this.hookManager.executeToolResultHooks(
+            { toolCall, result },
+            ctx
+          );
+          toolResults[i] = { toolCallId, result: processedResult.result };
         }
       }
     }
@@ -497,34 +674,71 @@ export class Agent {
     };
     this.steps.push(stepResult);
 
-    // 创建 assistant 消息
-    const assistantMessage: Message = {
-      messageId: crypto.randomUUID(),
-      role: 'assistant',
-      content: this.state.currentText || '',
-      tool_calls: this.state.currentToolCalls.length > 0 ? this.state.currentToolCalls : undefined,
-      finish_reason: finishReason ?? undefined,
-      usage: { ...this.state.stepUsage },
-    };
-    this.messages.push(assistantMessage);
+    // 创建或更新 assistant 消息
+    let assistantMessage = getInProgressAssistantMessage(this.messages, this.persistenceState);
+    if (!assistantMessage) {
+      assistantMessage = {
+        messageId: crypto.randomUUID(),
+        role: 'assistant',
+        content: this.state.currentText || '',
+        reasoning_content: this.currentReasoningContent || undefined,
+        tool_calls:
+          this.state.currentToolCalls.length > 0 ? [...this.state.currentToolCalls] : undefined,
+        finish_reason: finishReason ?? undefined,
+        usage: { ...this.state.stepUsage },
+      };
+      this.messages.push(assistantMessage);
+    } else {
+      assistantMessage.content = this.state.currentText || '';
+      assistantMessage.reasoning_content = this.currentReasoningContent || undefined;
+      assistantMessage.tool_calls =
+        this.state.currentToolCalls.length > 0 ? [...this.state.currentToolCalls] : undefined;
+      assistantMessage.finish_reason = finishReason ?? undefined;
+      assistantMessage.usage = { ...this.state.stepUsage };
+    }
+
+    if (this.persistenceState.inProgressAssistantMessageId) {
+      try {
+        await persistInProgressAssistantMessage({
+          state: this.persistenceState,
+          messages: this.messages,
+          memoryManager: this.config.memoryManager,
+          sessionId: this.sessionId,
+          force: true,
+        });
+      } catch (error) {
+        this.logger?.error('[Agent] Failed to persist final stream state', error, {
+          sessionId: this.sessionId,
+          stepIndex: this.state.stepIndex,
+        });
+      }
+    }
 
     // 添加工具结果消息
     for (const { toolCallId, result } of toolResults) {
       const toolMessage: Message = {
         messageId: crypto.randomUUID(),
         role: 'tool',
-        content: JSON.stringify(result.data ?? { error: result.error }),
+        content: JSON.stringify({
+          success: result.success,
+          data: result.data,
+          error: result.error,
+          metadata: result.metadata,
+        }),
         tool_call_id: toolCallId,
       };
       this.messages.push(toolMessage);
     }
 
     // 发送步骤完成事件
-    await this.emitEvent('step-complete', {
-      stepIndex: this.state.stepIndex,
-      finishReason,
-      toolCallsCount: this.state.currentToolCalls.length,
-    });
+    await this.hookManager.executeStepHooks(
+      {
+        stepIndex: this.state.stepIndex,
+        finishReason: finishReason ?? undefined,
+        toolCallsCount: this.state.currentToolCalls.length,
+      },
+      ctx
+    );
 
     // 根据完成原因决定是否继续
     if (finishReason === 'stop' || finishReason === 'length') {
@@ -532,11 +746,9 @@ export class Agent {
     } else if (finishReason === 'tool_calls' && toolResults.length > 0) {
       this.state.resultStatus = 'continue';
     }
-  }
 
-  // ===========================================================================
-  // 完成检测
-  // ===========================================================================
+    resetStreamPersistence(this.persistenceState);
+  }
 
   /**
    * 评估是否应该完成
@@ -566,12 +778,48 @@ export class Agent {
     }
 
     // 4. 默认完成检测
-    return defaultCompletionDetector(this.steps[this.steps.length - 1]);
+    const defaultResult = defaultCompletionDetector(this.steps[this.steps.length - 1]);
+    if (defaultResult.done) {
+      return defaultResult;
+    }
+
+    // 5. 达到步骤上限（避免误判为 stop）
+    if (!this.canContinue()) {
+      const reachedStepLimit = this.state.stepIndex >= this.config.maxSteps;
+      if (reachedStepLimit) {
+        const message = `Reached maxSteps limit (${this.config.maxSteps}) before completion`;
+        return { done: true, reason: 'limit_exceeded', message };
+      }
+    }
+
+    return defaultResult;
   }
 
-  // ===========================================================================
-  // 错误处理与重试
-  // ===========================================================================
+  private async handleToolStreamEvent(event: ToolStreamEvent, ctx: HookContext): Promise<void> {
+    await this.hookManager.executeToolStreamHooks(event, ctx);
+
+    const logContext: Record<string, unknown> = {
+      toolCallId: event.toolCallId,
+      toolName: event.toolName,
+      eventType: event.type,
+      sequence: event.sequence,
+      timestamp: event.timestamp,
+    };
+    if (typeof event.content === 'string') {
+      logContext['contentLength'] = event.content.length;
+      logContext['contentPreview'] =
+        event.content.length > 300 ? `${event.content.slice(0, 300)}...` : event.content;
+    }
+    if (event.data !== undefined) {
+      logContext['data'] = event.data;
+    }
+
+    if (event.type === 'stderr' || event.type === 'error') {
+      this.logger?.warn('[Agent] Tool stream event', logContext);
+      return;
+    }
+    this.logger?.debug('[Agent] Tool stream event', logContext);
+  }
 
   /**
    * 处理循环错误
@@ -624,11 +872,7 @@ export class Agent {
       this.config.backoffConfig
     );
 
-    await this.emitEvent('retry', {
-      attempt: this.state.retryCount,
-      delay,
-      error: this.state.lastError,
-    });
+    this.logger?.warn(`[Agent] Retry attempt ${this.state.retryCount} after ${delay}ms`);
 
     await this.sleep(delay, this.abortController?.signal);
 
@@ -643,11 +887,7 @@ export class Agent {
    * 检查是否可以继续
    */
   private canContinue(): boolean {
-    return (
-      this.state.loopIndex < this.config.maxLoops &&
-      this.state.stepIndex < this.config.maxSteps &&
-      !this.state.aborted
-    );
+    return this.state.stepIndex < this.config.maxSteps && !this.state.aborted;
   }
 
   // ===========================================================================
@@ -657,47 +897,103 @@ export class Agent {
   /**
    * 构建初始消息
    */
-  private buildInitialMessages(userContent: string | LLMRequestMessage['content']): Message[] {
+  private async buildInitialMessages(
+    userContent: string | LLMRequestMessage['content']
+  ): Promise<Message[]> {
     const messages: Message[] = [];
+    const ctx = this.getHookContext();
 
+    // 应用 systemPrompt hooks
     if (this.config.systemPrompt) {
+      let systemPrompt = this.config.systemPrompt;
+      systemPrompt = await this.hookManager.executeSystemPromptHooks(systemPrompt, ctx);
       messages.push({
         messageId: crypto.randomUUID(),
         role: 'system',
-        content: this.config.systemPrompt,
+        content: systemPrompt,
       });
     }
 
-    messages.push({
-      messageId: crypto.randomUUID(),
-      role: 'user',
-      content: userContent,
-    });
+    messages.push(await this.buildUserMessage(userContent));
 
     return messages;
   }
 
-  /**
-   * 发出事件
-   */
-  private async emitEvent(type: AgentEvent['type'], data?: unknown): Promise<void> {
-    if (!this.config.onEvent) return;
-
-    const event: AgentEvent = {
-      type,
-      data,
-      timestamp: Date.now(),
-      loopIndex: this.state.loopIndex,
-      stepIndex: this.state.stepIndex,
-    };
-
-    try {
-      await this.config.onEvent(event);
-    } catch (error) {
-      if (this.config.debug) {
-        console.error('[Agent] Event callback error:', error);
-      }
+  private async buildUserMessage(
+    userContent: string | LLMRequestMessage['content']
+  ): Promise<Message> {
+    const ctx = this.getHookContext();
+    let processedUserContent = userContent;
+    if (typeof processedUserContent === 'string') {
+      processedUserContent = await this.hookManager.executeUserPromptHooks(
+        processedUserContent,
+        ctx
+      );
     }
+
+    return {
+      messageId: crypto.randomUUID(),
+      role: 'user',
+      content: processedUserContent,
+    };
+  }
+
+  private async applyConfigHooks(): Promise<void> {
+    const hookedConfig = await this.hookManager.executeConfigHooks<AgentConfig>(
+      this.config as AgentConfig,
+      this.getHookContext()
+    );
+    this.config = mergeAgentConfig(hookedConfig);
+    this.toolManager = this.config.toolManager!;
+    this.logger = this.config.logger;
+    if (this.config.sessionId) {
+      this.sessionId = this.config.sessionId;
+    }
+  }
+
+  private async prepareMessages(
+    userContent: string | LLMRequestMessage['content']
+  ): Promise<number> {
+    const memoryManager = this.config.memoryManager;
+    if (!memoryManager) {
+      this.messages = await this.buildInitialMessages(userContent);
+      return 0;
+    }
+
+    await memoryManager.initialize();
+    const existingSession = memoryManager.getSession(this.sessionId);
+
+    if (existingSession) {
+      await this.restoreMessages();
+      if (this.messages.length === 0 && existingSession.systemPrompt) {
+        // 已有 session 但 context 为空时，按 session 元信息恢复 system，避免重复写入 system 消息
+        this.messages = [
+          {
+            messageId: crypto.randomUUID(),
+            role: 'system',
+            content: existingSession.systemPrompt,
+          },
+        ];
+      }
+
+      const saveFromIndex = this.messages.length;
+      this.messages.push(await this.buildUserMessage(userContent));
+      return saveFromIndex;
+    }
+
+    this.messages = await this.buildInitialMessages(userContent);
+    await memoryManager.createSession(this.sessionId, this.extractSystemPrompt(this.messages));
+    const firstNonSystemIndex = this.messages.findIndex((message) => message.role !== 'system');
+    if (firstNonSystemIndex === -1) {
+      return this.messages.length;
+    }
+    return firstNonSystemIndex;
+  }
+
+  private extractSystemPrompt(messages: Message[]): string {
+    const systemMessage = messages.find((message) => message.role === 'system');
+    if (!systemMessage) return '';
+    return contentToText(systemMessage.content);
   }
 
   /**
@@ -723,10 +1019,6 @@ export class Agent {
     });
   }
 }
-
-// =============================================================================
-// 便捷函数
-// =============================================================================
 
 /**
  * 创建 Agent 实例

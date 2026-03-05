@@ -14,7 +14,6 @@ import type { AgentLoopState, AgentConfig } from './types';
  * Agent 默认配置
  */
 export const DEFAULT_AGENT_CONFIG = {
-  maxLoops: 100,
   maxSteps: 1000,
   maxRetries: 10,
   debug: false,
@@ -79,11 +78,12 @@ export function mergeAgentConfig(
     | 'systemPrompt'
     | 'toolManager'
     | 'completionDetector'
-    | 'onEvent'
+    | 'plugins'
     | 'generateOptions'
     | 'conversationId'
     | 'memoryManager'
     | 'sessionId'
+    | 'logger'
   >
 > &
   AgentConfig {

@@ -3,8 +3,12 @@
  */
 
 import type { z } from 'zod';
-import type { Tool } from '../providers';
-import type { ToolResult, ToolExecutionContext } from '../agent/types';
+import type { ToolResult, ToolExecutionContext, ToolStreamEvent } from '../core/types';
+
+// 重新导出共享类型
+export type { ToolResult, ToolExecutionContext } from '../core/types';
+export type { ToolStreamEvent, ToolStreamEventInput } from '../core/types';
+export type { Tool } from '../providers';
 
 // =============================================================================
 // 参数 Schema 类型
@@ -14,8 +18,9 @@ import type { ToolResult, ToolExecutionContext } from '../agent/types';
  * 工具参数 Schema 类型
  *
  * 使用 Zod schema 来定义和校验参数
+ * 使用 unknown 作为统一输入/输出类型，兼容任意具体 Zod schema。
  */
-export type ToolParameterSchema = z.ZodType<any, any, any>;
+export type ToolParameterSchema = z.ZodType;
 
 // =============================================================================
 // 工具元数据
@@ -99,6 +104,14 @@ export interface ToolManagerConfig {
   middlewares?: ToolMiddleware[];
 }
 
+/**
+ * 工具执行回调
+ */
+export interface ToolExecutionCallbacks {
+  /** 工具流式事件回调 */
+  onToolEvent?: (event: ToolStreamEvent) => void | Promise<void>;
+}
+
 // =============================================================================
 // 简单工具类型
 // =============================================================================
@@ -123,9 +136,3 @@ export interface SimpleToolConfig<T extends ToolParameterSchema = ToolParameterS
   dangerous?: boolean;
   requireConfirm?: boolean;
 }
-
-// =============================================================================
-// 导出类型
-// =============================================================================
-
-export type { ToolResult, ToolExecutionContext, Tool };

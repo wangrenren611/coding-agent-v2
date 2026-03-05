@@ -29,8 +29,6 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# Test
-*.test.ts
 .env
 # .env.local
 # .env.*.local
@@ -50,7 +48,7 @@ typescript
 apps/agent-cli-ink-v2/data/*
 
 /test-memory
-
+/.tmp
 data
 data/agent-memory
 request.json

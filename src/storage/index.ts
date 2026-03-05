@@ -83,6 +83,9 @@ export { FileCompactionStore } from './fileCompactionStore';
 export { FileSessionStore } from './fileSessionStore';
 export { createFileStorageBundle } from './fileStoreBundle';
 export type { FileStorageBundleOptions } from './fileStoreBundle';
+export { SqliteClient } from './sqliteClient';
+export { createSqliteStorageBundle } from './sqliteStoreBundle';
+export type { SqliteStorageBundleOptions } from './sqliteStoreBundle';
 
 // =============================================================================
 // 工具函数

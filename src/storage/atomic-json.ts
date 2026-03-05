@@ -104,23 +104,22 @@ export class AtomicJsonStore {
    * 3. 原子重命名
    */
   async writeJsonFile(filePath: string, value: unknown): Promise<void> {
-    const json = JSON.stringify(value, null, 2);
-
     await this.enqueueFileOperation(filePath, async () => {
-      // 确保目录存在
-      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await this.writeJsonValue(filePath, value);
+    });
+  }
 
-      // 备份旧文件
-      await this.copyFileIfExists(filePath, this.getBackupFilePath(filePath));
-
-      // 写入临时文件
-      const tempFilePath = this.buildTempFilePath(filePath);
-      try {
-        await fs.writeFile(tempFilePath, json, 'utf-8');
-        await this.renameWithRetry(tempFilePath, filePath);
-      } finally {
-        await this.unlinkIfExists(tempFilePath);
-      }
+  /**
+   * 原子读取并更新 JSON 文件（读改写在同一队列中执行）
+   */
+  async mutateJsonFile<T>(
+    filePath: string,
+    updater: (current: T | null) => T | Promise<T>
+  ): Promise<void> {
+    await this.enqueueFileOperation(filePath, async () => {
+      const current = await this.readJsonFileWithoutRepair<T>(filePath);
+      const next = await updater(current);
+      await this.writeJsonValue(filePath, next);
     });
   }
 
@@ -214,6 +213,35 @@ export class AtomicJsonStore {
   }
 
   /**
+   * 读取 JSON 文件（不触发自动修复写回）
+   */
+  private async readJsonFileWithoutRepair<T>(filePath: string): Promise<T | null> {
+    const raw = await this.readTextIfExists(filePath);
+    if (raw === null) {
+      const backupRaw = await this.readTextIfExists(this.getBackupFilePath(filePath));
+      if (backupRaw === null) return null;
+
+      const parsedBackup = this.parseJsonText<T>(backupRaw, this.getBackupFilePath(filePath));
+      if (parsedBackup.ok) return parsedBackup.value;
+      throw parsedBackup.error;
+    }
+
+    const parsedPrimary = this.parseJsonText<T>(raw, filePath);
+    if (parsedPrimary.ok) {
+      return parsedPrimary.value;
+    }
+    const primaryError = parsedPrimary.error;
+
+    const backupRaw = await this.readTextIfExists(this.getBackupFilePath(filePath));
+    if (backupRaw !== null) {
+      const parsedBackup = this.parseJsonText<T>(backupRaw, this.getBackupFilePath(filePath));
+      if (parsedBackup.ok) return parsedBackup.value;
+    }
+
+    throw primaryError;
+  }
+
+  /**
    * 读取文本文件（如果存在）
    */
   private async readTextIfExists(filePath: string): Promise<string | null> {
@@ -284,6 +312,24 @@ export class AtomicJsonStore {
         return;
       }
       throw error;
+    }
+  }
+
+  /**
+   * 写入 JSON 文件（调用方需保证并发安全）
+   */
+  private async writeJsonValue(filePath: string, value: unknown): Promise<void> {
+    const json = JSON.stringify(value, null, 2);
+
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await this.copyFileIfExists(filePath, this.getBackupFilePath(filePath));
+
+    const tempFilePath = this.buildTempFilePath(filePath);
+    try {
+      await fs.writeFile(tempFilePath, json, 'utf-8');
+      await this.renameWithRetry(tempFilePath, filePath);
+    } finally {
+      await this.unlinkIfExists(tempFilePath);
     }
   }
 

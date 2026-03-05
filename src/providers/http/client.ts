@@ -15,10 +15,11 @@
 
 import { LLMError, LLMAbortedError, LLMRetryableError, createErrorFromStatus } from '../types';
 import { classifyAbortReason } from '../types';
+import type { ProviderLogger } from '../types';
 
 export interface HttpClientOptions {
-  /** 启用调试日志 */
-  debug?: boolean;
+  /** 日志器（推荐注入 Agent logger 的 child） */
+  logger?: ProviderLogger;
   /** 默认超时（毫秒，仅在调用方未传 signal 时生效） */
   defaultTimeoutMs?: number;
 }
@@ -32,11 +33,11 @@ export type RequestInitWithOptions = RequestInit;
  * 如未传入且配置了 defaultTimeoutMs，会自动应用默认超时信号。
  */
 export class HTTPClient {
-  readonly debug: boolean;
+  readonly logger?: ProviderLogger;
   readonly defaultTimeoutMs?: number;
 
   constructor(options: HttpClientOptions = {}) {
-    this.debug = options.debug ?? false;
+    this.logger = options.logger?.child('HTTPClient');
     this.defaultTimeoutMs = this.normalizeTimeoutMs(options.defaultTimeoutMs);
   }
 
@@ -72,26 +73,37 @@ export class HTTPClient {
    */
   private async executeFetch(url: string, options: RequestInit): Promise<Response> {
     const upstreamSignal = options.signal;
+    const method = options.method || 'GET';
 
     try {
-      if (this.debug) {
-        console.log(`[HTTPClient] Sending request: ${options.method || 'GET'} ${url}`);
-      }
+      this.logger?.debug('Sending request', {
+        method,
+        url,
+        hasSignal: Boolean(upstreamSignal),
+      });
 
       const response = await fetch(url, {
         ...options,
         signal: upstreamSignal,
       });
 
-      if (this.debug) {
-        console.log(`[HTTPClient] Response received: ${options.method || 'GET'} ${url}`);
-      }
+      this.logger?.debug('Response received', {
+        method,
+        url,
+        status: response.status,
+      });
 
       return response;
     } catch (error) {
-      if (this.debug) {
-        console.log(`[HTTPClient] Request failed: ${options.method || 'GET'} ${url}`);
-      }
+      this.logger?.warn(
+        'Request failed',
+        {
+          method,
+          url,
+          aborted: Boolean(upstreamSignal?.aborted),
+        },
+        error
+      );
 
       // 检查是否为超时或中止错误
       if (upstreamSignal?.aborted) {
