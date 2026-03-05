@@ -182,7 +182,7 @@ export interface AgentLoopState {
   /** 是否已中止 */
   aborted: boolean;
   /** 循环结果状态 */
-  resultStatus: 'continue' | 'compact' | 'stop';
+  resultStatus: 'continue' | 'stop';
 }
 
 // =============================================================================

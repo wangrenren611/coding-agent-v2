@@ -8,7 +8,7 @@
 import { z } from 'zod';
 import type { Tool } from '../providers';
 import type { ToolResult, ToolExecutionContext } from '../agent/types';
-import type { ToolMeta, ToolParameterSchema, SimpleToolConfig, SimpleToolExecutor } from './types';
+import type { ToolMeta, ToolParameterSchema } from './types';
 
 // =============================================================================
 // BaseTool 抽象类
@@ -46,6 +46,12 @@ import type { ToolMeta, ToolParameterSchema, SimpleToolConfig, SimpleToolExecuto
  * ```
  */
 export abstract class BaseTool<T extends ToolParameterSchema = ToolParameterSchema> {
+  /** 默认超时时间（毫秒） */
+  protected timeout = 60000;
+
+  /** 默认最大输出长度 */
+  protected maxOutputLength = 30000;
+
   // ===========================================================================
   // 抽象属性和方法（必须实现）
   // ===========================================================================
@@ -102,6 +108,17 @@ export abstract class BaseTool<T extends ToolParameterSchema = ToolParameterSche
     context: ToolExecutionContext
   ): Promise<ToolResult | void>;
 
+  /**
+   * 执行前是否需要用户确认
+   */
+  shouldConfirm?(
+    args: z.infer<T>,
+    context: ToolExecutionContext
+  ):
+    | Promise<boolean | { required: boolean; reason?: string }>
+    | boolean
+    | { required: boolean; reason?: string };
+
   // ===========================================================================
   // 便捷方法
   // ===========================================================================
@@ -125,6 +142,13 @@ export abstract class BaseTool<T extends ToolParameterSchema = ToolParameterSche
    */
   get parameterSchema(): T {
     return this.meta.parameters;
+  }
+
+  /**
+   * 获取工具默认超时时间（毫秒）
+   */
+  getTimeoutMs(): number {
+    return this.timeout;
   }
 
   /**
@@ -193,6 +217,62 @@ export abstract class BaseTool<T extends ToolParameterSchema = ToolParameterSche
       success: false,
       error,
       data: details,
+    };
+  }
+
+  /**
+   * 结果截断（用于大文本输出）
+   */
+  protected resultTruncation(
+    output: string,
+    options?: {
+      maxLength?: number;
+      headLength?: number;
+      tailLength?: number;
+      marker?: string;
+    }
+  ): { output: string; truncated: boolean } {
+    const maxLength =
+      typeof options?.maxLength === 'number' && options.maxLength > 0
+        ? Math.floor(options.maxLength)
+        : this.maxOutputLength;
+
+    if (output.length <= maxLength) {
+      return { output, truncated: false };
+    }
+
+    const marker = options?.marker ?? '[... Output Truncated ...]';
+    const sep = '\n\n';
+    const fixedLength = marker.length + sep.length * 2;
+    const available = maxLength - fixedLength;
+
+    if (available <= 20) {
+      return {
+        output: output.slice(0, Math.max(0, maxLength)),
+        truncated: true,
+      };
+    }
+
+    let headLength =
+      typeof options?.headLength === 'number' && options.headLength > 0
+        ? Math.floor(options.headLength)
+        : Math.floor(available / 2);
+    let tailLength =
+      typeof options?.tailLength === 'number' && options.tailLength > 0
+        ? Math.floor(options.tailLength)
+        : available - headLength;
+
+    if (headLength + tailLength > available) {
+      headLength = Math.floor(available / 2);
+      tailLength = available - headLength;
+    }
+
+    return {
+      output:
+        output.slice(0, headLength) +
+        `${sep}${marker}${sep}` +
+        output.slice(Math.max(0, output.length - tailLength)),
+      truncated: true,
     };
   }
 }
@@ -412,63 +492,3 @@ function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
   // 对于不支持的类型，返回空对象
   return {};
 }
-
-// =============================================================================
-// 简单工具类（用于快速创建工具）
-// =============================================================================
-
-/**
- * 简单工具类
- *
- * 用于快速创建不需要复杂逻辑的工具
- *
- * @example
- * ```typescript
- * import { z } from 'zod';
- *
- * const echoTool = new SimpleTool(
- *   {
- *     name: 'echo',
- *     description: '返回输入的文本',
- *     parameters: z.object({
- *       text: z.string().describe('要返回的文本'),
- *     }),
- *   },
- *   async (args) => ({ success: true, data: args.text })
- * );
- * ```
- */
-export class SimpleTool<T extends ToolParameterSchema = ToolParameterSchema> extends BaseTool<T> {
-  private config: SimpleToolConfig<T>;
-  private executor: SimpleToolExecutor<T>;
-
-  constructor(config: SimpleToolConfig<T>, executor: SimpleToolExecutor<T>) {
-    super();
-    this.config = config;
-    this.executor = executor;
-  }
-
-  get meta(): ToolMeta<T> {
-    return {
-      ...this.config,
-      parameters: this.config.parameters,
-    };
-  }
-
-  async execute(args: z.infer<T>, context: ToolExecutionContext): Promise<ToolResult> {
-    return this.executor(args, context);
-  }
-}
-
-/**
- * 创建简单工具的便捷函数
- */
-export function createTool<T extends ToolParameterSchema>(
-  config: SimpleToolConfig<T>,
-  executor: SimpleToolExecutor<T>
-): SimpleTool<T> {
-  return new SimpleTool(config, executor);
-}
-
-// 重新导出类型，方便使用
-export type { SimpleToolConfig, SimpleToolExecutor } from './types';

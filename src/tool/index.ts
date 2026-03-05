@@ -3,11 +3,13 @@
  */
 
 // 核心类
-export { BaseTool, SimpleTool, createTool } from './base';
+export { BaseTool } from './base';
+export { SimpleTool, createTool } from './simple-tool';
 export { ToolManager, createToolManager } from './manager';
 
 // 内置工具
 export { BashTool } from './bash';
+export { FileTool } from './file-tool';
 export {
   evaluateBashPolicy,
   getBashAllowedCommands,
@@ -25,10 +27,10 @@ export {
 export type {
   ToolParameterSchema,
   ToolMeta,
-  ToolMiddleware,
-  ToolExecutionInfo,
   ToolManagerConfig,
   ToolExecutionCallbacks,
+  ToolConfirmDecision,
+  ToolConfirmRequest,
   SimpleToolConfig,
   SimpleToolExecutor,
 } from './types';
@@ -37,3 +39,6 @@ export type {
 export type { ToolResult, ToolExecutionContext } from './types';
 export type { ToolStreamEvent, ToolStreamEventInput } from './types';
 export type { Tool } from '../providers';
+
+// Runtime capabilities
+export * from './runtime';

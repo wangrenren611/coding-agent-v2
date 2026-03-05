@@ -34,7 +34,7 @@ export type {
 export type { Plugin } from '../hook';
 
 // 错误类
-export { AgentLoopExceededError, AgentAbortedError, AgentMaxRetriesExceededError } from './errors';
+export { AgentAbortedError, AgentMaxRetriesExceededError } from './errors';
 
 // 状态管理
 export {

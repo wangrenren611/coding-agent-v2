@@ -3,19 +3,6 @@
  */
 
 /**
- * Agent 循环次数超限错误
- */
-export class AgentLoopExceededError extends Error {
-  constructor(
-    public readonly limit: number,
-    public readonly actual: number
-  ) {
-    super(`Agent loop exceeded: ${actual} > ${limit}`);
-    this.name = 'AgentLoopExceededError';
-  }
-}
-
-/**
  * Agent 中止错误
  */
 export class AgentAbortedError extends Error {

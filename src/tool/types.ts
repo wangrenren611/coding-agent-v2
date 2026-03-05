@@ -53,38 +53,6 @@ export interface ToolMeta<T extends ToolParameterSchema = ToolParameterSchema> {
 }
 
 // =============================================================================
-// 中间件类型
-// =============================================================================
-
-/**
- * 工具执行上下文（包含更多信息）
- */
-export interface ToolExecutionInfo<T extends ToolParameterSchema = ToolParameterSchema> {
-  /** 工具名称 */
-  toolName: string;
-  /** 工具参数（已校验） */
-  args: z.infer<T>;
-  /** 原始参数（未校验） */
-  rawArgs: Record<string, unknown>;
-  /** 执行上下文 */
-  context: ToolExecutionContext;
-  /** 工具元数据 */
-  meta: ToolMeta<T>;
-  /** 开始时间 */
-  startTime: number;
-}
-
-/**
- * 中间件下一个函数
- */
-export type MiddlewareNext = () => Promise<ToolResult>;
-
-/**
- * 中间件函数
- */
-export type ToolMiddleware = (info: ToolExecutionInfo, next: MiddlewareNext) => Promise<ToolResult>;
-
-// =============================================================================
 // 工具管理器配置
 // =============================================================================
 
@@ -96,12 +64,16 @@ export interface ToolManagerConfig {
   maxConcurrency?: number;
   /** 单个工具超时时间（毫秒），默认 60000 */
   timeout?: number;
-  /** 是否启用内置日志中间件 */
-  enableLogging?: boolean;
-  /** 是否启用执行计时 */
-  enableTiming?: boolean;
-  /** 自定义中间件列表 */
-  middlewares?: ToolMiddleware[];
+}
+
+export type ToolConfirmDecision = 'approve' | 'deny';
+
+export interface ToolConfirmRequest {
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  rawArgs: Record<string, unknown>;
+  reason?: string;
 }
 
 /**
@@ -110,6 +82,10 @@ export interface ToolManagerConfig {
 export interface ToolExecutionCallbacks {
   /** 工具流式事件回调 */
   onToolEvent?: (event: ToolStreamEvent) => void | Promise<void>;
+  /** 工具执行确认回调 */
+  onToolConfirm?: (
+    request: ToolConfirmRequest
+  ) => ToolConfirmDecision | Promise<ToolConfirmDecision>;
 }
 
 // =============================================================================

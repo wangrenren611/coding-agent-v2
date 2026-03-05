@@ -7,6 +7,7 @@
 import type { Tool } from '../providers';
 import type { ToolCall, ToolResult, HookContext, ToolStreamEvent } from '../core/types';
 import type { Plugin, HookStrategy, ConfigHook } from './types';
+import type { ToolConfirmRequest } from '../tool/types';
 
 // =============================================================================
 // Hook 点位配置
@@ -20,6 +21,7 @@ const HOOK_POINTS = {
   toolUse: { strategy: 'series-last' as HookStrategy },
   toolResult: { strategy: 'series-last' as HookStrategy },
   toolStream: { strategy: 'series' as HookStrategy },
+  toolConfirm: { strategy: 'series' as HookStrategy },
   step: { strategy: 'series' as HookStrategy },
   loop: { strategy: 'series' as HookStrategy },
   stop: { strategy: 'series' as HookStrategy },
@@ -181,6 +183,13 @@ export class HookManager {
    */
   async executeToolStreamHooks(event: ToolStreamEvent, ctx: HookContext): Promise<void> {
     await this.executeSeries('toolStream', (plugin) => plugin.toolStream, event, ctx);
+  }
+
+  /**
+   * 执行 toolConfirm hooks（通知类型）
+   */
+  async executeToolConfirmHooks(request: ToolConfirmRequest, ctx: HookContext): Promise<void> {
+    await this.executeSeries('toolConfirm', (plugin) => plugin.toolConfirm, request, ctx);
   }
 
   /**

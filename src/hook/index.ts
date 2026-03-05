@@ -16,6 +16,7 @@ export type {
   ToolUseHook,
   ToolResultHook,
   ToolStreamHook,
+  ToolConfirmHook,
   StepHook,
   LoopHook,
   StopHook,

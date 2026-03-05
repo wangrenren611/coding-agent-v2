@@ -11,125 +11,51 @@ import { BaseTool } from './base';
 import type {
   ToolManagerConfig,
   ToolExecutionCallbacks,
+  ToolConfirmRequest,
   ToolMeta,
-  ToolMiddleware,
-  ToolExecutionInfo,
   ToolParameterSchema,
   ToolStreamEventInput,
 } from './types';
 
-// =============================================================================
-// 内置中间件
-// =============================================================================
+type ToolErrorStage =
+  | 'lookup'
+  | 'availability'
+  | 'parse_args'
+  | 'validation'
+  | 'confirmation'
+  | 'execution'
+  | 'timeout';
 
-/**
- * 日志中间件
- */
-const loggingMiddleware: ToolMiddleware = async (info, next) => {
-  console.log(`[Tool] Executing: ${info.toolName}`, info.args);
-  try {
-    const result = await next();
-    console.log(`[Tool] Success: ${info.toolName}`, result.success);
-    return result;
-  } catch (error) {
-    console.error(`[Tool] Error: ${info.toolName}`, error);
-    throw error;
-  }
-};
+interface ToolErrorLike extends Error {
+  code?: string;
+  recoverable?: boolean;
+  data?: unknown;
+}
 
-/**
- * 计时中间件
- */
-const timingMiddleware: ToolMiddleware = async (info, next) => {
-  const start = Date.now();
-  try {
-    const result = await next();
-    const duration = Date.now() - start;
-    return {
-      ...result,
-      metadata: {
-        ...result.metadata,
-        duration: `${duration}ms`,
-      },
-    };
-  } catch (error) {
-    const duration = Date.now() - start;
-    console.error(`[Tool] ${info.toolName} failed after ${duration}ms`);
-    throw error;
-  }
-};
+interface ZodIssueLike {
+  message: string;
+  path?: Array<string | number>;
+}
 
-// =============================================================================
-// ToolManager 类
-// =============================================================================
+class ToolArgumentsParseError extends Error implements ToolErrorLike {
+  code = 'TOOL_ARGUMENTS_PARSE_ERROR';
+  recoverable = true;
+}
 
-/**
- * 工具管理器
- *
- * @example
- * ```typescript
- * import { z } from 'zod';
- * import { ToolManager, BaseTool } from './tool';
- *
- * // 定义工具
- * class CalculatorTool extends BaseTool {
- *   parameters = z.object({
- *     expression: z.string().describe('数学表达式'),
- *   });
- *
- *   get meta() {
- *     return {
- *       name: 'calculator',
- *       description: '执行数学计算',
- *       parameters: this.parameters,
- *     };
- *   }
- *
- *   async execute(args) {
- *     const result = eval(args.expression);
- *     return this.success(result);
- *   }
- * }
- *
- * // 创建管理器并注册工具
- * const toolManager = new ToolManager({
- *   maxConcurrency: 10,
- *   timeout: 30000,
- * });
- *
- * toolManager.register(new CalculatorTool());
- *
- * // 在 Agent 中使用
- * const agent = new Agent({
- *   provider,
- *   toolManager,
- * });
- * ```
- */
+class ToolExecutionTimeoutError extends Error implements ToolErrorLike {
+  code = 'TOOL_TIMEOUT';
+  recoverable = true;
+}
+
 export class ToolManager {
   private tools: Map<string, BaseTool<ToolParameterSchema>> = new Map();
-  private middlewares: ToolMiddleware[] = [];
   private config: Required<ToolManagerConfig>;
 
   constructor(config?: ToolManagerConfig) {
     this.config = {
       maxConcurrency: config?.maxConcurrency ?? 5,
       timeout: config?.timeout ?? 60000,
-      enableLogging: config?.enableLogging ?? false,
-      enableTiming: config?.enableTiming ?? false,
-      middlewares: config?.middlewares ?? [],
     };
-
-    // 添加内置中间件
-    if (this.config.enableTiming) {
-      this.middlewares.push(timingMiddleware);
-    }
-    if (this.config.enableLogging) {
-      this.middlewares.push(loggingMiddleware);
-    }
-
-    // 添加自定义中间件
-    this.middlewares.push(...this.config.middlewares);
   }
 
   // ===========================================================================
@@ -137,24 +63,16 @@ export class ToolManager {
   // ===========================================================================
 
   /**
-   * 注册单个工具
+   * 注册工具（支持单个或批量）
    */
-  register<T extends ToolParameterSchema>(tool: BaseTool<T>): this {
-    const name = tool.name;
-    if (this.tools.has(name)) {
-      console.warn(`[ToolManager] Tool "${name}" already registered, will be overwritten`);
-    }
-    this.tools.set(name, tool);
-    return this;
-  }
-
-  /**
-   * 批量注册工具
-   */
-
-  registerList(tools: BaseTool<ToolParameterSchema>[]): this {
+  register(toolOrTools: BaseTool<ToolParameterSchema> | BaseTool<ToolParameterSchema>[]): this {
+    const tools = Array.isArray(toolOrTools) ? toolOrTools : [toolOrTools];
     for (const tool of tools) {
-      this.register(tool);
+      const name = tool.name;
+      if (this.tools.has(name)) {
+        console.warn(`[ToolManager] Tool "${name}" already registered, will be overwritten`);
+      }
+      this.tools.set(name, tool);
     }
     return this;
   }
@@ -165,18 +83,6 @@ export class ToolManager {
   unregister(name: string): boolean {
     return this.tools.delete(name);
   }
-
-  /**
-   * 清空所有工具
-   */
-  clear(): void {
-    this.tools.clear();
-  }
-
-  // ===========================================================================
-  // 工具查询
-  // ===========================================================================
-
   /**
    * 获取工具
    */
@@ -224,27 +130,11 @@ export class ToolManager {
   }
 
   /**
-   * 按标签获取工具
-   */
-
-  getToolsByTag(tag: string): BaseTool<ToolParameterSchema>[] {
-    return this.getTools().filter((tool) => tool.meta.tags?.includes(tag));
-  }
-
-  /**
    * 获取危险工具
    */
 
   getDangerousTools(): BaseTool<ToolParameterSchema>[] {
     return this.getTools().filter((tool) => tool.meta.dangerous);
-  }
-
-  /**
-   * 获取启用的工具
-   */
-
-  getEnabledTools(): BaseTool<ToolParameterSchema>[] {
-    return this.getTools().filter((tool) => tool.meta.enabled !== false);
   }
 
   // ===========================================================================
@@ -255,19 +145,19 @@ export class ToolManager {
    * 生成 LLM Provider 需要的 Tool Schema 列表
    */
   toToolsSchema(): Tool[] {
-    return this.getEnabledTools().map((tool) => tool.toToolSchema());
+    return this.getTools()
+      .filter((tool) => tool.meta.enabled !== false)
+      .map((tool) => tool.toToolSchema());
   }
 
   /**
    * 获取所有工具的元数据
    */
   getToolsMeta(): ToolMeta[] {
-    return this.getEnabledTools().map((tool) => tool.meta);
+    return this.getTools()
+      .filter((tool) => tool.meta.enabled !== false)
+      .map((tool) => tool.meta);
   }
-
-  // ===========================================================================
-  // 工具执行
-  // ===========================================================================
 
   /**
    * 执行单个工具
@@ -275,22 +165,27 @@ export class ToolManager {
   async executeTool<T extends ToolParameterSchema = ToolParameterSchema>(
     name: string,
     args: Record<string, unknown>,
-    context: ToolExecutionContext
+    context: ToolExecutionContext,
+    callbacks?: ToolExecutionCallbacks
   ): Promise<ToolResult> {
     const tool = this.tools.get(name) as BaseTool<T> | undefined;
     if (!tool) {
-      return {
-        success: false,
-        error: `Tool not found: ${name}`,
-      };
+      return this.createErrorResult({
+        toolName: name,
+        stage: 'lookup',
+        code: 'TOOL_NOT_FOUND',
+        message: `Tool not found: ${name}`,
+      });
     }
 
     // 检查是否启用
     if (tool.meta.enabled === false) {
-      return {
-        success: false,
-        error: `Tool is disabled: ${name}`,
-      };
+      return this.createErrorResult({
+        toolName: name,
+        stage: 'availability',
+        code: 'TOOL_DISABLED',
+        message: `Tool is disabled: ${name}`,
+      });
     }
 
     // 参数校验
@@ -298,56 +193,114 @@ export class ToolManager {
     try {
       validatedArgs = tool.validateArgs(args);
     } catch (error) {
-      let errorMessage: string;
+      let errorMessage = 'Invalid arguments';
+      let issues: Array<{ message: string; path?: string }> | undefined;
       if (error instanceof z.ZodError) {
-        // zod v3/v4 兼容 - access internal properties that differ between versions
-        type ZodIssueLike = { message: string };
-        const errorWithIssues = error as { issues?: ZodIssueLike[]; errors?: ZodIssueLike[] };
-        const issues = errorWithIssues.issues ?? errorWithIssues.errors ?? [];
-
-        errorMessage = `Invalid arguments: ${issues.map((e) => e.message).join(', ')}`;
+        const extracted = this.getZodIssues(error);
+        issues = extracted.map((issue) => ({
+          message: issue.message,
+          path: issue.path?.length ? issue.path.join('.') : undefined,
+        }));
+        errorMessage = `Invalid arguments: ${extracted.map((e) => e.message).join(', ')}`;
       } else if (error instanceof Error) {
         errorMessage = error.message;
       } else {
         errorMessage = String(error);
       }
 
-      return {
-        success: false,
-        error: errorMessage,
-      };
+      return this.createErrorResult({
+        toolName: name,
+        stage: 'validation',
+        code: 'TOOL_VALIDATION_ERROR',
+        message: errorMessage,
+        details: issues ? { issues } : undefined,
+      });
     }
 
-    // 构建执行信息
-    const info: ToolExecutionInfo<T> = {
-      toolName: name,
-      args: validatedArgs,
-      rawArgs: args,
-      context,
-      meta: tool.meta,
-      startTime: Date.now(),
-    };
+    const confirmRequirement = await this.resolveToolConfirmRequirement(
+      tool,
+      validatedArgs,
+      context
+    );
+    if (confirmRequirement.required) {
+      const confirmRequest: ToolConfirmRequest = {
+        toolCallId: context.toolCallId,
+        toolName: name,
+        args: validatedArgs as Record<string, unknown>,
+        rawArgs: args,
+        reason: confirmRequirement.reason,
+      };
 
-    // 构建中间件链
-    const executeChain = this.buildMiddlewareChain(tool, info, validatedArgs);
+      const onToolConfirm = callbacks?.onToolConfirm;
+      if (!onToolConfirm) {
+        return this.createErrorResult({
+          toolName: name,
+          stage: 'confirmation',
+          code: 'TOOL_CONFIRMATION_REQUIRED',
+          message: `Tool "${name}" requires user confirmation before execution`,
+          details: confirmRequest,
+        });
+      }
+
+      const decision = await onToolConfirm(confirmRequest);
+      if (decision !== 'approve') {
+        return this.createErrorResult({
+          toolName: name,
+          stage: 'confirmation',
+          code: 'TOOL_CONFIRMATION_DENIED',
+          message: `Tool "${name}" execution was denied by user`,
+          details: confirmRequest,
+        });
+      }
+    }
 
     try {
-      return await executeChain();
+      const result = await this.executeToolCore(tool, validatedArgs, context);
+      if (result.success) {
+        return result;
+      }
+      return this.normalizeToolFailure(name, result, 'execution', 'TOOL_EXECUTION_ERROR');
     } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-
-      // 调用错误钩子
+      const err = this.toError(error);
       if (tool.onError) {
-        const handled = await tool.onError(err, validatedArgs, context);
-        if (handled) {
-          return handled;
+        try {
+          const handled = await tool.onError(err, validatedArgs, context);
+          if (handled) {
+            if (handled.success) {
+              return handled;
+            }
+            return this.normalizeToolFailure(name, handled, 'execution', 'TOOL_EXECUTION_ERROR');
+          }
+        } catch (onErrorFailure) {
+          return this.createErrorResult({
+            toolName: name,
+            stage: 'execution',
+            code: 'TOOL_ONERROR_FAILED',
+            message: this.toError(onErrorFailure).message,
+            details: {
+              original_error: this.serializeError(err),
+              on_error_failure: this.serializeError(onErrorFailure),
+            },
+          });
         }
       }
 
-      return {
-        success: false,
-        error: err.message,
-      };
+      const stage = this.inferErrorStage(err);
+      return this.createErrorResult({
+        toolName: name,
+        stage,
+        code: this.extractErrorCode(
+          err,
+          stage === 'timeout' ? 'TOOL_TIMEOUT' : 'TOOL_EXECUTION_ERROR'
+        ),
+        message: err.message || 'Tool execution failed',
+        recoverable: err.recoverable,
+        details: {
+          name: err.name,
+          ...(err.code ? { code: err.code } : {}),
+          ...(err.data !== undefined ? { data: err.data } : {}),
+        },
+      });
     }
   }
 
@@ -425,10 +378,11 @@ export class ToolManager {
       });
 
       const args = this.parseToolArgs(toolCall.function.arguments);
+      const timeoutMs = this.resolveTimeoutMs(toolCall.function.name, args);
       const result = await this.withTimeout(
-        this.executeTool(toolCall.function.name, args, fullContext),
-        this.config.timeout,
-        `Tool "${toolCall.function.name}" execution timed out after ${this.config.timeout}ms`
+        this.executeTool(toolCall.function.name, args, fullContext, callbacks),
+        timeoutMs,
+        toolCall.function.name
       );
 
       if (!result.success) {
@@ -450,23 +404,40 @@ export class ToolManager {
 
       return { toolCallId: toolCall.id, result };
     } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
+      const err = this.toError(error);
+      const stage = this.inferErrorStage(err);
+      const result = this.createErrorResult({
+        toolName: toolCall.function.name,
+        stage,
+        code: this.extractErrorCode(
+          err,
+          stage === 'timeout' ? 'TOOL_TIMEOUT' : 'TOOL_EXECUTION_ERROR'
+        ),
+        message: err.message || `Tool "${toolCall.function.name}" failed`,
+        recoverable: err.recoverable,
+        details: {
+          name: err.name,
+          ...(err.code ? { code: err.code } : {}),
+          ...(err.data !== undefined ? { data: err.data } : {}),
+        },
+      });
       await this.safeEmitToolEvent(emitToolEvent, {
         type: 'error',
         data: {
-          error: err.message,
+          error: result.error,
+          result,
         },
       });
       await this.safeEmitToolEvent(emitToolEvent, {
         type: 'end',
         data: {
           success: false,
-          error: err.message,
+          result,
         },
       });
       return {
         toolCallId: toolCall.id,
-        result: { success: false, error: err.message },
+        result,
       };
     }
   }
@@ -475,11 +446,60 @@ export class ToolManager {
    * 解析工具参数
    */
   private parseToolArgs(argsString: string): Record<string, unknown> {
-    try {
-      return JSON.parse(argsString);
-    } catch {
+    if (!argsString || !argsString.trim()) {
       return {};
     }
+    try {
+      const parsed = JSON.parse(argsString);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new ToolArgumentsParseError('Tool arguments must be a JSON object');
+      }
+      return parsed as Record<string, unknown>;
+    } catch (error) {
+      if (error instanceof ToolArgumentsParseError) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      throw new ToolArgumentsParseError(`Invalid tool arguments JSON: ${message}`);
+    }
+  }
+
+  private resolveTimeoutMs(toolName: string, args: Record<string, unknown>): number {
+    const tool = this.tools.get(toolName);
+    const toolTimeout =
+      tool && Number.isFinite(tool.getTimeoutMs()) && tool.getTimeoutMs() > 0
+        ? Math.floor(tool.getTimeoutMs())
+        : this.config.timeout;
+
+    let timeoutMs = Math.min(this.config.timeout, toolTimeout);
+    const rawTimeout = args['timeout'];
+    if (typeof rawTimeout === 'number' && Number.isFinite(rawTimeout) && rawTimeout > 0) {
+      timeoutMs = Math.min(timeoutMs, Math.floor(rawTimeout));
+    }
+    return timeoutMs;
+  }
+
+  private async resolveToolConfirmRequirement<T extends ToolParameterSchema>(
+    tool: BaseTool<T>,
+    args: z.infer<T>,
+    context: ToolExecutionContext
+  ): Promise<{ required: boolean; reason?: string }> {
+    if (tool.shouldConfirm) {
+      const result = await tool.shouldConfirm(args, context);
+      if (typeof result === 'boolean') {
+        return { required: result };
+      }
+      if (result && typeof result === 'object') {
+        return {
+          required: result.required === true,
+          reason: typeof result.reason === 'string' ? result.reason : undefined,
+        };
+      }
+    }
+
+    return {
+      required: tool.meta.requireConfirm === true,
+    };
   }
 
   private createToolEventEmitter(
@@ -533,9 +553,13 @@ export class ToolManager {
   /**
    * 带超时的 Promise 执行
    */
-  private async withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  private async withTimeout<T>(promise: Promise<T>, ms: number, toolName: string): Promise<T> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(message)), ms);
+      const timer = setTimeout(() => {
+        reject(
+          new ToolExecutionTimeoutError(`Tool "${toolName}" execution timed out after ${ms}ms`)
+        );
+      }, ms);
       promise
         .then((result) => {
           clearTimeout(timer);
@@ -548,110 +572,163 @@ export class ToolManager {
     });
   }
 
-  /**
-   * 构建中间件链
-   */
-  private buildMiddlewareChain<T extends ToolParameterSchema>(
+  private async executeToolCore<T extends ToolParameterSchema>(
     tool: BaseTool<T>,
-    info: ToolExecutionInfo<T>,
-    validatedArgs: z.infer<T>
-  ): () => Promise<ToolResult> {
-    // 核心执行函数
-    const coreExecute = async (): Promise<ToolResult> => {
-      // 1. 执行前钩子
-      let args = validatedArgs;
-      if (tool.beforeExecute) {
-        const modifiedArgs = await tool.beforeExecute(args, info.context);
-        if (modifiedArgs) {
-          args = modifiedArgs;
-        }
+    validatedArgs: z.infer<T>,
+    context: ToolExecutionContext
+  ): Promise<ToolResult> {
+    let args = validatedArgs;
+    if (tool.beforeExecute) {
+      const modifiedArgs = await tool.beforeExecute(args, context);
+      if (modifiedArgs) {
+        args = modifiedArgs;
       }
+    }
 
-      // 2. 执行工具
-      let result = await tool.execute(args, info.context);
+    let result = await tool.execute(args, context);
+    if (tool.afterExecute) {
+      result = await tool.afterExecute(result, args, context);
+    }
+    return result;
+  }
 
-      // 3. 执行后钩子
-      if (tool.afterExecute) {
-        result = await tool.afterExecute(result, args, info.context);
-      }
+  private getZodIssues(error: z.ZodError): ZodIssueLike[] {
+    const errorWithIssues = error as { issues?: ZodIssueLike[]; errors?: ZodIssueLike[] };
+    return errorWithIssues.issues ?? errorWithIssues.errors ?? [];
+  }
 
-      return result;
+  private normalizeToolFailure(
+    toolName: string,
+    result: ToolResult,
+    stage: ToolErrorStage,
+    fallbackCode: string
+  ): ToolResult {
+    const existingData =
+      result.data && typeof result.data === 'object' && !Array.isArray(result.data)
+        ? (result.data as Record<string, unknown>)
+        : {};
+    const code = this.extractErrorCode(existingData, fallbackCode);
+    const message =
+      (typeof existingData.message === 'string' && existingData.message.trim()) ||
+      (typeof result.error === 'string' && result.error.trim()) ||
+      'Tool execution failed';
+    const recoverable =
+      typeof existingData.recoverable === 'boolean' ? existingData.recoverable : true;
+
+    return {
+      success: false,
+      error: this.composeErrorMessage(code, message),
+      data: {
+        ...existingData,
+        error: code,
+        code,
+        message,
+        tool: toolName,
+        stage,
+        recoverable,
+      },
+      metadata: result.metadata,
     };
-
-    // 从后向前构建中间件链
-    let chain = coreExecute;
-
-    for (let i = this.middlewares.length - 1; i >= 0; i--) {
-      const middleware = this.middlewares[i];
-      const next = chain;
-      chain = () => middleware(info, next);
-    }
-
-    return chain;
   }
 
-  // ===========================================================================
-  // 中间件管理
-  // ===========================================================================
+  private createErrorResult(params: {
+    toolName: string;
+    stage: ToolErrorStage;
+    code: string;
+    message: string;
+    recoverable?: boolean;
+    details?: unknown;
+  }): ToolResult {
+    const errorData: Record<string, unknown> = {
+      error: params.code,
+      code: params.code,
+      message: params.message,
+      tool: params.toolName,
+      stage: params.stage,
+      recoverable: params.recoverable ?? true,
+    };
+    if (params.details !== undefined) {
+      errorData.details = params.details;
+    }
 
-  /**
-   * 添加中间件
-   */
-  use(middleware: ToolMiddleware): this {
-    this.middlewares.push(middleware);
-    return this;
+    return {
+      success: false,
+      error: this.composeErrorMessage(params.code, params.message),
+      data: errorData,
+    };
   }
 
-  /**
-   * 移除中间件
-   */
-  removeMiddleware(middleware: ToolMiddleware): boolean {
-    const index = this.middlewares.indexOf(middleware);
-    if (index > -1) {
-      this.middlewares.splice(index, 1);
-      return true;
+  private composeErrorMessage(code: string, message: string): string {
+    const normalizedMessage = message.trim();
+    if (normalizedMessage.toUpperCase().startsWith(`${code}:`)) {
+      return normalizedMessage;
     }
-    return false;
+    return `${code}: ${normalizedMessage}`;
   }
 
-  // ===========================================================================
-  // 工具状态管理
-  // ===========================================================================
-
-  /**
-   * 启用工具
-   */
-  enableTool(name: string): boolean {
-    const tool = this.tools.get(name);
-    if (tool) {
-      tool.meta.enabled = true;
-      return true;
+  private extractErrorCode(source: unknown, fallbackCode: string): string {
+    const record =
+      source && typeof source === 'object' && !Array.isArray(source)
+        ? (source as Record<string, unknown>)
+        : undefined;
+    const fromData =
+      this.normalizeErrorCode(record?.code) ??
+      this.normalizeErrorCode(record?.error) ??
+      this.normalizeErrorCode((source as { code?: unknown } | undefined)?.code);
+    if (fromData) {
+      return fromData;
     }
-    return false;
+
+    const message =
+      (typeof source === 'string' && source) ||
+      (source instanceof Error ? source.message : undefined) ||
+      (typeof record?.message === 'string' ? record.message : undefined);
+    if (message) {
+      const matched = message.trim().match(/^([A-Z][A-Z0-9_]{2,})(?::|\s|$)/);
+      const fromMessage = this.normalizeErrorCode(matched?.[1]);
+      if (fromMessage) {
+        return fromMessage;
+      }
+    }
+    return fallbackCode;
   }
 
-  /**
-   * 禁用工具
-   */
-  disableTool(name: string): boolean {
-    const tool = this.tools.get(name);
-    if (tool) {
-      tool.meta.enabled = false;
-      return true;
+  private normalizeErrorCode(value: unknown): string | undefined {
+    if (typeof value !== 'string') {
+      return undefined;
     }
-    return false;
+    const normalized = value.trim().toUpperCase();
+    if (!/^[A-Z][A-Z0-9_]{2,127}$/.test(normalized)) {
+      return undefined;
+    }
+    return normalized;
   }
 
-  /**
-   * 设置工具优先级
-   */
-  setToolPriority(name: string, priority: number): boolean {
-    const tool = this.tools.get(name);
-    if (tool) {
-      tool.meta.priority = priority;
-      return true;
+  private inferErrorStage(error: unknown): ToolErrorStage {
+    const code = this.extractErrorCode(error, '');
+    if (code === 'TOOL_TIMEOUT') {
+      return 'timeout';
     }
-    return false;
+    if (code === 'TOOL_ARGUMENTS_PARSE_ERROR') {
+      return 'parse_args';
+    }
+    return 'execution';
+  }
+
+  private toError(error: unknown): ToolErrorLike {
+    if (error instanceof Error) {
+      return error as ToolErrorLike;
+    }
+    return new Error(String(error));
+  }
+
+  private serializeError(error: unknown): Record<string, unknown> {
+    const err = this.toError(error);
+    return {
+      name: err.name,
+      message: err.message,
+      code: err.code,
+    };
   }
 }
 

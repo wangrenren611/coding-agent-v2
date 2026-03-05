@@ -3,34 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { AgentLoopExceededError, AgentAbortedError, AgentMaxRetriesExceededError } from '../errors';
-
-describe('AgentLoopExceededError', () => {
-  it('should create error with limit and actual values', () => {
-    const error = new AgentLoopExceededError(100, 150);
-
-    expect(error).toBeInstanceOf(Error);
-    expect(error).toBeInstanceOf(AgentLoopExceededError);
-    expect(error.name).toBe('AgentLoopExceededError');
-    expect(error.message).toBe('Agent loop exceeded: 150 > 100');
-    expect(error.limit).toBe(100);
-    expect(error.actual).toBe(150);
-  });
-
-  it('should create error with zero values', () => {
-    const error = new AgentLoopExceededError(0, 1);
-
-    expect(error.message).toBe('Agent loop exceeded: 1 > 0');
-    expect(error.limit).toBe(0);
-    expect(error.actual).toBe(1);
-  });
-
-  it('should create error with same values', () => {
-    const error = new AgentLoopExceededError(10, 10);
-
-    expect(error.message).toBe('Agent loop exceeded: 10 > 10');
-  });
-});
+import { AgentAbortedError, AgentMaxRetriesExceededError } from '../errors';
 
 describe('AgentAbortedError', () => {
   it('should create error with default message', () => {

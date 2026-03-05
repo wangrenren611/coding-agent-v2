@@ -4,41 +4,26 @@
  * 综合了流式处理、状态管理、重试机制、工具调用、压缩等功能
  */
 
-import type { LLMGenerateOptions, LLMRequestMessage, Chunk, Tool } from '../providers';
-import {
-  LLMError,
-  LLMRetryableError,
-  isRetryableError,
-  isPermanentError,
-  isAbortedError,
-  calculateBackoff,
-} from '../providers';
+import type { LLMGenerateOptions, LLMRequestMessage, Tool } from '../providers';
+import { LLMRetryableError, calculateBackoff } from '../providers';
 import type { AgentConfig, AgentStepResult, AgentResult, CompletionResult } from './types';
-import type {
-  Message,
-  ToolResult,
-  ToolCall,
-  FinishReason,
-  AgentLoopState,
-  HookContext,
-  ToolStreamEvent,
-} from '../core/types';
+import type { Message, AgentLoopState, HookContext, ToolStreamEvent } from '../core/types';
 import { AgentAbortedError, AgentMaxRetriesExceededError } from './errors';
 import { createInitialState, mergeAgentConfig } from './state';
 import { defaultCompletionDetector } from './completion';
 import { compact, estimateMessagesTokens } from './compaction';
+import { classifyLoopError } from './runtime/utils';
+import { executeAgentStep } from './runtime/step-runner';
 import {
-  createPersistenceState,
-  flushPendingMessages,
-  getInProgressAssistantMessage,
-  persistInProgressAssistantMessage,
-  resetStreamPersistence,
-  ensureInProgressAssistantMessage,
-} from './persistence';
+  buildInitialMessages as buildInitialAgentMessages,
+  buildUserMessage as buildAgentUserMessage,
+  ensureSystemMessageForExistingSession as ensureSystemMessageForExistingSessionUtil,
+  prepareMessagesForRun,
+} from './runtime/message-builder';
+import { createPersistenceState, flushPendingMessages } from './persistence';
 import type { ToolManager } from '../tool';
 import { HookManager } from '../hook';
 import type { Logger } from '../logger';
-import { contentToText } from '../utils';
 
 /**
  * Agent 核心类
@@ -61,7 +46,7 @@ export class Agent {
     this.config = mergeAgentConfig(config);
     this.state = createInitialState();
     this.sessionId = config.sessionId ?? crypto.randomUUID();
-    this.toolManager = config.toolManager!;
+    this.toolManager = this.requireToolManager(config.toolManager);
     this.logger = config.logger;
 
     // 初始化 HookManager 并注册 plugins
@@ -133,7 +118,7 @@ export class Agent {
   /**
    * 获取工具管理器
    */
-  getToolManager(): ToolManager | undefined {
+  getToolManager(): ToolManager {
     return this.toolManager;
   }
 
@@ -255,20 +240,12 @@ export class Agent {
     let runResult: AgentResult | undefined;
 
     try {
-      await flushPendingMessages({
-        state: this.persistenceState,
-        messagesLength: this.messages.length,
-        saveMessages: (startIndex) => this.saveMessages(startIndex),
-      });
+      await this.flushPendingMessagesWithRetry('pre_run');
       this.logger?.info('[Agent] Starting run', { sessionId: this.sessionId });
 
       // 获取工具 schema（优先使用 toolManager）
-      let tools = this.getToolsSchema(options?.tools);
-
-      // 应用 tools hooks
-      if (tools && tools.length > 0) {
-        tools = await this.hookManager.executeToolsHooks(tools, this.getHookContext());
-      }
+      const toolsPinned = options?.tools !== undefined;
+      const tools = await this.resolveTools(options?.tools);
       this.currentTools = tools;
 
       // 合并选项
@@ -286,7 +263,7 @@ export class Agent {
       );
 
       try {
-        await this.runLoop(mergedOptions);
+        await this.runLoop(mergedOptions, toolsPinned);
       } catch (error) {
         if (error instanceof AgentAbortedError || this.state.aborted) {
           this.logger?.warn('[Agent] Run aborted by user');
@@ -336,11 +313,7 @@ export class Agent {
     }
 
     try {
-      await flushPendingMessages({
-        state: this.persistenceState,
-        messagesLength: this.messages.length,
-        saveMessages: (startIndex) => this.saveMessages(startIndex),
-      });
+      await this.flushPendingMessagesWithRetry('post_run');
     } catch (saveError) {
       this.logger?.error('[Agent] Failed to persist messages', saveError, {
         sessionId: this.sessionId,
@@ -349,6 +322,9 @@ export class Agent {
       if (!runError) {
         throw saveError;
       }
+      this.logger?.error('[Agent] Persistence failed after run error', saveError, {
+        sessionId: this.sessionId,
+      });
     }
 
     if (runError) {
@@ -367,8 +343,16 @@ export class Agent {
     }
 
     // 使用 toolManager 的 schema
-    const schema = this.toolManager!.toToolsSchema();
+    const schema = this.toolManager.toToolsSchema();
     return schema.length > 0 ? schema : undefined;
+  }
+
+  private async resolveTools(optionsTools?: Tool[]): Promise<Tool[] | undefined> {
+    let tools = this.getToolsSchema(optionsTools);
+    if (tools && tools.length > 0) {
+      tools = await this.hookManager.executeToolsHooks(tools, this.getHookContext());
+    }
+    return tools;
   }
 
   // ===========================================================================
@@ -378,7 +362,7 @@ export class Agent {
   /**
    * 主循环
    */
-  private async runLoop(options: LLMGenerateOptions): Promise<void> {
+  private async runLoop(options: LLMGenerateOptions, toolsPinned: boolean): Promise<void> {
     // 使用状态变量控制循环，避免 while(true)
     const checkContinue = (): boolean => {
       return !this.state.aborted && this.canContinue();
@@ -398,11 +382,14 @@ export class Agent {
 
       // 3. 检查是否需要压缩
       if (this.needsCompaction()) {
+        this.state.loopIndex++;
         this.logger?.info('[Agent] Starting compaction', {
           messageCount: this.messages.length,
           tokenEstimate: estimateMessagesTokens(this.messages, this.currentTools),
         });
         await this.performCompaction();
+        await this.refreshToolsAfterCompaction(options, toolsPinned);
+        continue;
       }
 
       // 4. 重试检查和处理
@@ -436,324 +423,41 @@ export class Agent {
    * 执行单步操作
    */
   private async executeStep(options: LLMGenerateOptions): Promise<void> {
-    this.state.stepIndex++;
-    this.state.currentText = '';
-    this.currentReasoningContent = '';
-    this.state.currentToolCalls = [];
-    this.state.stepUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-    resetStreamPersistence(this.persistenceState);
-
-    const rawChunks: Chunk[] = [];
-    let finishReason = null;
-
-    try {
-      // 转换为 LLM 格式发送给 Provider
-      const llmMessages = this.getLLMMessages();
-      const stream = this.config.provider.generateStream(llmMessages, options);
-
-      for await (const chunk of stream) {
-        if (this.state.aborted) {
-          throw new AgentAbortedError();
-        }
-
-        rawChunks.push(chunk);
-        await this.processStreamChunk(chunk);
-
-        if (chunk.choices?.[0]?.finish_reason) {
-          finishReason = chunk.choices[0].finish_reason;
-        }
-      }
-
-      await this.finalizeStep(rawChunks, finishReason, options);
-    } catch (error) {
-      this.logger?.error('[Agent] Step error', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 处理流式数据块
-   */
-  private async processStreamChunk(chunk: Chunk): Promise<void> {
-    const choice = chunk.choices?.[0];
-    if (!choice) return;
-
-    const delta = choice.delta;
-    const ctx = this.getHookContext();
-    const streamMessage = await ensureInProgressAssistantMessage({
-      state: this.persistenceState,
-      messages: this.messages,
-      memoryManager: this.config.memoryManager,
-      sessionId: this.sessionId,
-      currentText: this.state.currentText,
-      currentReasoningContent: this.currentReasoningContent,
-      currentToolCalls: this.state.currentToolCalls,
-      stepUsage: this.state.stepUsage,
-      flushPending: async () =>
-        flushPendingMessages({
-          state: this.persistenceState,
-          messagesLength: this.messages.length,
-          saveMessages: (startIndex) => this.saveMessages(startIndex),
-        }),
-      logger: this.logger,
-      stepIndex: this.state.stepIndex,
-    });
-
-    // 处理文本增量
-    if (delta.content && typeof delta.content === 'string') {
-      this.state.currentText += delta.content;
-      await this.hookManager.executeTextDeltaHooks({ text: delta.content }, ctx);
-    }
-
-    // 处理推理内容
-    if (delta.reasoning_content) {
-      this.currentReasoningContent += delta.reasoning_content;
-      await this.hookManager.executeTextDeltaHooks(
-        { text: delta.reasoning_content, isReasoning: true },
-        ctx
-      );
-    }
-
-    // 处理工具调用
-    if (delta.tool_calls) {
-      for (const toolCall of delta.tool_calls) {
-        await this.handleToolCallDelta(toolCall);
-      }
-    }
-
-    // 处理 usage 信息
-    if (chunk.usage) {
-      this.state.stepUsage = { ...chunk.usage };
-      this.state.totalUsage.prompt_tokens += chunk.usage.prompt_tokens;
-      this.state.totalUsage.completion_tokens += chunk.usage.completion_tokens;
-      this.state.totalUsage.total_tokens += chunk.usage.total_tokens;
-    }
-
-    if (streamMessage) {
-      streamMessage.content = this.state.currentText;
-      streamMessage.reasoning_content = this.currentReasoningContent || undefined;
-      streamMessage.tool_calls =
-        this.state.currentToolCalls.length > 0 ? [...this.state.currentToolCalls] : undefined;
-      streamMessage.usage = { ...this.state.stepUsage };
-    }
-
-    // 处理错误
-    if (chunk.error) {
-      this.logger?.error('[Agent] Stream chunk error', chunk.error);
-    }
-
-    if (streamMessage) {
-      try {
-        await persistInProgressAssistantMessage({
-          state: this.persistenceState,
-          messages: this.messages,
-          memoryManager: this.config.memoryManager,
-          sessionId: this.sessionId,
-        });
-      } catch (error) {
-        this.logger?.error('[Agent] Failed to persist stream progress', error, {
-          sessionId: this.sessionId,
-          stepIndex: this.state.stepIndex,
-        });
-      }
-    }
-  }
-
-  /**
-   * 处理工具调用增量
-   */
-  private async handleToolCallDelta(toolCall: ToolCall): Promise<void> {
-    const index = Number.isFinite(toolCall?.index) ? toolCall.index : 0;
-    const incomingId =
-      typeof toolCall?.id === 'string' && toolCall.id.trim().length > 0 ? toolCall.id : '';
-    const incomingName = typeof toolCall?.function?.name === 'string' ? toolCall.function.name : '';
-    const incomingArguments =
-      typeof toolCall?.function?.arguments === 'string' ? toolCall.function.arguments : '';
-
-    const existing =
-      (incomingId ? this.state.currentToolCalls.find((tc) => tc.id === incomingId) : undefined) ??
-      this.state.currentToolCalls.find((tc) => tc.index === index);
-
-    if (!existing) {
-      this.state.currentToolCalls.push({
-        id: incomingId || `tool_call_${this.state.stepIndex}_${index}`,
-        type: toolCall?.type || 'function',
-        index,
-        function: {
-          name: incomingName,
-          arguments: incomingArguments,
-        },
-      });
-      return;
-    }
-
-    if (incomingId && existing.id !== incomingId) {
-      existing.id = incomingId;
-    }
-    if (incomingName) {
-      existing.function.name = existing.function.name || incomingName;
-    }
-    if (incomingArguments) {
-      existing.function.arguments += incomingArguments;
-    }
-  }
-
-  /**
-   * 完成步骤处理
-   */
-  private async finalizeStep(
-    rawChunks: Chunk[],
-    finishReason: FinishReason,
-    _options: LLMGenerateOptions
-  ): Promise<void> {
-    const ctx = this.getHookContext();
-
-    // 发送文本完成事件
-    if (this.state.currentText) {
-      await this.hookManager.executeTextCompleteHooks(this.state.currentText, ctx);
-    }
-
-    // 并发执行工具调用
-    const toolResults: Array<{ toolCallId: string; result: ToolResult }> = [];
-
-    if (this.state.currentToolCalls.length > 0) {
-      this.logger?.info('[Agent] Executing tools', {
-        count: this.state.currentToolCalls.length,
-        tools: this.state.currentToolCalls.map((tc) => tc.function.name),
-      });
-
-      const context = {
-        loopIndex: this.state.loopIndex,
-        stepIndex: this.state.stepIndex,
-        agent: this,
-        agentContext: {
-          sessionId: this.sessionId,
-          loopIndex: this.state.loopIndex,
-          stepIndex: this.state.stepIndex,
-        },
-      };
-
-      // 应用 toolUse hooks
-      const processedToolCalls: ToolCall[] = [];
-      for (const toolCall of this.state.currentToolCalls) {
-        const processed = await this.hookManager.executeToolUseHooks(toolCall, ctx);
-        processedToolCalls.push(processed);
-      }
-
-      // 使用 toolManager 执行工具
-      toolResults.push(
-        ...(await this.toolManager!.executeTools(processedToolCalls, context, {
-          onToolEvent: async (event) => {
-            await this.handleToolStreamEvent(event, ctx);
-          },
-        }))
-      );
-
-      // 应用 toolResult hooks 并发送事件
-      for (let i = 0; i < toolResults.length; i++) {
-        const { toolCallId, result } = toolResults[i];
-        const toolCall = processedToolCalls.find((tc) => tc.id === toolCallId);
-        if (toolCall) {
-          const processedResult = await this.hookManager.executeToolResultHooks(
-            { toolCall, result },
-            ctx
-          );
-          toolResults[i] = { toolCallId, result: processedResult.result };
-        }
-      }
-    }
-
-    // 记录步骤结果
-    const stepResult: AgentStepResult = {
-      text: this.state.currentText,
-      toolCalls: [...this.state.currentToolCalls],
-      toolResults,
-      finishReason,
-      usage: { ...this.state.stepUsage },
-      rawChunks,
-    };
-    this.steps.push(stepResult);
-
-    // 创建或更新 assistant 消息
-    let assistantMessage = getInProgressAssistantMessage(this.messages, this.persistenceState);
-    if (!assistantMessage) {
-      assistantMessage = {
-        messageId: crypto.randomUUID(),
-        role: 'assistant',
-        content: this.state.currentText || '',
-        reasoning_content: this.currentReasoningContent || undefined,
-        tool_calls:
-          this.state.currentToolCalls.length > 0 ? [...this.state.currentToolCalls] : undefined,
-        finish_reason: finishReason ?? undefined,
-        usage: { ...this.state.stepUsage },
-      };
-      this.messages.push(assistantMessage);
-    } else {
-      assistantMessage.content = this.state.currentText || '';
-      assistantMessage.reasoning_content = this.currentReasoningContent || undefined;
-      assistantMessage.tool_calls =
-        this.state.currentToolCalls.length > 0 ? [...this.state.currentToolCalls] : undefined;
-      assistantMessage.finish_reason = finishReason ?? undefined;
-      assistantMessage.usage = { ...this.state.stepUsage };
-    }
-
-    if (this.persistenceState.inProgressAssistantMessageId) {
-      try {
-        await persistInProgressAssistantMessage({
-          state: this.persistenceState,
-          messages: this.messages,
-          memoryManager: this.config.memoryManager,
-          sessionId: this.sessionId,
-          force: true,
-        });
-      } catch (error) {
-        this.logger?.error('[Agent] Failed to persist final stream state', error, {
-          sessionId: this.sessionId,
-          stepIndex: this.state.stepIndex,
-        });
-      }
-    }
-
-    // 添加工具结果消息
-    for (const { toolCallId, result } of toolResults) {
-      const toolMessage: Message = {
-        messageId: crypto.randomUUID(),
-        role: 'tool',
-        content: JSON.stringify({
-          success: result.success,
-          data: result.data,
-          error: result.error,
-          metadata: result.metadata,
-        }),
-        tool_call_id: toolCallId,
-      };
-      this.messages.push(toolMessage);
-    }
-
-    // 发送步骤完成事件
-    await this.hookManager.executeStepHooks(
+    await executeAgentStep(
       {
-        stepIndex: this.state.stepIndex,
-        finishReason: finishReason ?? undefined,
-        toolCallsCount: this.state.currentToolCalls.length,
+        state: this.state,
+        messages: this.messages,
+        steps: this.steps,
+        persistenceState: this.persistenceState,
+        sessionId: this.sessionId,
+        toolManager: this.toolManager,
+        hookManager: this.hookManager,
+        logger: this.logger,
+        config: {
+          provider: this.config.provider,
+          memoryManager: this.config.memoryManager,
+          onToolConfirm: this.config.onToolConfirm,
+        },
+        getHookContext: () => this.getHookContext(),
+        getLLMMessages: () => this.getLLMMessages(),
+        saveMessages: (startIndex) => this.saveMessages(startIndex),
+        agentRef: this,
+        getCurrentReasoningContent: () => this.currentReasoningContent,
+        setCurrentReasoningContent: (value) => {
+          this.currentReasoningContent = value;
+        },
+        handleToolStreamEvent: (event, ctx) => this.handleToolStreamEvent(event, ctx),
       },
-      ctx
+      options
     );
-
-    // 根据完成原因决定是否继续
-    if (finishReason === 'stop' || finishReason === 'length') {
-      this.state.resultStatus = 'stop';
-    } else if (finishReason === 'tool_calls' && toolResults.length > 0) {
-      this.state.resultStatus = 'continue';
-    }
-
-    resetStreamPersistence(this.persistenceState);
   }
 
   /**
    * 评估是否应该完成
    */
   private async evaluateCompletion(): Promise<CompletionResult> {
+    const lastStep = this.steps[this.steps.length - 1];
+
     // 1. 检查中止
     if (this.state.aborted) {
       return { done: true, reason: 'user_abort', message: 'Agent was aborted by user' };
@@ -766,19 +470,20 @@ export class Agent {
 
     // 3. 使用自定义完成检测器
     if (this.config.completionDetector) {
-      const lastStep = this.steps[this.steps.length - 1];
       const result = await this.config.completionDetector(
         this.state,
         this.getLLMMessages(),
         lastStep
       );
-      if (result.done) {
+      if (result.done || !this.config.useDefaultCompletionDetector) {
         return result;
       }
     }
 
     // 4. 默认完成检测
-    const defaultResult = defaultCompletionDetector(this.steps[this.steps.length - 1]);
+    const defaultResult = this.config.useDefaultCompletionDetector
+      ? defaultCompletionDetector(lastStep)
+      : { done: false, reason: 'stop' as const };
     if (defaultResult.done) {
       return defaultResult;
     }
@@ -826,26 +531,30 @@ export class Agent {
    */
   private async handleLoopError(error: Error): Promise<void> {
     this.state.lastError = error;
+    const disposition = classifyLoopError(error, this.state.aborted);
 
-    if (isPermanentError(error)) {
-      throw error;
+    switch (disposition) {
+      case 'throw_permanent':
+        throw error;
+      case 'abort':
+        throw new AgentAbortedError();
+      case 'retry':
+        this.logger?.warn('[Agent] LLM error detected, scheduling retry', {
+          loopIndex: this.state.loopIndex,
+          stepIndex: this.state.stepIndex,
+          errorName: error.name,
+          errorMessage: error.message,
+        });
+        this.state.needsRetry = true;
+        return;
+      case 'throw_unknown':
+      default:
+        this.logger?.error('[Agent] Non-retryable loop error', error, {
+          loopIndex: this.state.loopIndex,
+          stepIndex: this.state.stepIndex,
+        });
+        throw error;
     }
-
-    if (isAbortedError(error) || this.state.aborted) {
-      throw new AgentAbortedError();
-    }
-
-    if (isRetryableError(error)) {
-      this.state.needsRetry = true;
-      return;
-    }
-
-    if (error instanceof LLMError) {
-      this.state.needsRetry = true;
-      return;
-    }
-
-    throw error;
   }
 
   /**
@@ -900,42 +609,24 @@ export class Agent {
   private async buildInitialMessages(
     userContent: string | LLMRequestMessage['content']
   ): Promise<Message[]> {
-    const messages: Message[] = [];
-    const ctx = this.getHookContext();
-
-    // 应用 systemPrompt hooks
-    if (this.config.systemPrompt) {
-      let systemPrompt = this.config.systemPrompt;
-      systemPrompt = await this.hookManager.executeSystemPromptHooks(systemPrompt, ctx);
-      messages.push({
-        messageId: crypto.randomUUID(),
-        role: 'system',
-        content: systemPrompt,
-      });
-    }
-
-    messages.push(await this.buildUserMessage(userContent));
-
-    return messages;
+    return buildInitialAgentMessages({
+      systemPrompt: this.config.systemPrompt,
+      userContent,
+      hookManager: this.hookManager,
+      getHookContext: () => this.getHookContext(),
+      createMessageId: () => crypto.randomUUID(),
+    });
   }
 
   private async buildUserMessage(
     userContent: string | LLMRequestMessage['content']
   ): Promise<Message> {
-    const ctx = this.getHookContext();
-    let processedUserContent = userContent;
-    if (typeof processedUserContent === 'string') {
-      processedUserContent = await this.hookManager.executeUserPromptHooks(
-        processedUserContent,
-        ctx
-      );
-    }
-
-    return {
-      messageId: crypto.randomUUID(),
-      role: 'user',
-      content: processedUserContent,
-    };
+    return buildAgentUserMessage({
+      userContent,
+      hookManager: this.hookManager,
+      getHookContext: () => this.getHookContext(),
+      createMessageId: () => crypto.randomUUID(),
+    });
   }
 
   private async applyConfigHooks(): Promise<void> {
@@ -944,7 +635,7 @@ export class Agent {
       this.getHookContext()
     );
     this.config = mergeAgentConfig(hookedConfig);
-    this.toolManager = this.config.toolManager!;
+    this.toolManager = this.requireToolManager(this.config.toolManager);
     this.logger = this.config.logger;
     if (this.config.sessionId) {
       this.sessionId = this.config.sessionId;
@@ -954,46 +645,88 @@ export class Agent {
   private async prepareMessages(
     userContent: string | LLMRequestMessage['content']
   ): Promise<number> {
-    const memoryManager = this.config.memoryManager;
-    if (!memoryManager) {
-      this.messages = await this.buildInitialMessages(userContent);
-      return 0;
-    }
-
-    await memoryManager.initialize();
-    const existingSession = memoryManager.getSession(this.sessionId);
-
-    if (existingSession) {
-      await this.restoreMessages();
-      if (this.messages.length === 0 && existingSession.systemPrompt) {
-        // 已有 session 但 context 为空时，按 session 元信息恢复 system，避免重复写入 system 消息
-        this.messages = [
-          {
-            messageId: crypto.randomUUID(),
-            role: 'system',
-            content: existingSession.systemPrompt,
-          },
-        ];
-      }
-
-      const saveFromIndex = this.messages.length;
-      this.messages.push(await this.buildUserMessage(userContent));
-      return saveFromIndex;
-    }
-
-    this.messages = await this.buildInitialMessages(userContent);
-    await memoryManager.createSession(this.sessionId, this.extractSystemPrompt(this.messages));
-    const firstNonSystemIndex = this.messages.findIndex((message) => message.role !== 'system');
-    if (firstNonSystemIndex === -1) {
-      return this.messages.length;
-    }
-    return firstNonSystemIndex;
+    const prepared = await prepareMessagesForRun({
+      memoryManager: this.config.memoryManager,
+      sessionId: this.sessionId,
+      userContent,
+      buildInitialMessages: (content) => this.buildInitialMessages(content),
+      buildUserMessage: (content) => this.buildUserMessage(content),
+      restoreMessages: async () => {
+        await this.restoreMessages();
+        return [...this.messages];
+      },
+      ensureSystemMessageForExistingSession: (messages, existingSessionPrompt) =>
+        this.ensureSystemMessageForExistingSession(messages, existingSessionPrompt),
+    });
+    this.messages = prepared.messages;
+    return prepared.saveFromIndex;
   }
 
-  private extractSystemPrompt(messages: Message[]): string {
-    const systemMessage = messages.find((message) => message.role === 'system');
-    if (!systemMessage) return '';
-    return contentToText(systemMessage.content);
+  private async ensureSystemMessageForExistingSession(
+    messages: Message[],
+    existingSessionPrompt?: string
+  ): Promise<Message[]> {
+    return ensureSystemMessageForExistingSessionUtil({
+      messages,
+      existingSessionPrompt,
+      systemPrompt: this.config.systemPrompt,
+      hookManager: this.hookManager,
+      getHookContext: () => this.getHookContext(),
+      createMessageId: () => crypto.randomUUID(),
+    });
+  }
+
+  private requireToolManager(toolManager?: ToolManager): ToolManager {
+    if (!toolManager) {
+      throw new Error('[Agent] toolManager is required');
+    }
+    return toolManager;
+  }
+
+  private async flushPendingMessagesWithRetry(
+    stage: 'pre_run' | 'post_run',
+    maxAttempts = 3
+  ): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await flushPendingMessages({
+          state: this.persistenceState,
+          messagesLength: this.messages.length,
+          saveMessages: (startIndex) => this.saveMessages(startIndex),
+        });
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt >= maxAttempts) {
+          break;
+        }
+        const delay = Math.min(100 * Math.pow(2, attempt - 1), 500);
+        this.logger?.warn('[Agent] Message persistence failed, retrying', {
+          stage,
+          attempt,
+          nextRetryDelayMs: delay,
+          sessionId: this.sessionId,
+        });
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+
+    throw lastError;
+  }
+
+  private async refreshToolsAfterCompaction(
+    options: LLMGenerateOptions,
+    toolsPinned: boolean
+  ): Promise<void> {
+    if (toolsPinned) {
+      this.currentTools = options.tools;
+      return;
+    }
+
+    const refreshedTools = await this.resolveTools();
+    this.currentTools = refreshedTools;
+    options.tools = refreshedTools;
   }
 
   /**

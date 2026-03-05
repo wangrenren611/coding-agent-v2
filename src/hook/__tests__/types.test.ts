@@ -17,6 +17,7 @@ import type {
   ToolUseHook,
   ToolResultHook,
   ToolStreamHook,
+  ToolConfirmHook,
   StepHook,
   LoopHook,
   StopHook,
@@ -525,6 +526,7 @@ describe('Plugin Interface', () => {
       toolUse: (tc) => tc,
       toolResult: (r) => r,
       toolStream: (_e: ToolStreamEvent) => {},
+      toolConfirm: () => {},
       step: () => {},
       loop: () => {},
       stop: () => {},
@@ -541,6 +543,7 @@ describe('Plugin Interface', () => {
     expect(typeof plugin.toolUse).toBe('function');
     expect(typeof plugin.toolResult).toBe('function');
     expect(typeof plugin.toolStream).toBe('function');
+    expect(typeof plugin.toolConfirm).toBe('function');
     expect(typeof plugin.step).toBe('function');
     expect(typeof plugin.loop).toBe('function');
     expect(typeof plugin.stop).toBe('function');
@@ -690,6 +693,7 @@ describe('Type Exports', () => {
     assertType<ToolUseHook>((tc) => tc);
     assertType<ToolResultHook>((r) => r);
     assertType<ToolStreamHook>(() => {});
+    assertType<ToolConfirmHook>(() => {});
     assertType<StepHook>(() => {});
     assertType<LoopHook>(() => {});
     assertType<StopHook>(() => {});

@@ -6,6 +6,7 @@
 
 import type { Tool } from '../providers';
 import type { ToolCall, ToolResult, HookContext, ToolStreamEvent } from '../core/types';
+import type { ToolConfirmRequest } from '../tool/types';
 
 // 重新导出共享类型
 export type { ToolCall, ToolResult, HookContext, ToolStreamEvent } from '../core/types';
@@ -107,6 +108,14 @@ export type TextCompleteHook = (text: string, ctx: HookContext) => void | Promis
  */
 export type ToolStreamHook = (event: ToolStreamEvent, ctx: HookContext) => void | Promise<void>;
 
+/**
+ * Tool Confirm Hook - 工具确认事件通知
+ */
+export type ToolConfirmHook = (
+  request: ToolConfirmRequest,
+  ctx: HookContext
+) => void | Promise<void>;
+
 // =============================================================================
 // Plugin 接口
 // =============================================================================
@@ -143,6 +152,8 @@ export interface Plugin {
   toolResult?: ToolResultHook;
   /** 工具流式输出 */
   toolStream?: ToolStreamHook;
+  /** 工具确认事件 */
+  toolConfirm?: ToolConfirmHook;
   /** 步骤完成通知 */
   step?: StepHook;
   /** 循环完成通知 */

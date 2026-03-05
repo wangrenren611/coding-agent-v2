@@ -9,7 +9,14 @@ import {
   type Plugin,
   type ToolStreamEvent,
 } from '../../src/index.ts';
-import { BashTool, ToolManager } from '../../src/tool/index.ts';
+import { createInterface } from 'node:readline/promises';
+import {
+  BashTool,
+  FileTool,
+  ToolManager,
+  type ToolConfirmDecision,
+  type ToolConfirmRequest,
+} from '../../src/tool/index.ts';
 
 const DEFAULT_MODEL: ModelId = 'glm-4.7';
 const DEFAULT_PROMPT = '初始化一个 Node.js + TypeScript + Vitest 项目，给出执行步骤。';
@@ -41,6 +48,10 @@ Examples:
   pnpm example:agent
   pnpm example:agent glm-4.7 "帮我设计一个模块目录结构"
   pnpm example:agent glm-4.7 "初始化项目步骤" "请继续并给出风险清单"
+
+Env:
+  AGENT_AUTO_CONFIRM_TOOLS=true   # 自动同意所有待确认工具调用
+  AGENT_AUTO_CONFIRM_TOOLS=false  # 自动拒绝所有待确认工具调用
 `);
 }
 
@@ -126,6 +137,12 @@ function createConsoleStreamPlugin(): Plugin {
     toolStream: (event) => {
       printToolEvent(event);
     },
+    toolConfirm: (request) => {
+      switchChannel('tool', 'Tool Stream');
+      process.stdout.write(
+        `[tool-confirm:${request.toolName}:${request.toolCallId}] reason=${request.reason ?? 'n/a'} args=${JSON.stringify(request.args)}\n`
+      );
+    },
     step: ({ stepIndex, finishReason, toolCallsCount }) => {
       process.stdout.write(
         `\n[step] index=${stepIndex} finishReason=${finishReason ?? 'unknown'} toolCalls=${toolCallsCount}\n`
@@ -135,6 +152,56 @@ function createConsoleStreamPlugin(): Plugin {
       process.stdout.write(`\n[stop] reason=${reason}${message ? ` message=${message}` : ''}\n`);
     },
   };
+}
+
+function parseAutoConfirmDecision(): ToolConfirmDecision | undefined {
+  const raw = process.env.AGENT_AUTO_CONFIRM_TOOLS?.trim().toLowerCase();
+  if (!raw) {
+    return undefined;
+  }
+  if (raw === '1' || raw === 'true' || raw === 'yes' || raw === 'y') {
+    return 'approve';
+  }
+  if (raw === '0' || raw === 'false' || raw === 'no' || raw === 'n') {
+    return 'deny';
+  }
+  return undefined;
+}
+
+async function confirmToolExecution(request: ToolConfirmRequest): Promise<ToolConfirmDecision> {
+  const autoDecision = parseAutoConfirmDecision();
+  if (autoDecision) {
+    console.log(
+      `[tool-confirm] auto decision=${autoDecision} tool=${request.toolName} id=${request.toolCallId}`
+    );
+    return autoDecision;
+  }
+
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.log(
+      `[tool-confirm] no TTY available, default deny tool=${request.toolName} id=${request.toolCallId}`
+    );
+    return 'deny';
+  }
+
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  try {
+    const question =
+      `\n确认执行工具 "${request.toolName}" (callId=${request.toolCallId})? [y/N]\n` +
+      `reason=${request.reason ?? 'n/a'}\n` +
+      `args=${JSON.stringify(request.args)}\n> `;
+    const answer = (await rl.question(question)).trim().toLowerCase();
+    if (answer === 'y' || answer === 'yes') {
+      return 'approve';
+    }
+    return 'deny';
+  } finally {
+    rl.close();
+  }
 }
 
 async function main(): Promise<void> {
@@ -155,7 +222,7 @@ async function main(): Promise<void> {
       logger: logger.child('Provider'),
     });
     const toolManager = new ToolManager();
-    toolManager.registerList([new BashTool()]);
+    toolManager.register([new BashTool(), new FileTool()]);
     const sessionId = process.env.AGENT_SESSION_ID ?? `example-agent-${Date.now()}`;
 
     console.log('=== Runtime Config ===');
@@ -173,10 +240,11 @@ async function main(): Promise<void> {
       toolManager,
       memoryManager,
       logger,
-      sessionId,
+      // sessionId:"example-agent-1772704577922",
       systemPrompt: 'You are a practical coding assistant. Respond in Chinese with concise steps.',
       maxSteps,
       plugins: [createConsoleStreamPlugin()],
+      onToolConfirm: confirmToolExecution,
     });
 
     const prompt = promptArg ?? DEFAULT_PROMPT;

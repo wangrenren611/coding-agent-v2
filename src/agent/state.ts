@@ -21,6 +21,7 @@ export const DEFAULT_AGENT_CONFIG = {
   compactionThreshold: 100000,
   compactionKeepMessages: 10,
   summaryLanguage: 'English',
+  useDefaultCompletionDetector: true,
   memoryManager: undefined,
 } as const;
 
@@ -84,6 +85,7 @@ export function mergeAgentConfig(
     | 'memoryManager'
     | 'sessionId'
     | 'logger'
+    | 'onToolConfirm'
   >
 > &
   AgentConfig {

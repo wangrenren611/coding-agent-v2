@@ -14,6 +14,7 @@ import { HookManager, createHookManager } from '../manager';
 import type { Plugin, HookContext } from '../types';
 import type { Tool } from '../../providers';
 import type { ToolCall, ToolResult, AgentLoopState, ToolStreamEvent } from '../../core/types';
+import type { ToolConfirmRequest } from '../../tool/types';
 
 // =============================================================================
 // Mock Data & Helpers
@@ -60,6 +61,16 @@ const createMockToolCall = (id: string, toolName: string): ToolCall => ({
 const createMockToolResult = (success: boolean = true): ToolResult => ({
   success,
   data: { result: 'test' },
+});
+
+const createMockToolConfirmRequest = (
+  overrides?: Partial<ToolConfirmRequest>
+): ToolConfirmRequest => ({
+  toolCallId: 'call-confirm-1',
+  toolName: 'bash',
+  args: { command: 'rm -rf /tmp/x' },
+  rawArgs: { command: 'rm -rf /tmp/x' },
+  ...overrides,
 });
 
 // =============================================================================
@@ -1165,6 +1176,42 @@ describe('HookManager - ToolStream Hooks', () => {
     await manager.executeToolStreamHooks(event, ctx);
 
     expect(receivedEvent).toEqual(event);
+  });
+});
+
+// =============================================================================
+// ToolConfirm Hook Tests (Series Strategy - Notification)
+// =============================================================================
+
+describe('HookManager - ToolConfirm Hooks', () => {
+  let manager: HookManager;
+  let ctx: HookContext;
+
+  beforeEach(() => {
+    manager = new HookManager();
+    ctx = createMockContext();
+  });
+
+  it('should complete without error when no hooks registered', async () => {
+    await expect(
+      manager.executeToolConfirmHooks(createMockToolConfirmRequest(), ctx)
+    ).resolves.toBeUndefined();
+  });
+
+  it('should execute tool confirm hooks', async () => {
+    let received: ToolConfirmRequest | undefined;
+
+    manager.use({
+      name: 'confirm-plugin',
+      toolConfirm: (request) => {
+        received = request;
+      },
+    });
+
+    const request = createMockToolConfirmRequest({ toolName: 'file' });
+    await manager.executeToolConfirmHooks(request, ctx);
+
+    expect(received).toEqual(request);
   });
 });
 

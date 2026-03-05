@@ -537,8 +537,7 @@ function evaluateBashPolicyInternal(
       return {
         effect: nestedResult.effect,
         reason:
-          nestedResult.reason ??
-          `Nested command "${nestedCommand}" is blocked by security policy`,
+          nestedResult.reason ?? `Nested command "${nestedCommand}" is blocked by security policy`,
         commands: nestedExtractedCommands,
       };
     }

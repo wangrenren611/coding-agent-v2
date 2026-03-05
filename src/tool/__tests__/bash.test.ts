@@ -20,6 +20,13 @@ import {
   getBashDangerousPatterns,
   extractSegmentCommands,
 } from '../bash-policy';
+import type {
+  CommandExecutionCallbacks,
+  CommandExecutionRequest,
+  CommandExecutionResult,
+  CommandExecutionRouter,
+  CommandExecutor,
+} from '../runtime';
 import type { ToolExecutionContext } from '../types';
 
 // =============================================================================
@@ -263,6 +270,130 @@ describe('BashTool', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('COMMAND_BLOCKED_BY_POLICY');
+    });
+  });
+
+  describe('execution backend routing', () => {
+    it('should execute command through injected executor', async () => {
+      class MockExecutor implements CommandExecutor {
+        readonly id = 'mock-executor';
+        readonly target = 'custom' as const;
+
+        canExecute(_request: CommandExecutionRequest): boolean {
+          return true;
+        }
+
+        async execute(
+          _request: CommandExecutionRequest,
+          callbacks?: CommandExecutionCallbacks
+        ): Promise<CommandExecutionResult> {
+          await callbacks?.onEvent?.({ type: 'stdout', content: 'from-mock-backend' });
+          return {
+            success: true,
+            exitCode: 0,
+            output: 'from-mock-backend',
+            streamed: true,
+          };
+        }
+      }
+
+      class MockRouter implements CommandExecutionRouter {
+        private readonly executor = new MockExecutor();
+
+        route(_request: CommandExecutionRequest): CommandExecutor {
+          return this.executor;
+        }
+      }
+
+      const tool = new BashTool({ commandRouter: new MockRouter() });
+      const result = await tool.execute({ command: 'echo mocked' }, mockContext);
+      expect(result.success).toBe(true);
+      expect((result.data as BashForegroundResult).output).toContain('from-mock-backend');
+    });
+
+    it('should map background metadata from injected executor', async () => {
+      class MockExecutor implements CommandExecutor {
+        readonly id = 'mock-bg-executor';
+        readonly target = 'custom' as const;
+
+        canExecute(_request: CommandExecutionRequest): boolean {
+          return true;
+        }
+
+        async execute(request: CommandExecutionRequest): Promise<CommandExecutionResult> {
+          if (request.runInBackground) {
+            return {
+              success: true,
+              exitCode: 0,
+              output: '',
+              backgroundTask: {
+                pid: 32100,
+                logPath: '/tmp/mock-bg.log',
+              },
+            };
+          }
+          return {
+            success: true,
+            exitCode: 0,
+            output: 'foreground',
+          };
+        }
+      }
+
+      class MockRouter implements CommandExecutionRouter {
+        private readonly executor = new MockExecutor();
+
+        route(_request: CommandExecutionRequest): CommandExecutor {
+          return this.executor;
+        }
+      }
+
+      const tool = new BashTool({ commandRouter: new MockRouter() });
+      const result = await tool.execute(
+        { command: 'echo mocked-bg', run_in_background: true },
+        mockContext
+      );
+      expect(result.success).toBe(true);
+      expect((result.data as BashBackgroundResult).pid).toBe(32100);
+      expect((result.data as BashBackgroundResult).logPath).toBe('/tmp/mock-bg.log');
+    });
+
+    it('should pass configured execution target to router', async () => {
+      let capturedTarget: string | undefined;
+
+      class MockExecutor implements CommandExecutor {
+        readonly id = 'mock-target-executor';
+        readonly target = 'remote' as const;
+
+        canExecute(_request: CommandExecutionRequest): boolean {
+          return true;
+        }
+
+        async execute(_request: CommandExecutionRequest): Promise<CommandExecutionResult> {
+          return {
+            success: true,
+            exitCode: 0,
+            output: 'target-ok',
+          };
+        }
+      }
+
+      class MockRouter implements CommandExecutionRouter {
+        private readonly executor = new MockExecutor();
+
+        route(request: CommandExecutionRequest): CommandExecutor {
+          capturedTarget = request.target;
+          return this.executor;
+        }
+      }
+
+      const tool = new BashTool({
+        commandRouter: new MockRouter(),
+        defaultExecutionTarget: 'remote',
+      });
+      const result = await tool.execute({ command: 'echo target' }, mockContext);
+      expect(result.success).toBe(true);
+      expect(capturedTarget).toBe('remote');
     });
   });
 

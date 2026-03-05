@@ -22,6 +22,7 @@ describe('DEFAULT_AGENT_CONFIG', () => {
     expect(DEFAULT_AGENT_CONFIG.compactionThreshold).toBe(100000);
     expect(DEFAULT_AGENT_CONFIG.compactionKeepMessages).toBe(10);
     expect(DEFAULT_AGENT_CONFIG.summaryLanguage).toBe('English');
+    expect(DEFAULT_AGENT_CONFIG.useDefaultCompletionDetector).toBe(true);
     expect(DEFAULT_AGENT_CONFIG.memoryManager).toBeUndefined();
   });
 });
@@ -120,6 +121,7 @@ describe('mergeAgentConfig', () => {
     expect(merged.compactionThreshold).toBe(100000);
     expect(merged.compactionKeepMessages).toBe(10);
     expect(merged.summaryLanguage).toBe('English');
+    expect(merged.useDefaultCompletionDetector).toBe(true);
     expect(merged.provider).toBe(mockProvider);
     expect(merged.toolManager).toBe(mockToolManager);
   });
@@ -135,6 +137,7 @@ describe('mergeAgentConfig', () => {
       compactionThreshold: 50000,
       compactionKeepMessages: 20,
       summaryLanguage: 'Chinese',
+      useDefaultCompletionDetector: false,
       systemPrompt: 'You are helpful.',
     };
 
@@ -147,6 +150,7 @@ describe('mergeAgentConfig', () => {
     expect(merged.compactionThreshold).toBe(50000);
     expect(merged.compactionKeepMessages).toBe(20);
     expect(merged.summaryLanguage).toBe('Chinese');
+    expect(merged.useDefaultCompletionDetector).toBe(false);
     expect(merged.systemPrompt).toBe('You are helpful.');
   });
 

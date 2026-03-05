@@ -9,17 +9,19 @@
  */
 
 import { z } from 'zod';
-import { execaCommand } from 'execa';
 import stripAnsi from 'strip-ansi';
-import { spawn } from 'child_process';
-import { randomUUID } from 'crypto';
-import fs from 'fs';
-import path from 'path';
-import { tmpdir } from 'os';
 import { BaseTool } from './base';
 import type { ToolResult, ToolExecutionContext } from './types';
-import { evaluateBashPolicy, type BashPolicyMode } from './bash-policy';
+import { evaluateBashPolicy, type BashPolicyEffect, type BashPolicyMode } from './bash-policy';
 import BASH_DESCRIPTION from './bash.description';
+import type {
+  BackgroundTaskInfo,
+  CommandExecutionCallbacks,
+  CommandExecutionResult,
+  CommandExecutionRouter,
+  ExecutionTarget,
+} from './runtime';
+import { LocalCommandExecutor, StaticCommandExecutionRouter } from './runtime';
 
 // =============================================================================
 // 参数 Schema
@@ -51,7 +53,7 @@ const schema = z.object({
 // =============================================================================
 
 interface PolicyDecision {
-  allowed: boolean;
+  effect: BashPolicyEffect;
   reason?: string;
 }
 
@@ -59,11 +61,12 @@ interface ExecutionResult {
   exitCode: number;
   output: string;
   streamed: boolean;
+  backgroundTask?: BackgroundTaskInfo;
 }
 
-interface BackgroundResult {
-  pid: number | undefined;
-  logPath: string;
+export interface BashToolOptions {
+  commandRouter?: CommandExecutionRouter;
+  defaultExecutionTarget?: ExecutionTarget;
 }
 
 // =============================================================================
@@ -88,11 +91,20 @@ interface BackgroundResult {
  * ```
  */
 export class BashTool extends BaseTool<typeof schema> {
-  /** 默认超时时间（毫秒） */
-  private defaultTimeout = 60000;
+  private readonly commandRouter: CommandExecutionRouter;
+  private readonly defaultExecutionTarget?: ExecutionTarget;
 
-  /** 最大输出长度 */
-  private maxOutputLength = 30000;
+  constructor(options: BashToolOptions = {}) {
+    super();
+    this.commandRouter =
+      options.commandRouter ??
+      new StaticCommandExecutionRouter({
+        defaultTarget: 'local',
+        executors: [new LocalCommandExecutor()],
+      });
+    this.defaultExecutionTarget =
+      options.defaultExecutionTarget ?? this.getConfiguredExecutionTarget();
+  }
 
   get meta() {
     return {
@@ -126,7 +138,7 @@ export class BashTool extends BaseTool<typeof schema> {
 
     // 1. 验证安全策略
     const policy = this.validatePolicy(command);
-    if (!policy.allowed) {
+    if (policy.effect === 'deny') {
       return this.failure(`COMMAND_BLOCKED_BY_POLICY: ${policy.reason || 'Command not allowed'}`, {
         error: 'COMMAND_BLOCKED_BY_POLICY',
         reason: policy.reason,
@@ -139,7 +151,17 @@ export class BashTool extends BaseTool<typeof schema> {
     }
 
     // 3. 前台执行
-    return this.executeForeground(command, timeout ?? this.defaultTimeout, context);
+    return this.executeForeground(command, timeout ?? this.getTimeoutMs(), context);
+  }
+
+  async shouldConfirm(
+    args: z.infer<typeof schema>
+  ): Promise<{ required: boolean; reason?: string }> {
+    const policy = this.validatePolicy(args.command);
+    if (policy.effect === 'ask') {
+      return { required: true, reason: policy.reason };
+    }
+    return { required: false };
   }
 
   // ===========================================================================
@@ -154,27 +176,32 @@ export class BashTool extends BaseTool<typeof schema> {
     return raw === 'permissive' ? 'permissive' : 'guarded';
   }
 
+  private getConfiguredExecutionTarget(): ExecutionTarget | undefined {
+    const raw = process.env.BASH_TOOL_EXECUTION_TARGET?.trim().toLowerCase();
+    if (!raw) return undefined;
+    if (raw === 'local' || raw === 'remote' || raw === 'sandbox' || raw === 'custom') {
+      return raw;
+    }
+    return undefined;
+  }
+
   /**
    * 验证命令安全策略
    */
   private validatePolicy(command: string): PolicyDecision {
     const normalized = command.trim();
     if (!normalized) {
-      return { allowed: false, reason: 'Command is empty' };
+      return { effect: 'deny', reason: 'Command is empty' };
     }
 
     const decision = evaluateBashPolicy(normalized, {
       mode: this.getPolicyMode(),
-      allowlistMissEffect: 'deny',
+      allowlistMissEffect: 'ask',
       allowlistMissReason: (cmd) =>
-        `Command "${cmd}" is not in allowed command list (set BASH_TOOL_POLICY=permissive to bypass)`,
+        `Command "${cmd}" is not in allowed command list and requires user confirmation`,
     });
 
-    if (decision.effect === 'allow') {
-      return { allowed: true };
-    }
-
-    return { allowed: false, reason: decision.reason };
+    return { effect: decision.effect, reason: decision.reason };
   }
 
   // ===========================================================================
@@ -193,17 +220,13 @@ export class BashTool extends BaseTool<typeof schema> {
       const result = await this.runCommand(command, timeoutMs, context);
 
       // 处理输出
-      let output = this.sanitizeOutput(result.output);
-      const isTruncated = output.length > this.maxOutputLength;
-
-      if (isTruncated) {
-        const headLength = 10000;
-        const tailLength = 10000;
-        output =
-          output.slice(0, headLength) +
-          '\n\n[... Output Truncated for Brevity ...]\n\n' +
-          output.slice(-tailLength);
-      }
+      const truncated = this.resultTruncation(this.sanitizeOutput(result.output), {
+        headLength: 10000,
+        tailLength: 10000,
+        marker: '[... Output Truncated for Brevity ...]',
+      });
+      const output = truncated.output;
+      const isTruncated = truncated.truncated;
 
       if (result.exitCode === 0) {
         return this.success(
@@ -238,11 +261,14 @@ export class BashTool extends BaseTool<typeof schema> {
     context: ToolExecutionContext
   ): Promise<ToolResult> {
     try {
-      const { pid, logPath } = this.runInBackground(command);
+      const result = await this.runCommand(command, this.getTimeoutMs(), context, true);
+      const pid = result.backgroundTask?.pid;
+      const logPath = result.backgroundTask?.logPath;
       const pidText = typeof pid === 'number' ? String(pid) : 'unknown';
+      const safeLogPath = logPath ?? 'unknown';
       this.emitToolEvent(context, {
         type: 'info',
-        content: `BACKGROUND_STARTED: pid=${pidText}, log=${logPath}`,
+        content: `BACKGROUND_STARTED: pid=${pidText}, log=${safeLogPath}`,
         data: {
           pid,
           logPath,
@@ -256,7 +282,7 @@ export class BashTool extends BaseTool<typeof schema> {
           logPath,
           run_in_background: true,
         },
-        `BACKGROUND_STARTED: pid=${pidText}, log=${logPath}`
+        `BACKGROUND_STARTED: pid=${pidText}, log=${safeLogPath}`
       );
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -268,92 +294,44 @@ export class BashTool extends BaseTool<typeof schema> {
   }
 
   /**
-   * 执行命令（使用 execa）
+   * 执行命令（通过运行时执行后端）
    */
   private async runCommand(
     command: string,
     timeoutMs: number,
-    context: ToolExecutionContext
+    context: ToolExecutionContext,
+    runInBackground = false
   ): Promise<ExecutionResult> {
-    const subprocess = execaCommand(command, {
-      all: true,
-      reject: false,
-      shell: true,
-      preferLocal: true,
-      windowsHide: true,
-      encoding: 'utf8',
-      timeout: timeoutMs,
+    const callbacks: CommandExecutionCallbacks = {
+      onEvent: (event) => {
+        if (event.type === 'stdout' || event.type === 'stderr') {
+          this.emitToolEvent(context, {
+            type: event.type,
+            content: event.content,
+            data: event.data,
+          });
+        }
+      },
+    };
+    const request = {
+      command,
+      cwd: process.cwd(),
+      timeoutMs,
+      runInBackground,
       env: this.getExecutionEnv(),
-      maxBuffer: 50 * 1024 * 1024, // 50MB
-    });
-
-    let streamed = false;
-    const outputChunks: string[] = [];
-
-    // 收集输出
-    if (subprocess.stdout) {
-      subprocess.stdout.on('data', (chunk: string | Buffer) => {
-        const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-        this.emitToolEvent(context, { type: 'stdout', content: str });
-      });
-    }
-
-    if (subprocess.stderr) {
-      subprocess.stderr.on('data', (chunk: string | Buffer) => {
-        const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-        this.emitToolEvent(context, { type: 'stderr', content: str });
-      });
-    }
-
-    if (subprocess.all) {
-      subprocess.all.on('data', (chunk: string | Buffer) => {
-        const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-        outputChunks.push(str);
-        streamed = true;
-      });
-    }
-
-    const result = await subprocess;
-    const output = outputChunks.length > 0 ? outputChunks.join('') : (result.all ?? '');
+      correlationId: context.toolCallId,
+      profile: 'trusted' as const,
+      target: this.defaultExecutionTarget,
+    };
+    const executor = this.commandRouter.route(request);
+    const result: CommandExecutionResult = await executor.execute(request, callbacks);
 
     return {
-      exitCode: result.exitCode ?? 1,
-      output,
-      streamed,
+      exitCode: result.exitCode,
+      output: result.output,
+      streamed: result.streamed ?? false,
+      backgroundTask: result.backgroundTask,
     };
-  }
-
-  /**
-   * 后台运行命令
-   */
-  private runInBackground(command: string): BackgroundResult {
-    const logPath = path.join(
-      tmpdir(),
-      `agent-bash-bg-${Date.now()}-${randomUUID().slice(0, 8)}.log`
-    );
-    fs.writeFileSync(logPath, '', { flag: 'a' });
-
-    const quotedLogPath =
-      process.platform === 'win32'
-        ? `"${logPath.replace(/"/g, '""')}"`
-        : `'${logPath.replace(/'/g, `'\\''`)}'`;
-    const redirectedCommand = `${command} >> ${quotedLogPath} 2>&1`;
-
-    const shellCommand =
-      process.platform === 'win32'
-        ? ['cmd.exe', '/d', '/s', '/c', redirectedCommand]
-        : ['/bin/bash', '-lc', redirectedCommand];
-
-    const child = spawn(shellCommand[0], shellCommand.slice(1), {
-      cwd: process.cwd(),
-      env: process.env,
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    });
-
-    child.unref();
-    return { pid: child.pid, logPath };
   }
 
   // ===========================================================================

@@ -21,6 +21,7 @@ import type { ToolCall, FinishReason, Usage, ToolResult, AgentLoopState } from '
 
 import type { MemoryManager } from '../storage';
 import type { ToolManager } from '../tool';
+import type { ToolConfirmDecision, ToolConfirmRequest } from '../tool/types';
 import type { Plugin } from '../hook';
 import type { Logger } from '../logger';
 
@@ -75,8 +76,14 @@ export interface AgentConfig {
   generateOptions?: LLMGenerateOptions;
   /** 完成检测器 */
   completionDetector?: CompletionDetector;
+  /** 自定义 completionDetector 返回 done=false 时，是否继续执行默认完成检测器 */
+  useDefaultCompletionDetector?: boolean;
   /** 插件列表 */
   plugins?: Plugin[];
+  /** 工具确认回调（用于等待用户确认） */
+  onToolConfirm?: (
+    request: ToolConfirmRequest
+  ) => ToolConfirmDecision | Promise<ToolConfirmDecision>;
   /** 调试模式 */
   debug?: boolean;
   /** 日志记录器 */
@@ -96,7 +103,7 @@ export interface AgentConfig {
  */
 export interface CompletionResult {
   done: boolean;
-  reason: 'stop' | 'length' | 'tool_calls_complete' | 'user_abort' | 'error' | 'limit_exceeded';
+  reason: 'stop' | 'length' | 'user_abort' | 'limit_exceeded';
   message?: string;
 }
 
