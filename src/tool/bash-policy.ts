@@ -33,6 +33,8 @@ export interface EvaluateBashPolicyResult {
   commands: string[];
 }
 
+const MAX_POLICY_RECURSION_DEPTH = 4;
+
 // =============================================================================
 // 命令列表
 // =============================================================================
@@ -264,7 +266,11 @@ const COMMON_DANGEROUS_PATTERNS: BashDangerousPattern[] = [
     reason: 'Refusing write to protected system path',
   },
   {
-    pattern: /\b(sh|bash|zsh)\s+-[lc]\b/i,
+    pattern: /\b(sh|bash|zsh)\s+-[a-z]*c[a-z]*\b/i,
+    reason: 'Nested shell execution is blocked by policy',
+  },
+  {
+    pattern: /\b(sh|bash|zsh)\s+--command\b/i,
     reason: 'Nested shell execution is blocked by policy',
   },
   {
@@ -274,6 +280,14 @@ const COMMON_DANGEROUS_PATTERNS: BashDangerousPattern[] = [
   {
     pattern: /\bexec\s+/i,
     reason: 'exec command is blocked for security reasons',
+  },
+  {
+    pattern: /\bpython(?:3)?\s+-[a-z]*c[a-z]*\b/i,
+    reason: 'Inline Python execution is blocked for security reasons',
+  },
+  {
+    pattern: /\b(node|nodejs)\s+(?:--eval|-e)\b/i,
+    reason: 'Inline Node.js execution is blocked for security reasons',
   },
 ];
 
@@ -324,6 +338,251 @@ function normalizeCommandToken(token: string): string {
     return lower.slice(0, -ext.length);
   }
   return lower;
+}
+
+function collectParenthesizedSubcommands(command: string, marker: '$(' | '<(' | '>('): string[] {
+  const snippets: string[] = [];
+  const markerLength = marker.length;
+  const len = command.length;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let escaped = false;
+
+  for (let i = 0; i < len; i += 1) {
+    const ch = command[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\' && !inSingleQuote) {
+      escaped = true;
+      continue;
+    }
+    if (ch === "'" && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+      continue;
+    }
+    if (ch === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      continue;
+    }
+    if (inSingleQuote) {
+      continue;
+    }
+
+    if (command.startsWith(marker, i)) {
+      const contentStart = i + markerLength;
+      let depth = 1;
+      let innerSingleQuote = false;
+      let innerDoubleQuote = false;
+      let innerEscaped = false;
+      let closedAt = -1;
+
+      for (let j = contentStart; j < len; j += 1) {
+        const innerCh = command[j];
+        if (innerEscaped) {
+          innerEscaped = false;
+          continue;
+        }
+        if (innerCh === '\\' && !innerSingleQuote) {
+          innerEscaped = true;
+          continue;
+        }
+        if (innerCh === "'" && !innerDoubleQuote) {
+          innerSingleQuote = !innerSingleQuote;
+          continue;
+        }
+        if (innerCh === '"' && !innerSingleQuote) {
+          innerDoubleQuote = !innerDoubleQuote;
+          continue;
+        }
+        if (innerSingleQuote || innerDoubleQuote) {
+          continue;
+        }
+
+        if (
+          j + 1 < len &&
+          (command[j] === '$' || command[j] === '<' || command[j] === '>') &&
+          command[j + 1] === '('
+        ) {
+          depth += 1;
+          j += 1;
+          continue;
+        }
+
+        if (innerCh === ')') {
+          depth -= 1;
+          if (depth === 0) {
+            closedAt = j;
+            break;
+          }
+        }
+      }
+
+      if (closedAt > contentStart) {
+        const snippet = command.slice(contentStart, closedAt).trim();
+        if (snippet) {
+          snippets.push(snippet);
+        }
+        i = closedAt;
+      }
+    }
+  }
+
+  return snippets;
+}
+
+function collectBacktickSubcommands(command: string): string[] {
+  const snippets: string[] = [];
+  const len = command.length;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let escaped = false;
+  let captureStart = -1;
+
+  for (let i = 0; i < len; i += 1) {
+    const ch = command[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\' && !inSingleQuote) {
+      escaped = true;
+      continue;
+    }
+    if (ch === "'" && captureStart === -1 && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+      continue;
+    }
+    if (ch === '"' && captureStart === -1 && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      continue;
+    }
+    if (inSingleQuote) {
+      continue;
+    }
+
+    if (ch === '`') {
+      if (captureStart === -1) {
+        captureStart = i + 1;
+      } else if (i > captureStart) {
+        const snippet = command.slice(captureStart, i).trim();
+        if (snippet) {
+          snippets.push(snippet);
+        }
+        captureStart = -1;
+      } else {
+        captureStart = -1;
+      }
+    }
+  }
+
+  return snippets;
+}
+
+function extractNestedCommands(command: string): string[] {
+  return [
+    ...collectParenthesizedSubcommands(command, '$('),
+    ...collectParenthesizedSubcommands(command, '<('),
+    ...collectParenthesizedSubcommands(command, '>('),
+    ...collectBacktickSubcommands(command),
+  ];
+}
+
+function evaluateBashPolicyInternal(
+  command: string,
+  options: EvaluateBashPolicyOptions = {},
+  depth = 0
+): EvaluateBashPolicyResult {
+  if (depth > MAX_POLICY_RECURSION_DEPTH) {
+    return {
+      effect: 'deny',
+      reason: 'Command nesting depth exceeded policy limit',
+      commands: [],
+    };
+  }
+
+  const normalizedCommand = command.trim();
+  const mode = options.mode ?? 'guarded';
+  const allowlistMissEffect = options.allowlistMissEffect ?? 'deny';
+  const allowlistMissReason =
+    options.allowlistMissReason ??
+    ((commandName: string) =>
+      `Command "${commandName}" is not in allowed command list (set BASH_TOOL_POLICY=permissive to bypass)`);
+  const platform = options.platform ?? process.platform;
+
+  // 空命令允许
+  if (!normalizedCommand) {
+    return { effect: 'allow', commands: [] };
+  }
+
+  // 检查危险模式
+  for (const rule of getBashDangerousPatterns(platform)) {
+    if (rule.pattern.test(normalizedCommand)) {
+      return {
+        effect: 'deny',
+        reason: rule.reason,
+        commands: [],
+      };
+    }
+  }
+
+  const nestedCommands = extractNestedCommands(normalizedCommand);
+  const nestedExtractedCommands: string[] = [];
+  for (const nestedCommand of nestedCommands) {
+    const nestedResult = evaluateBashPolicyInternal(nestedCommand, options, depth + 1);
+    nestedExtractedCommands.push(...nestedResult.commands);
+
+    if (nestedResult.effect !== 'allow') {
+      return {
+        effect: nestedResult.effect,
+        reason:
+          nestedResult.reason ??
+          `Nested command "${nestedCommand}" is blocked by security policy`,
+        commands: nestedExtractedCommands,
+      };
+    }
+  }
+
+  // 提取命令
+  const commands = extractSegmentCommands(normalizedCommand);
+  if (commands.length === 0) {
+    return {
+      effect: 'deny',
+      reason: 'Unable to parse executable command',
+      commands: nestedExtractedCommands,
+    };
+  }
+
+  const allCommands = [...nestedExtractedCommands, ...commands];
+
+  // 检查危险命令
+  const dangerousCommands = getBashDangerousCommands(platform);
+  for (const cmd of allCommands) {
+    if (dangerousCommands.has(cmd)) {
+      return {
+        effect: 'deny',
+        reason: `Command "${cmd}" is blocked by security policy`,
+        commands: allCommands,
+      };
+    }
+  }
+
+  // 在 guarded 模式下检查白名单
+  if (mode === 'guarded' && !options.allowlistBypassed) {
+    const allowedCommands = getBashAllowedCommands(platform);
+    for (const cmd of allCommands) {
+      if (!allowedCommands.has(cmd)) {
+        return {
+          effect: allowlistMissEffect,
+          reason: allowlistMissReason(cmd),
+          commands: allCommands,
+        };
+      }
+    }
+  }
+
+  return { effect: 'allow', commands: allCommands };
 }
 
 /**
@@ -428,66 +687,5 @@ export function evaluateBashPolicy(
   command: string,
   options: EvaluateBashPolicyOptions = {}
 ): EvaluateBashPolicyResult {
-  const normalizedCommand = command.trim();
-  const mode = options.mode ?? 'guarded';
-  const allowlistMissEffect = options.allowlistMissEffect ?? 'deny';
-  const allowlistMissReason =
-    options.allowlistMissReason ??
-    ((commandName: string) =>
-      `Command "${commandName}" is not in allowed command list (set BASH_TOOL_POLICY=permissive to bypass)`);
-  const platform = options.platform ?? process.platform;
-
-  // 空命令允许
-  if (!normalizedCommand) {
-    return { effect: 'allow', commands: [] };
-  }
-
-  // 检查危险模式
-  for (const rule of getBashDangerousPatterns(platform)) {
-    if (rule.pattern.test(normalizedCommand)) {
-      return {
-        effect: 'deny',
-        reason: rule.reason,
-        commands: [],
-      };
-    }
-  }
-
-  // 提取命令
-  const commands = extractSegmentCommands(normalizedCommand);
-  if (commands.length === 0) {
-    return {
-      effect: 'deny',
-      reason: 'Unable to parse executable command',
-      commands: [],
-    };
-  }
-
-  // 检查危险命令
-  const dangerousCommands = getBashDangerousCommands(platform);
-  for (const cmd of commands) {
-    if (dangerousCommands.has(cmd)) {
-      return {
-        effect: 'deny',
-        reason: `Command "${cmd}" is blocked by security policy`,
-        commands,
-      };
-    }
-  }
-
-  // 在 guarded 模式下检查白名单
-  if (mode === 'guarded' && !options.allowlistBypassed) {
-    const allowedCommands = getBashAllowedCommands(platform);
-    for (const cmd of commands) {
-      if (!allowedCommands.has(cmd)) {
-        return {
-          effect: allowlistMissEffect,
-          reason: allowlistMissReason(cmd),
-          commands,
-        };
-      }
-    }
-  }
-
-  return { effect: 'allow', commands };
+  return evaluateBashPolicyInternal(command, options);
 }

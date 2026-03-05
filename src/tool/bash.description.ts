@@ -2,8 +2,9 @@
  * Bash 工具描述
  */
 
-export default `Executes a given bash command with optional timeout. Working directory persists between
-commands; shell state (everything else) does not. The shell environment is initialized
+export default `Executes a given bash command with optional timeout. Each command starts in the current
+process working directory; directory changes inside a command do not persist between calls.
+The shell environment is initialized
 from the user's profile (bash or zsh).
 
 IMPORTANT: This tool is for terminal operations like git, npm, docker, etc.

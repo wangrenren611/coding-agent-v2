@@ -257,6 +257,13 @@ describe('BashTool', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('COMMAND_BLOCKED_BY_POLICY');
     });
+
+    it('should fail for blocked command substitution', async () => {
+      const result = await bashTool.execute({ command: 'echo $(sudo ls)' }, mockContext);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('COMMAND_BLOCKED_BY_POLICY');
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -412,6 +419,12 @@ describe('bash-policy', () => {
         expect(result.effect).toBe('allow');
       });
 
+      it('should allow safe command substitution', () => {
+        const result = evaluateBashPolicy('echo $(pwd)');
+        expect(result.effect).toBe('allow');
+        expect(result.commands).toContain('pwd');
+      });
+
       it('should allow empty command', () => {
         const result = evaluateBashPolicy('');
         expect(result.effect).toBe('allow');
@@ -512,6 +525,24 @@ describe('bash-policy', () => {
         expect(result.reason).toContain('Nested shell');
       });
 
+      it('should deny nested shell with -lc', () => {
+        const result = evaluateBashPolicy('bash -lc "echo hello"');
+        expect(result.effect).toBe('deny');
+        expect(result.reason).toContain('Nested shell');
+      });
+
+      it('should deny dangerous command in command substitution', () => {
+        const result = evaluateBashPolicy('echo $(sudo ls)');
+        expect(result.effect).toBe('deny');
+        expect(result.reason).toContain('sudo');
+      });
+
+      it('should deny dangerous command in backtick substitution', () => {
+        const result = evaluateBashPolicy('echo `reboot`');
+        expect(result.effect).toBe('deny');
+        expect(result.reason).toContain('reboot');
+      });
+
       it('should deny eval command', () => {
         const result = evaluateBashPolicy('eval "echo hello"');
         expect(result.effect).toBe('deny');
@@ -520,6 +551,18 @@ describe('bash-policy', () => {
       it('should deny exec command', () => {
         const result = evaluateBashPolicy('exec ls');
         expect(result.effect).toBe('deny');
+      });
+
+      it('should deny inline Python execution', () => {
+        const result = evaluateBashPolicy('python -c "print(1)"');
+        expect(result.effect).toBe('deny');
+        expect(result.reason).toContain('Inline Python');
+      });
+
+      it('should deny inline Node.js execution', () => {
+        const result = evaluateBashPolicy('node -e "console.log(1)"');
+        expect(result.effect).toBe('deny');
+        expect(result.reason).toContain('Inline Node.js');
       });
     });
 
