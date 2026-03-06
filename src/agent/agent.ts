@@ -1195,16 +1195,25 @@ export class Agent {
    */
   private async sleep(ms: number, signal?: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(resolve, ms);
+      const onAbort = () => {
+        cleanup();
+        clearTimeout(timer);
+        reject(new AgentAbortedError());
+      };
+
+      const cleanup = () => {
+        signal?.removeEventListener('abort', onAbort);
+      };
+
+      const timer = setTimeout(() => {
+        cleanup();
+        resolve();
+      }, ms);
 
       if (signal) {
-        const onAbort = () => {
-          clearTimeout(timer);
-          reject(new AgentAbortedError());
-        };
-
         // 检查是否已经中止
         if (signal.aborted) {
+          cleanup();
           clearTimeout(timer);
           reject(new AgentAbortedError());
         } else {

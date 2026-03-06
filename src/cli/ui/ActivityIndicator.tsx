@@ -34,23 +34,21 @@ export function ActivityIndicator(props: {
   if (status === 'failed') {
     return (
       <Box marginTop={1}>
-        <Text color="red">
-          failed: {error ?? 'Unknown error'} | tokens~{totalTokens}
-        </Text>
+        <Text color="red">{`failed | ${error ?? 'unknown error'} | tokens~${totalTokens}`}</Text>
       </Box>
     );
   }
 
-  if (running) {
-    return (
-      <Box marginTop={1}>
-        <Text color="cyan">
-          {spinner} loading... ({elapsedSeconds}s, tokens~{totalTokens}, tools={processingToolCalls}
-          )
-        </Text>
-      </Box>
-    );
+  if (!running) {
+    return null;
   }
 
-  return null;
+  return (
+    <Box marginTop={1}>
+      <Text color="gray">
+        {spinner} processing | {elapsedSeconds}s | tokens~{totalTokens} | tools=
+        {processingToolCalls}
+      </Text>
+    </Box>
+  );
 }

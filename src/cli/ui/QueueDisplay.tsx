@@ -1,4 +1,4 @@
-﻿import { Box, Text } from 'ink';
+import { Box, Text } from 'ink';
 
 export function QueueDisplay(props: { queuedMessages: string[] }) {
   const { queuedMessages } = props;
@@ -7,11 +7,13 @@ export function QueueDisplay(props: { queuedMessages: string[] }) {
   }
 
   return (
-    <Box marginTop={1} flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1}>
-      <Text color="yellow">Queued Messages ({queuedMessages.length})</Text>
-      {queuedMessages.slice(-3).map((item, idx) => (
-        <Text key={`${idx}-${item.slice(0, 8)}`} color="gray">
-          {idx + 1}. {item.length > 80 ? `${item.slice(0, 77)}...` : item}
+    <Box marginTop={1} flexDirection="column">
+      <Text color="yellow">queue</Text>
+      {queuedMessages.slice(-3).map((item, index) => (
+        <Text key={`${index}-${item.slice(0, 8)}`} color="gray">
+          {`${queuedMessages.length - Math.min(queuedMessages.length, 3) + index + 1}. ${
+            item.length > 88 ? `${item.slice(0, 85)}...` : item
+          }`}
         </Text>
       ))}
     </Box>

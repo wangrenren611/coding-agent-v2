@@ -14,6 +14,7 @@ export const SLASH_COMMANDS: SlashCommandMeta[] = [
   { command: 'session', description: 'show or switch session' },
   { command: 'sessions', description: 'list recent sessions' },
   { command: 'new', description: 'new session' },
+  { command: 'fork', description: 'fork current session from a previous user message' },
   { command: 'resume', description: 'resume session by id' },
   { command: 'history', description: 'print recent history' },
   { command: 'log', description: 'print recent history' },

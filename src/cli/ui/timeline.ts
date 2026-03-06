@@ -69,6 +69,25 @@ export function splitTimelineByPendingTools(items: TimelineItem[]): {
   };
 }
 
+export function splitTimelineForRendering(
+  items: TimelineItem[],
+  running: boolean
+): {
+  completedItems: TimelineItem[];
+  pendingItems: TimelineItem[];
+} {
+  const split = splitTimelineByPendingTools(items);
+
+  if (!running || split.pendingItems.length > 0 || split.completedItems.length === 0) {
+    return split;
+  }
+
+  return {
+    completedItems: split.completedItems.slice(0, -1),
+    pendingItems: split.completedItems.slice(-1),
+  };
+}
+
 export function clipTimeline(items: TimelineItem[], maxItems: number): TimelineItem[] {
   if (maxItems <= 0 || items.length <= maxItems) {
     return items;

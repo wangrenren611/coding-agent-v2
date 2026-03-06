@@ -1,8 +1,8 @@
-import { Box, Text } from 'ink';
+import { Box, Static, Text } from 'ink';
 import { useMemo } from 'react';
 import { DiffViewer, looksLikeDiff } from './DiffViewer';
 import { hasTodoList, TodoList } from './Todo';
-import { clipTimeline, mergeTimeline, splitTimelineByPendingTools } from './timeline';
+import { clipTimeline, mergeTimeline, splitTimelineForRendering } from './timeline';
 import type {
   ActivityEvent,
   ActivityLevel,
@@ -252,16 +252,27 @@ export function Messages(props: {
   activities: ActivityEvent[];
   panelMode: PanelMode;
   transcriptMode: boolean;
+  running?: boolean;
   maxTimelineItems?: number;
 }) {
-  const { messages, activities, panelMode, transcriptMode, maxTimelineItems = 160 } = props;
+  const {
+    messages,
+    activities,
+    panelMode,
+    transcriptMode,
+    running = false,
+    maxTimelineItems = 160,
+  } = props;
 
   const timeline = useMemo(
     () => clipTimeline(mergeTimeline(messages, activities), maxTimelineItems),
     [activities, maxTimelineItems, messages]
   );
 
-  const splitTimeline = useMemo(() => splitTimelineByPendingTools(timeline), [timeline]);
+  const splitTimeline = useMemo(
+    () => splitTimelineForRendering(timeline, running),
+    [running, timeline]
+  );
   const visibleMessages = useMemo(
     () => messages.slice(-(transcriptMode ? maxTimelineItems : 72)),
     [maxTimelineItems, messages, transcriptMode]
@@ -296,10 +307,14 @@ export function Messages(props: {
     );
   }
 
+  const staticKey = `${splitTimeline.completedItems[0]?.seq ?? 'empty'}-${splitTimeline.completedItems.length}`;
+
   return (
     <Box marginTop={1} flexDirection="column">
       {timeline.length === 0 ? <Text color="gray">(no activity)</Text> : null}
-      <TimelineView items={splitTimeline.completedItems} />
+      <Static key={staticKey} items={splitTimeline.completedItems}>
+        {(item) => <TimelineView items={[item as TimelineItem]} />}
+      </Static>
       <TimelineView items={splitTimeline.pendingItems} />
     </Box>
   );

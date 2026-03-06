@@ -1,4 +1,4 @@
-﻿import { Box, Text } from 'ink';
+import { Box, Text } from 'ink';
 import type { InputMode } from './types';
 import { UI_COLORS } from './constants';
 
@@ -10,17 +10,18 @@ export function ModeIndicator(props: { mode: InputMode }) {
 
   const label =
     mode === 'bash'
-      ? 'bash mode'
+      ? 'bash'
       : mode === 'memory'
-        ? 'memory mode'
+        ? 'memory'
         : mode === 'plan'
-          ? 'plan mode'
-          : 'brainstorm mode';
+          ? 'plan'
+          : 'brainstorm';
 
   return (
     <Box marginTop={1}>
       <Text color={UI_COLORS.MODE_TEXT}>{label}</Text>
-      <Text color={UI_COLORS.MODE_HINT}> (Shift+Tab to toggle)</Text>
+      <Text color={UI_COLORS.MODE_HINT}> mode</Text>
+      <Text color={UI_COLORS.MODE_HINT}> | Shift+Tab switch</Text>
     </Box>
   );
 }

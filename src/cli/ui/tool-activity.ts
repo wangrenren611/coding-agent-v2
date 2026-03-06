@@ -1,4 +1,5 @@
-﻿import type { ToolStreamEvent } from '../../tool';
+﻿import path from 'node:path';
+import type { ToolStreamEvent } from '../../tool';
 
 function toRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
@@ -89,6 +90,29 @@ function formatFileCall(args: Record<string, unknown>): string {
   return `${name}(${truncate(safeJson(args), 260)})`;
 }
 
+function formatTaskCall(args: Record<string, unknown>): string {
+  const description =
+    typeof args.description === 'string'
+      ? normalizeText(args.description).replace(/\s+/g, ' ').trim()
+      : '';
+  if (description) {
+    return `Task(${truncate(description, 180)})`;
+  }
+
+  const taskId = typeof args.task_id === 'string' ? args.task_id.trim() : '';
+  if (taskId) {
+    return `Task(task_id=${truncate(taskId, 120)})`;
+  }
+
+  const action =
+    typeof args.action === 'string' && args.action.trim().length > 0 ? args.action.trim() : '';
+  if (action) {
+    return `Task(${truncate(action, 120)})`;
+  }
+
+  return 'Task';
+}
+
 export function formatToolCallLine(event: ToolStreamEvent): string {
   const args = parseStartArgs(event);
 
@@ -102,6 +126,10 @@ export function formatToolCallLine(event: ToolStreamEvent): string {
 
   if (event.toolName === 'file') {
     return formatFileCall(args);
+  }
+
+  if (event.toolName === 'task') {
+    return formatTaskCall(args);
   }
 
   const title = toTitle(event.toolName);
@@ -230,6 +258,84 @@ function extractResultText(data: unknown): string {
   return '';
 }
 
+function formatFileEntryName(entry: Record<string, unknown>): string {
+  const entryPath = typeof entry.path === 'string' ? entry.path : '';
+  const name = entryPath ? path.basename(entryPath) : 'unknown';
+  const isDirectory = entry.isDirectory === true;
+  return isDirectory ? `${name}/` : name;
+}
+
+function formatFileToolResult(data: unknown): string {
+  const result = getResultRecord(data);
+  const payload = toRecord(result?.data);
+  if (!payload) {
+    return '';
+  }
+
+  if (Array.isArray(payload.entries)) {
+    const targetPath = typeof payload.path === 'string' ? payload.path : '.';
+    const entries = payload.entries.filter((item) => toRecord(item)) as Array<
+      Record<string, unknown>
+    >;
+    const visible = entries.slice(0, 8).map((entry) => `- ${formatFileEntryName(entry)}`);
+    const remaining = entries.length - visible.length;
+    const header = `${targetPath} (${entries.length} entries)`;
+    return [header, ...visible, remaining > 0 ? `... +${remaining} more` : '']
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  if (Array.isArray(payload.matches)) {
+    const targetPath = typeof payload.path === 'string' ? payload.path : '.';
+    const matches = payload.matches.filter((item) => typeof item === 'string') as string[];
+    const visible = matches.slice(0, 8).map((item) => `- ${item}`);
+    const remaining = matches.length - visible.length;
+    const header = `${targetPath} (${matches.length} matches)`;
+    return [header, ...visible, remaining > 0 ? `... +${remaining} more` : '']
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  if (payload.stats && toRecord(payload.stats)) {
+    const stats = toRecord(payload.stats) ?? {};
+    const targetPath = typeof payload.path === 'string' ? payload.path : '.';
+    const size = typeof stats.size === 'number' ? `${stats.size} bytes` : 'unknown size';
+    const kind = stats.isDirectory === true ? 'directory' : stats.isFile === true ? 'file' : 'path';
+    return `${targetPath}\n- ${kind}\n- ${size}`;
+  }
+
+  return '';
+}
+
+function formatTaskToolResult(data: unknown): string {
+  const result = getResultRecord(data);
+  const payload = toRecord(result?.data);
+  if (!payload) {
+    return '';
+  }
+
+  const taskId = typeof payload.task_id === 'string' ? payload.task_id : '';
+  const status = typeof payload.status === 'string' ? payload.status : '';
+  const output = typeof payload.output === 'string' ? payload.output.trim() : '';
+  const error = typeof payload.error === 'string' ? payload.error.trim() : '';
+
+  const lines: string[] = [];
+  if (taskId) {
+    lines.push(`task_id=${taskId}`);
+  }
+  if (status) {
+    lines.push(`status=${status}`);
+  }
+  if (output) {
+    lines.push(`output=${truncate(normalizeText(output).replace(/\s+/g, ' '), 220)}`);
+  }
+  if (error) {
+    lines.push(`error=${truncate(normalizeText(error).replace(/\s+/g, ' '), 220)}`);
+  }
+
+  return lines.join('\n');
+}
+
 function shouldSuppressEmptyBashSuccess(event: ToolStreamEvent): boolean {
   if (event.toolName !== 'bash') {
     return false;
@@ -297,6 +403,30 @@ export function formatToolEndLines(
 
   if (shouldSuppressEmptyBashSuccess(event)) {
     return { lines: resultLines, hiddenLineCount: 0 };
+  }
+
+  if (event.toolName === 'file') {
+    const fileResultText = formatFileToolResult(event.data);
+    if (fileResultText) {
+      const formatted = formatToolOutputLines(fileResultText, transcriptMode, 9);
+      resultLines.push(...formatted.lines);
+      return {
+        lines: resultLines,
+        hiddenLineCount: formatted.hiddenLineCount,
+      };
+    }
+  }
+
+  if (event.toolName === 'task') {
+    const taskResultText = formatTaskToolResult(event.data);
+    if (taskResultText) {
+      const formatted = formatToolOutputLines(taskResultText, transcriptMode, 6);
+      resultLines.push(...formatted.lines);
+      return {
+        lines: resultLines,
+        hiddenLineCount: formatted.hiddenLineCount,
+      };
+    }
   }
 
   const resultText = extractResultText(event.data);

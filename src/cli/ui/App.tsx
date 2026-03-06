@@ -1,7 +1,8 @@
 import path from 'node:path';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, useApp, useInput } from 'ink';
+import { useCallback, useEffect } from 'react';
+import { Box, useApp } from 'ink';
 import type { ToolConfirmDecision, ToolConfirmRequest } from '../../tool';
+import type { HistoryMessage } from '../../storage';
 import { getSkillLoader, initializeSkillLoader } from '../../tool/skill';
 import { saveCliConfig } from '../config-store';
 import { createInkRenderer } from '../output';
@@ -16,11 +17,11 @@ import { QueueDisplay } from './QueueDisplay';
 import { TranscriptModeIndicator } from './TranscriptModeIndicator';
 import { Debug } from './Debug';
 import { ApprovalModal } from './ApprovalModal';
-import { BackgroundPrompt } from './BackgroundPrompt';
+import { MemoryModal } from './MemoryModal';
 import { ExitHint } from './ExitHint';
-import { buildPathIndex, searchPathIndex } from './path-search';
+import { ForkModal } from './ForkModal';
+import { buildPathIndex } from './path-search';
 import { mergeAssistantText, shouldStartNewAssistantMessage } from './assistant-text';
-import { matchSlashCommands } from './slash-commands';
 import {
   extractToolErrorLine,
   formatGenericToolEventLine,
@@ -30,26 +31,10 @@ import {
   formatToolOutputTailLines,
   isSubagentBubbleEvent,
 } from './tool-activity';
-import type {
-  ActivityEvent,
-  ActivityLevel,
-  AppStatus,
-  ChatLine,
-  InputMode,
-  PanelMode,
-  PendingConfirm,
-  SuggestionItem,
-} from './types';
-
-function createId(): string {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-let timelineSequence = 0;
-function nextTimelineSeq(): number {
-  timelineSequence += 1;
-  return timelineSequence;
-}
+import type { ActivityLevel } from './types';
+import { createId, nextTimelineSeq, nowTime, useCliStore } from './store';
+import { useSessionViewModel } from './useSessionViewModel';
+import { useInputHandlers } from './useInputHandlers';
 
 function parseSlash(raw: string): { command: string; args: string[] } {
   const body = raw.trim().slice(1);
@@ -71,14 +56,6 @@ function formatContent(value: unknown): string {
   }
 }
 
-function nowTime(): string {
-  return new Date().toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-}
-
 function resolvePath(base: string, value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -91,82 +68,6 @@ function approxTokens(text: string): number {
   return Math.max(1, Math.ceil(text.length / 4));
 }
 
-function nextMode(current: InputMode): InputMode {
-  if (current === 'prompt') return 'plan';
-  if (current === 'plan') return 'brainstorm';
-  return 'prompt';
-}
-
-type FileMatch = {
-  start: number;
-  end: number;
-  query: string;
-  trigger: 'at' | 'tab';
-};
-
-function findEndByWord(value: string, cursor: number): number {
-  let end = cursor;
-  while (end < value.length && !/\s/.test(value[end] ?? '')) {
-    end += 1;
-  }
-  return end;
-}
-
-function getAtFileMatch(value: string, cursor: number): FileMatch | null {
-  const safeCursor = Math.max(0, Math.min(cursor, value.length));
-  const before = value.slice(0, safeCursor);
-  const atPos = before.lastIndexOf('@');
-  if (atPos < 0) {
-    return null;
-  }
-
-  if (atPos > 0 && !/\s/.test(before[atPos - 1] ?? '')) {
-    return null;
-  }
-
-  const afterAt = before.slice(atPos + 1);
-  if (afterAt.includes('\n')) {
-    return null;
-  }
-
-  const query = afterAt.replace(/^"/, '').replace(/"$/, '').replace(/\\ /g, ' ');
-  return {
-    start: atPos,
-    end: findEndByWord(value, safeCursor),
-    query,
-    trigger: 'at',
-  };
-}
-
-function getTabFileMatch(
-  value: string,
-  cursor: number,
-  forceTabTrigger: boolean
-): FileMatch | null {
-  if (!forceTabTrigger) {
-    return null;
-  }
-
-  const safeCursor = Math.max(0, Math.min(cursor, value.length));
-  const before = value.slice(0, safeCursor);
-  const wordMatch = before.match(/([^\s]+)$/);
-  if (!wordMatch || !wordMatch[1]) {
-    return null;
-  }
-
-  if (/@[^\s]*$/.test(before)) {
-    return null;
-  }
-
-  const query = wordMatch[1];
-  return {
-    start: safeCursor - query.length,
-    end: findEndByWord(value, safeCursor),
-    query,
-    trigger: 'tab',
-  };
-}
-
 export function App(props: {
   runtime: CliRuntime;
   initialPrompt?: string;
@@ -176,158 +77,80 @@ export function App(props: {
 }) {
   const { exit } = useApp();
   const { runtime, initialPrompt, baseCwd, config } = props;
-
-  const [messages, setMessages] = useState<ChatLine[]>(() => [
-    {
-      id: createId(),
-      seq: nextTimelineSeq(),
-      role: 'system',
-      text: `cwd=${runtime.state.cwd} | model=${runtime.state.modelId} | session=${runtime.state.sessionId}`,
-    },
-    {
-      id: createId(),
-      seq: nextTimelineSeq(),
-      role: 'system',
-      text: 'UI ready. Enter send | Shift+Tab mode | Ctrl+R reverse search | Ctrl+O transcript',
-    },
-  ]);
-  const [activities, setActivities] = useState<ActivityEvent[]>([]);
-  const [input, setInput] = useState('');
-  const [inputCursor, setInputCursor] = useState(0);
-  const [running, setRunning] = useState(false);
-  const [status, setStatus] = useState<AppStatus>('idle');
-  const [processingStartTime, setProcessingStartTime] = useState<number | null>(null);
-  const [processingToolCalls, setProcessingToolCalls] = useState(0);
-  const [totalTokens, setTotalTokens] = useState(0);
-  const [errorText, setErrorText] = useState<string | null>(null);
-  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
-  const [confirmDecision, setConfirmDecision] = useState<ToolConfirmDecision>('approve');
-  const [history, setHistory] = useState<string[]>([]);
-  const [historyCursor, setHistoryCursor] = useState<number | null>(null);
-  const [panelMode, setPanelMode] = useState<PanelMode>('split');
-  const [tick, setTick] = useState(0);
-  const [mode, setMode] = useState<InputMode>('prompt');
-  const [queuedMessages, setQueuedMessages] = useState<string[]>([]);
-  const [transcriptMode, setTranscriptMode] = useState(false);
-  const [debugMode, setDebugMode] = useState(false);
-  const [debugLogs, setDebugLogs] = useState<string[]>([]);
-  const [forceTabTrigger, setForceTabTrigger] = useState(false);
-  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
-  const [pathIndex, setPathIndex] = useState<string[]>([]);
-  const [reverseSearchActive, setReverseSearchActive] = useState(false);
-  const [reverseSearchQuery, setReverseSearchQuery] = useState('');
-  const [reverseSearchIndex, setReverseSearchIndex] = useState(0);
-  const [exitRequested, setExitRequested] = useState(false);
-  const booted = useRef(false);
-  const assistantLineByMessageIdRef = useRef<Map<string, string>>(new Map());
-
-  const confirmQueueRef = useRef<
-    Array<{ request: ToolConfirmRequest; resolve: (d: ToolConfirmDecision) => void }>
-  >([]);
-  const pendingConfirmRef = useRef<{
-    request: ToolConfirmRequest;
-    resolve: (d: ToolConfirmDecision) => void;
-  } | null>(null);
-
-  const addDebug = useCallback((line: string) => {
-    const stamped = `[${nowTime()}] ${line}`;
-    setDebugLogs((prev) => [...prev, stamped].slice(-40));
-  }, []);
-
-  const addMessage = useCallback((role: ChatLine['role'], text: string) => {
-    const seq = nextTimelineSeq();
-    setMessages((prev) => [...prev, { id: createId(), seq, role, text }]);
-  }, []);
-
-  const addActivity = useCallback(
-    (
-      level: ActivityLevel,
-      text: string,
-      extra?: Partial<Pick<ActivityEvent, 'kind' | 'phase' | 'indent' | 'toolCallId'>>
-    ) => {
-      const normalized = text.trim();
-      if (!normalized) {
-        return;
-      }
-      const seq = nextTimelineSeq();
-      setActivities((prev) => {
-        const next = [
-          ...prev,
-          {
-            id: createId(),
-            seq,
-            level,
-            text: normalized,
-            time: nowTime(),
-            kind: extra?.kind,
-            phase: extra?.phase,
-            indent: extra?.indent,
-            toolCallId: extra?.toolCallId,
-          },
-        ];
-        return next.slice(-120);
-      });
-    },
-    []
-  );
-
-  const logSystem = useCallback(
-    (text: string) => {
-      for (const line of text.split('\n')) {
-        addMessage('system', line);
-      }
-    },
-    [addMessage]
-  );
-
-  const updateMessage = useCallback((id: string, updater: (current: string) => string) => {
-    setMessages((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              text: updater(item.text),
-            }
-          : item
-      )
-    );
-  }, []);
-
-  const setInputWithHistory = useCallback(
-    (direction: 'up' | 'down') => {
-      if (history.length === 0) {
-        return;
-      }
-
-      if (direction === 'up') {
-        const nextIndex =
-          historyCursor === null ? history.length - 1 : Math.max(historyCursor - 1, 0);
-        const value = history[nextIndex] ?? '';
-        setHistoryCursor(nextIndex);
-        setInput(value);
-        setInputCursor(value.length);
-        return;
-      }
-
-      if (historyCursor === null) {
-        return;
-      }
-
-      const nextIndex = historyCursor + 1;
-      if (nextIndex >= history.length) {
-        setHistoryCursor(null);
-        setInput('');
-        setInputCursor(0);
-        return;
-      }
-
-      const value = history[nextIndex] ?? '';
-      setHistoryCursor(nextIndex);
-      setInput(value);
-      setInputCursor(value.length);
-    },
-    [history, historyCursor]
-  );
+  const {
+    messages,
+    setMessages,
+    activities,
+    setActivities,
+    input,
+    setInput,
+    inputCursor,
+    setInputCursor,
+    running,
+    setRunning,
+    status,
+    setStatus,
+    processingStartTime,
+    setProcessingStartTime,
+    processingToolCalls,
+    setProcessingToolCalls,
+    totalTokens,
+    setTotalTokens,
+    errorText,
+    setErrorText,
+    pendingConfirm,
+    setPendingConfirm,
+    confirmDecision,
+    setConfirmDecision,
+    pendingMemory,
+    setPendingMemory,
+    history,
+    setHistory,
+    historyCursor,
+    setHistoryCursor,
+    panelMode,
+    setPanelMode,
+    tick,
+    setTick,
+    mode,
+    setMode,
+    queuedMessages,
+    setQueuedMessages,
+    transcriptMode,
+    setTranscriptMode,
+    debugMode,
+    setDebugMode,
+    debugLogs,
+    forceTabTrigger,
+    setForceTabTrigger,
+    selectedSuggestionIndex,
+    setSelectedSuggestionIndex,
+    pathIndex,
+    setPathIndex,
+    reverseSearchActive,
+    setReverseSearchActive,
+    reverseSearchQuery,
+    setReverseSearchQuery,
+    reverseSearchIndex,
+    setReverseSearchIndex,
+    exitRequested,
+    setExitRequested,
+    forkModalVisible,
+    setForkModalVisible,
+    booted,
+    assistantLineByMessageIdRef,
+    confirmQueueRef,
+    pendingConfirmRef,
+    addDebug,
+    addMessage,
+    addActivity,
+    logSystem,
+    updateMessage,
+  } = useCliStore({
+    cwd: runtime.state.cwd,
+    modelId: runtime.state.modelId,
+    sessionId: runtime.state.sessionId,
+  });
 
   const rotatePanelMode = useCallback(() => {
     setPanelMode((prev) => {
@@ -362,6 +185,49 @@ export function App(props: {
       pumpConfirmQueue();
     },
     [pumpConfirmQueue]
+  );
+
+  const resolvePendingMemory = useCallback(
+    async (destination: 'project' | 'global' | null) => {
+      const current = pendingMemory;
+      setPendingMemory(null);
+      if (!current || !destination) {
+        return;
+      }
+
+      try {
+        addMessage('user', `# ${current.rule}`);
+        const result = await runtime.saveMemoryRule(current.rule, destination);
+        if (result.duplicate) {
+          addActivity('warn', `memory already exists in ${result.filePath}`);
+          return;
+        }
+        addActivity('info', `saved memory to ${result.filePath}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus('failed');
+        setErrorText(message);
+        addActivity('error', `memory save failed: ${message}`);
+      }
+    },
+    [addActivity, addMessage, pendingMemory, runtime]
+  );
+
+  const handleForkConfirm = useCallback(
+    async (messageId: string) => {
+      try {
+        const nextSessionId = await runtime.forkSession(runtime.state.sessionId, messageId);
+        setForkModalVisible(false);
+        addActivity('info', `forked session ${nextSessionId}`);
+        logSystem(`forked session=${nextSessionId}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        addActivity('error', `fork failed: ${message}`);
+        setErrorText(message);
+        setStatus('failed');
+      }
+    },
+    [addActivity, logSystem, runtime, setErrorText, setForkModalVisible, setStatus]
   );
 
   const enqueueConfirmRequest = useCallback(
@@ -587,7 +453,7 @@ export function App(props: {
 
       if (!command || command === 'help') {
         logSystem(
-          'Commands: /help /exit /quit /model /models /tool /tools /session /sessions /new /resume /history /log /approval /cwd /workspace /clear /stats /format /system /config /skill /panel /mode /debug /transcript'
+          'Commands: /help /exit /quit /model /models /tool /tools /session /sessions /new /fork /resume /history /log /approval /cwd /workspace /clear /stats /format /system /config /skill /panel /mode /debug /transcript'
         );
         return;
       }
@@ -668,6 +534,12 @@ export function App(props: {
         const sessionId = runtime.newSession(args[0]);
         addActivity('info', `new session ${sessionId}`);
         logSystem(`new session=${sessionId}`);
+        return;
+      }
+
+      if (command === 'fork') {
+        setForkModalVisible(true);
+        logSystem('fork modal opened');
         return;
       }
 
@@ -1139,106 +1011,27 @@ export function App(props: {
     },
     [addActivity, addMessage, enqueueConfirmRequest, runtime, transcriptMode, updateMessage]
   );
-  const effectiveMode = useMemo<InputMode>(() => {
-    if (input.startsWith('!')) return 'bash';
-    if (input.startsWith('#')) return 'memory';
-    return mode;
-  }, [input, mode]);
+  const {
+    effectiveMode,
+    activeFileMatch,
+    suggestions,
+    reverseSearchMatches,
+    reverseSearchCurrentMatch,
+  } = useSessionViewModel({
+    input,
+    inputCursor,
+    mode,
+    reverseSearchActive,
+    reverseSearchQuery,
+    reverseSearchIndex,
+    history,
+    forceTabTrigger,
+    pathIndex,
+    setSelectedSuggestionIndex,
+    setReverseSearchIndex,
+  });
 
-  const slashMatches = useMemo(() => matchSlashCommands(input), [input]);
-  const atMatch = useMemo(() => getAtFileMatch(input, inputCursor), [input, inputCursor]);
-  const tabMatch = useMemo(
-    () => getTabFileMatch(input, inputCursor, forceTabTrigger),
-    [input, inputCursor, forceTabTrigger]
-  );
-  const activeFileMatch = atMatch ?? tabMatch;
-
-  const fileSuggestions = useMemo(() => {
-    if (!activeFileMatch) {
-      return [] as SuggestionItem[];
-    }
-    return searchPathIndex(pathIndex, activeFileMatch.query, 30).map((item) => ({
-      type: 'file' as const,
-      value: item,
-      title: item,
-      description: 'path',
-    }));
-  }, [activeFileMatch, pathIndex]);
-
-  const slashSuggestions = useMemo(
-    () =>
-      slashMatches.map((item) => ({
-        type: 'slash' as const,
-        value: item.command,
-        title: `/${item.command}`,
-        description: item.description,
-      })),
-    [slashMatches]
-  );
-
-  const suggestions = useMemo(() => {
-    if (reverseSearchActive) {
-      return [] as SuggestionItem[];
-    }
-    if (slashSuggestions.length > 0) {
-      return slashSuggestions;
-    }
-    return fileSuggestions;
-  }, [fileSuggestions, reverseSearchActive, slashSuggestions]);
-
-  useEffect(() => {
-    setSelectedSuggestionIndex(0);
-  }, [suggestions]);
-
-  const reverseSearchMatches = useMemo(() => {
-    const base = [...history].reverse();
-    const q = reverseSearchQuery.trim().toLowerCase();
-    if (!q) {
-      return base;
-    }
-    return base.filter((item) => item.toLowerCase().includes(q));
-  }, [history, reverseSearchQuery]);
-
-  useEffect(() => {
-    if (reverseSearchIndex >= reverseSearchMatches.length) {
-      setReverseSearchIndex(0);
-    }
-  }, [reverseSearchIndex, reverseSearchMatches.length]);
-
-  const reverseSearchCurrentMatch = reverseSearchMatches[reverseSearchIndex] ?? '';
-
-  const applySuggestion = useCallback(() => {
-    const target = suggestions[selectedSuggestionIndex];
-    if (!target) {
-      return;
-    }
-
-    if (target.type === 'slash') {
-      const next = `/${target.value} `;
-      setInput(next);
-      setInputCursor(next.length);
-      return;
-    }
-
-    const file = target.value.includes(' ') ? `"${target.value}"` : target.value;
-
-    if (activeFileMatch) {
-      const before = input.slice(0, activeFileMatch.start);
-      const after = input.slice(activeFileMatch.end);
-      const insert = activeFileMatch.trigger === 'at' ? `@${file}` : file;
-      const spacer = after.startsWith(' ') || after.length === 0 ? '' : ' ';
-      const next = `${before}${insert}${spacer}${after}`;
-      const nextCursor = before.length + insert.length;
-      setInput(next);
-      setInputCursor(nextCursor);
-    } else {
-      const next = `${input}${file}`;
-      setInput(next);
-      setInputCursor(next.length);
-    }
-
-    setForceTabTrigger(false);
-  }, [activeFileMatch, input, selectedSuggestionIndex, suggestions]);
+  const currentSessionHistory = runtime.getSessionHistory(runtime.state.sessionId);
 
   const submitInput = useCallback(
     async (value: string) => {
@@ -1248,7 +1041,7 @@ export function App(props: {
         return;
       }
 
-      if (running || pendingConfirmRef.current) {
+      if (running || pendingConfirmRef.current || pendingMemory !== null) {
         setQueuedMessages((prev) => [...prev, trimmed].slice(-20));
         addActivity('warn', `queued message (${trimmed.slice(0, 30)})`);
         return;
@@ -1265,8 +1058,14 @@ export function App(props: {
       }
 
       if (effectiveMode === 'memory') {
-        logSystem(`memory saved (runtime not implemented): ${finalInput.replace(/^#/, '').trim()}`);
-        addActivity('info', 'memory note saved locally');
+        const rule = finalInput.replace(/^#/, '').trim();
+        if (!rule) {
+          return;
+        }
+        setPendingMemory({
+          rule,
+          selection: 'project',
+        });
         return;
       }
 
@@ -1285,11 +1084,17 @@ export function App(props: {
 
       await runPrompt(finalInput);
     },
-    [addActivity, effectiveMode, executeSlash, history, logSystem, runPrompt, running]
+    [addActivity, effectiveMode, executeSlash, history, pendingMemory, runPrompt, running]
   );
 
   useEffect(() => {
-    if (running || pendingConfirm !== null || queuedMessages.length === 0) {
+    if (
+      running ||
+      pendingConfirm !== null ||
+      pendingMemory !== null ||
+      forkModalVisible ||
+      queuedMessages.length === 0
+    ) {
       return;
     }
 
@@ -1300,7 +1105,7 @@ export function App(props: {
 
     setQueuedMessages(rest);
     void submitInput(next);
-  }, [pendingConfirm, queuedMessages, running, submitInput]);
+  }, [forkModalVisible, pendingConfirm, pendingMemory, queuedMessages, running, submitInput]);
 
   useEffect(() => {
     let canceled = false;
@@ -1361,280 +1166,50 @@ export function App(props: {
     return () => clearTimeout(timer);
   }, [exit, exitRequested]);
 
-  useInput((value, key) => {
-    if (pendingConfirmRef.current) {
-      if (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow) {
-        setConfirmDecision((prev) => (prev === 'approve' ? 'deny' : 'approve'));
-        return;
-      }
-      if (value.toLowerCase() === 'y') {
-        setConfirmDecision('approve');
-        resolvePendingConfirm('approve');
-        return;
-      }
-      if (value.toLowerCase() === 'n') {
-        setConfirmDecision('deny');
-        resolvePendingConfirm('deny');
-        return;
-      }
-      if (key.escape) {
-        setConfirmDecision('deny');
-        resolvePendingConfirm('deny');
-        return;
-      }
-      if (key.return) {
-        resolvePendingConfirm(confirmDecision);
-        return;
-      }
-      return;
-    }
-
-    if (key.ctrl && value.toLowerCase() === 'c') {
-      setStatus('exit');
-      setExitRequested(true);
-      return;
-    }
-
-    if (key.ctrl && value.toLowerCase() === 'o') {
-      setTranscriptMode((prev) => !prev);
-      return;
-    }
-
-    if (key.ctrl && value.toLowerCase() === 'l') {
-      setMessages((prev) => prev.slice(-2));
-      setActivities([]);
-      addActivity('info', 'screen data cleared');
-      return;
-    }
-
-    if (key.ctrl && value.toLowerCase() === 'g') {
-      setDebugMode((prev) => !prev);
-      return;
-    }
-
-    if (key.shift && key.tab) {
-      setMode((prev) => nextMode(prev));
-      return;
-    }
-
-    if (key.ctrl && value.toLowerCase() === 'r') {
-      if (reverseSearchActive) {
-        if (reverseSearchMatches.length > 0) {
-          setReverseSearchIndex((prev) => Math.min(prev + 1, reverseSearchMatches.length - 1));
-        }
-      } else {
-        setReverseSearchActive(true);
-        setReverseSearchQuery('');
-        setReverseSearchIndex(0);
-      }
-      return;
-    }
-
-    if (key.ctrl && value.toLowerCase() === 's') {
-      if (reverseSearchActive) {
-        setReverseSearchIndex((prev) => Math.max(prev - 1, 0));
-      }
-      return;
-    }
-
-    if (reverseSearchActive) {
-      if (key.escape) {
-        setReverseSearchActive(false);
-        return;
-      }
-
-      if (key.return || key.tab) {
-        const chosen = reverseSearchCurrentMatch;
-        setReverseSearchActive(false);
-        if (chosen) {
-          setInput(chosen);
-          setInputCursor(chosen.length);
-        }
-        return;
-      }
-
-      if (key.upArrow) {
-        if (reverseSearchMatches.length > 0) {
-          setReverseSearchIndex((prev) => Math.min(prev + 1, reverseSearchMatches.length - 1));
-        }
-        return;
-      }
-
-      if (key.downArrow) {
-        setReverseSearchIndex((prev) => Math.max(prev - 1, 0));
-        return;
-      }
-
-      if (key.backspace || key.delete || (key.ctrl && value.toLowerCase() === 'h')) {
-        setReverseSearchQuery((prev) => prev.slice(0, -1));
-        setReverseSearchIndex(0);
-        return;
-      }
-
-      if (value && !key.ctrl && !key.meta) {
-        setReverseSearchQuery((prev) => prev + value);
-        setReverseSearchIndex(0);
-      }
-      return;
-    }
-
-    if (key.tab) {
-      if (suggestions.length > 0) {
-        applySuggestion();
-        return;
-      }
-      if (input.trim() && !input.startsWith('/')) {
-        setForceTabTrigger(true);
-        addDebug('tab suggestion triggered');
-        return;
-      }
-      rotatePanelMode();
-      return;
-    }
-
-    if (key.upArrow) {
-      if (suggestions.length > 0) {
-        setSelectedSuggestionIndex((prev) => Math.max(prev - 1, 0));
-        return;
-      }
-      setInputWithHistory('up');
-      return;
-    }
-
-    if (key.downArrow) {
-      if (suggestions.length > 0) {
-        setSelectedSuggestionIndex((prev) => Math.min(prev + 1, suggestions.length - 1));
-        return;
-      }
-      setInputWithHistory('down');
-      return;
-    }
-
-    if (key.escape) {
-      if ((effectiveMode === 'bash' || effectiveMode === 'memory') && input.length === 1) {
-        setInput('');
-        setInputCursor(0);
-        return;
-      }
-      setInput('');
-      setInputCursor(0);
-      setHistoryCursor(null);
-      setForceTabTrigger(false);
-      return;
-    }
-    if (key.return) {
-      const slashSuggesting = input.startsWith('/') && !input.slice(1).includes(' ');
-      if (slashSuggesting && suggestions.length > 0) {
-        const target = suggestions[selectedSuggestionIndex];
-        if (target?.type === 'slash') {
-          const next = `/${target.value} `;
-          setInput(next);
-          setInputCursor(next.length);
-          setForceTabTrigger(false);
-          return;
-        }
-      }
-
-      if (suggestions.length > 0) {
-        const target = suggestions[selectedSuggestionIndex];
-        if (target?.type === 'file') {
-          applySuggestion();
-          return;
-        }
-      }
-
-      const content = input;
-      setInput('');
-      setInputCursor(0);
-      setForceTabTrigger(false);
-      void submitInput(content);
-      return;
-    }
-
-    if (key.leftArrow) {
-      setInputCursor((prev) => Math.max(prev - 1, 0));
-      return;
-    }
-
-    if (key.rightArrow) {
-      setInputCursor((prev) => Math.min(prev + 1, input.length));
-      return;
-    }
-
-    if (key.ctrl && value.toLowerCase() === 'a') {
-      setInputCursor(0);
-      return;
-    }
-
-    if (key.ctrl && value.toLowerCase() === 'e') {
-      setInputCursor(input.length);
-      return;
-    }
-
-    if (key.ctrl && value.toLowerCase() === 'u') {
-      setInput((prev) => prev.slice(inputCursor));
-      setInputCursor(0);
-      setForceTabTrigger(false);
-      return;
-    }
-
-    if (key.ctrl && value.toLowerCase() === 'k') {
-      setInput((prev) => prev.slice(0, inputCursor));
-      setForceTabTrigger(false);
-      return;
-    }
-
-    if (key.ctrl && value.toLowerCase() === 'w') {
-      const left = input.slice(0, inputCursor);
-      const right = input.slice(inputCursor);
-      const trimmedLeft = left.replace(/\s+$/, '');
-      const cut = trimmedLeft.lastIndexOf(' ');
-      const nextLeft = cut >= 0 ? trimmedLeft.slice(0, cut + 1) : '';
-      const next = nextLeft + right;
-      setInput(next);
-      setInputCursor(nextLeft.length);
-      setForceTabTrigger(false);
-      return;
-    }
-
-    // Cross-platform fallback:
-    // some terminals report Backspace as `delete` or raw control chars.
-    const isBackspaceKey =
-      key.backspace ||
-      value === '\b' ||
-      value === '\x7f' ||
-      (key.ctrl && value.toLowerCase() === 'h') ||
-      (key.delete && inputCursor > 0 && inputCursor === input.length);
-
-    const isForwardDeleteKey = key.delete && !isBackspaceKey;
-
-    if (isBackspaceKey) {
-      if (inputCursor <= 0) {
-        return;
-      }
-      const next = input.slice(0, inputCursor - 1) + input.slice(inputCursor);
-      setInput(next);
-      setInputCursor((prev) => Math.max(prev - 1, 0));
-      setForceTabTrigger(false);
-      return;
-    }
-
-    if (isForwardDeleteKey) {
-      if (inputCursor >= input.length) {
-        return;
-      }
-      const next = input.slice(0, inputCursor) + input.slice(inputCursor + 1);
-      setInput(next);
-      setForceTabTrigger(false);
-      return;
-    }
-
-    if (value && !key.ctrl && !key.meta) {
-      const next = input.slice(0, inputCursor) + value + input.slice(inputCursor);
-      setInput(next);
-      setInputCursor((prev) => prev + value.length);
-      setForceTabTrigger(false);
-    }
+  useInputHandlers({
+    input,
+    setInput,
+    inputCursor,
+    setInputCursor,
+    effectiveMode,
+    running,
+    history,
+    historyCursor,
+    setHistory,
+    setHistoryCursor,
+    reverseSearchActive,
+    setReverseSearchActive,
+    reverseSearchMatches,
+    reverseSearchCurrentMatch,
+    reverseSearchQuery,
+    setReverseSearchQuery,
+    setReverseSearchIndex,
+    pendingConfirmRef,
+    confirmDecision,
+    setConfirmDecision,
+    resolvePendingConfirm,
+    pendingMemory,
+    setPendingMemory,
+    resolvePendingMemory,
+    suggestions,
+    selectedSuggestionIndex,
+    setSelectedSuggestionIndex,
+    activeFileMatch,
+    forceTabTrigger,
+    setForceTabTrigger,
+    submitInputImpl: submitInput,
+    rotatePanelMode,
+    addDebug,
+    setMode,
+    setTranscriptMode,
+    setMessages,
+    setActivities,
+    addActivity,
+    setDebugMode,
+    setStatus,
+    setExitRequested,
+    setForkModalVisible,
+    forkModalVisible,
   });
 
   const spinner = ['|', '/', '-', '\\'][tick];
@@ -1644,28 +1219,12 @@ export function App(props: {
     <Box flexDirection="column">
       <TranscriptModeIndicator transcriptMode={transcriptMode} />
 
-      {running || pendingConfirm !== null || status === 'failed' ? (
-        <StatusLine
-          running={running}
-          approvalPending={pendingConfirm !== null}
-          spinner={spinner}
-          modelId={runtime.state.modelId}
-          sessionId={runtime.state.sessionId}
-          cwd={runtime.state.cwd}
-          approvalMode={runtime.state.approvalMode}
-          panelMode={panelMode}
-          outputFormat={runtime.state.outputFormat}
-          historyCount={historyCount}
-          messageCount={messages.length}
-          activityCount={activities.length}
-        />
-      ) : null}
-
       <Messages
         messages={messages}
         activities={activities}
         panelMode={panelMode}
         transcriptMode={transcriptMode}
+        running={running}
         maxTimelineItems={transcriptMode ? 240 : 96}
       />
 
@@ -1682,21 +1241,41 @@ export function App(props: {
 
       <QueueDisplay queuedMessages={queuedMessages} />
 
-      <BackgroundPrompt queuedMessages={queuedMessages} />
+      {!forkModalVisible ? (
+        <ChatInput
+          input={input}
+          inputCursor={inputCursor}
+          running={running}
+          mode={effectiveMode}
+          suggestions={suggestions}
+          selectedSuggestionIndex={selectedSuggestionIndex}
+          reverseSearchActive={reverseSearchActive}
+          reverseSearchQuery={reverseSearchQuery}
+          reverseSearchCurrentMatch={reverseSearchCurrentMatch}
+          reverseSearchIndex={reverseSearchIndex}
+          reverseSearchTotalMatches={reverseSearchMatches.length}
+          queuedCount={queuedMessages.length}
+        />
+      ) : null}
 
-      <ChatInput
-        input={input}
-        inputCursor={inputCursor}
-        running={running}
-        mode={effectiveMode}
-        suggestions={suggestions}
-        selectedSuggestionIndex={selectedSuggestionIndex}
-        reverseSearchActive={reverseSearchActive}
-        reverseSearchQuery={reverseSearchQuery}
-        reverseSearchCurrentMatch={reverseSearchCurrentMatch}
-        reverseSearchIndex={reverseSearchIndex}
-        reverseSearchTotalMatches={reverseSearchMatches.length}
-      />
+      {!forkModalVisible ? (
+        <StatusLine
+          running={running}
+          approvalPending={pendingConfirm !== null}
+          spinner={spinner}
+          modelId={runtime.state.modelId}
+          sessionId={runtime.state.sessionId}
+          cwd={runtime.state.cwd}
+          approvalMode={runtime.state.approvalMode}
+          panelMode={panelMode}
+          outputFormat={runtime.state.outputFormat}
+          historyCount={historyCount}
+          messageCount={messages.length}
+          activityCount={activities.length}
+          transcriptMode={transcriptMode}
+          debugMode={debugMode}
+        />
+      ) : null}
 
       <Debug enabled={debugMode} logs={debugLogs} />
 
@@ -1708,7 +1287,16 @@ export function App(props: {
         totalTokens={totalTokens}
       />
 
+      {forkModalVisible ? (
+        <ForkModal
+          history={currentSessionHistory as HistoryMessage[]}
+          onClose={() => setForkModalVisible(false)}
+          onConfirm={handleForkConfirm}
+        />
+      ) : null}
+
       <ApprovalModal pendingConfirm={pendingConfirm} selectedDecision={confirmDecision} />
+      <MemoryModal pendingMemory={pendingMemory} />
     </Box>
   );
 }

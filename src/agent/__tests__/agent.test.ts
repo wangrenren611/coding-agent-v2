@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { getEventListeners } from 'node:events';
 import { Agent } from '../agent';
 import {
   LLMError,
@@ -719,5 +720,19 @@ describe('Agent run flow', () => {
       completion_tokens: 8,
       total_tokens: 20,
     });
+  });
+
+  it('should cleanup abort listener after sleep resolves', async () => {
+    const agent = new Agent({
+      provider: createSingleStepProvider(),
+      toolManager: createToolManager(),
+    });
+    const controller = new AbortController();
+
+    await (
+      agent as unknown as { sleep: (ms: number, signal?: AbortSignal) => Promise<void> }
+    ).sleep(1, controller.signal);
+
+    expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
   });
 });

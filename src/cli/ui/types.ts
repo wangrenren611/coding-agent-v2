@@ -33,6 +33,11 @@ export interface PendingConfirm {
   request: ToolConfirmRequest;
 }
 
+export interface PendingMemory {
+  rule: string;
+  selection: 'project' | 'global';
+}
+
 export interface SuggestionItem {
   type: 'slash' | 'file';
   value: string;

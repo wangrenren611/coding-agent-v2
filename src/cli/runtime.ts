@@ -1,3 +1,5 @@
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline/promises';
@@ -71,10 +73,61 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+async function appendRuleToAgentsFile(
+  filePath: string,
+  rule: string
+): Promise<{ duplicate: boolean }> {
+  const normalizedRule = rule.trim();
+  if (!normalizedRule) {
+    throw new Error('memory rule cannot be empty');
+  }
+
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+
+  let existing = '';
+  try {
+    existing = await fs.readFile(filePath, 'utf8');
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
+  const bullet = `- ${normalizedRule}`;
+  const duplicatePattern = new RegExp(`^${bullet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm');
+  if (duplicatePattern.test(existing)) {
+    return { duplicate: true };
+  }
+
+  const base = existing.trimEnd();
+  const hasMemorySection = /^## Memory$/m.test(existing);
+  let next: string;
+
+  if (!base) {
+    next = `# AGENTS.md\n\n## Memory\n${bullet}\n`;
+  } else if (!hasMemorySection) {
+    next = `${base}\n\n## Memory\n${bullet}\n`;
+  } else {
+    const lines = base.split('\n');
+    const memoryIndex = lines.findIndex((line) => line.trim() === '## Memory');
+    const nextSectionIndex = lines.findIndex(
+      (line, index) => index > memoryIndex && /^##\s+/.test(line.trim())
+    );
+    const insertIndex = nextSectionIndex === -1 ? lines.length : nextSectionIndex;
+    const updated = [...lines.slice(0, insertIndex), bullet, ...lines.slice(insertIndex)];
+    next = `${updated.join('\n')}\n`;
+  }
+
+  await fs.writeFile(filePath, next, 'utf8');
+  return { duplicate: false };
+}
+
 export class CliRuntime {
   readonly baseCwd: string;
   readonly state: CliRuntimeState;
   deps?: CliRuntimeDeps;
+  private initializeRefCount = 0;
 
   constructor(options: {
     baseCwd: string;
@@ -103,6 +156,11 @@ export class CliRuntime {
   }
 
   async initialize(): Promise<void> {
+    if (this.deps) {
+      this.initializeRefCount += 1;
+      return;
+    }
+
     await loadEnvFiles(this.state.cwd);
     const runtimeConfig = loadRuntimeConfigFromEnv(process.env, this.state.cwd);
     const memoryManager = createMemoryManagerFromRuntimeConfig(runtimeConfig);
@@ -114,12 +172,21 @@ export class CliRuntime {
       memoryManager,
       runtimeConfig,
     };
+    this.initializeRefCount = 1;
   }
 
   async close(): Promise<void> {
+    if (this.initializeRefCount === 0) {
+      return;
+    }
+    this.initializeRefCount -= 1;
+    if (this.initializeRefCount > 0) {
+      return;
+    }
     if (!this.deps) {
       return;
     }
+
     await this.deps.memoryManager.close();
     const logger = this.deps.logger as { close?: () => void };
     if (typeof logger.close === 'function') {
@@ -364,6 +431,57 @@ Approve tool "${request.toolName}"? [y/N]
     );
   }
 
+  getSessionMeta(sessionId: string) {
+    const deps = this.assertInitialized();
+    return deps.memoryManager.getSession(sessionId);
+  }
+
+  async forkSession(sourceSessionId: string, sourceMessageId: string): Promise<string> {
+    const deps = this.assertInitialized();
+    const sourceSession = deps.memoryManager.getSession(sourceSessionId);
+    if (!sourceSession) {
+      throw new Error(`Session not found: ${sourceSessionId}`);
+    }
+
+    const history = deps.memoryManager.getHistory(
+      { sessionId: sourceSessionId },
+      {
+        orderBy: 'sequence',
+        orderDirection: 'asc',
+      }
+    );
+    const target = history.find((item) => item.messageId === sourceMessageId);
+    if (!target) {
+      throw new Error(`Message not found in session ${sourceSessionId}: ${sourceMessageId}`);
+    }
+
+    const nextSessionId = randomUUID();
+    await deps.memoryManager.createSession(nextSessionId, sourceSession.systemPrompt);
+
+    const messagesToCopy = history
+      .filter((item) => item.sequence > 1 && item.sequence <= target.sequence)
+      .map((item) => ({
+        messageId: item.messageId,
+        role: item.role,
+        content: item.content,
+        reasoning_content: item.reasoning_content,
+        tool_calls: item.tool_calls,
+        tool_call_id: item.tool_call_id,
+        name: item.name,
+        id: item.id,
+        type: item.type,
+        finish_reason: item.finish_reason,
+        usage: item.usage,
+      }));
+
+    if (messagesToCopy.length > 0) {
+      await deps.memoryManager.addMessages(nextSessionId, messagesToCopy);
+    }
+
+    this.state.sessionId = nextSessionId;
+    return nextSessionId;
+  }
+
   clearSessionContext(sessionId: string): Promise<void> {
     const deps = this.assertInitialized();
     return deps.memoryManager.clearContext(sessionId);
@@ -384,6 +502,23 @@ Approve tool "${request.toolName}"? [y/N]
           : deps.runtimeConfig.storage.dir,
       logPath: deps.runtimeConfig.log.filePath,
       time: nowIso(),
+    };
+  }
+
+  async saveMemoryRule(
+    rule: string,
+    destination: 'project' | 'global'
+  ): Promise<{ filePath: string; duplicate: boolean }> {
+    const homeDir = process.env.HOME || os.homedir();
+    const filePath =
+      destination === 'project'
+        ? path.join(this.state.cwd, 'AGENTS.md')
+        : path.join(homeDir, '.coding-agent-v2', 'AGENTS.md');
+
+    const result = await appendRuleToAgentsFile(filePath, rule);
+    return {
+      filePath,
+      duplicate: result.duplicate,
     };
   }
 }

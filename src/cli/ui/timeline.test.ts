@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { clipTimeline, mergeTimeline, splitTimelineByPendingTools } from './timeline';
+import {
+  clipTimeline,
+  mergeTimeline,
+  splitTimelineByPendingTools,
+  splitTimelineForRendering,
+} from './timeline';
 import type { ActivityEvent, ChatLine } from './types';
 
 function msg(seq: number, id: string): ChatLine {
@@ -67,5 +72,21 @@ describe('clipTimeline', () => {
     );
     const clipped = clipTimeline(items, 3);
     expect(clipped.map((item) => item.seq)).toEqual([3, 4, 5]);
+  });
+});
+
+describe('splitTimelineForRendering', () => {
+  test('keeps the last item dynamic while running without pending tools', () => {
+    const items = mergeTimeline([msg(1, 'm1'), msg(2, 'm2')], []);
+    const result = splitTimelineForRendering(items, true);
+    expect(result.completedItems.map((item) => item.seq)).toEqual([1]);
+    expect(result.pendingItems.map((item) => item.seq)).toEqual([2]);
+  });
+
+  test('keeps normal split when not running', () => {
+    const items = mergeTimeline([msg(1, 'm1'), msg(2, 'm2')], []);
+    const result = splitTimelineForRendering(items, false);
+    expect(result.completedItems.map((item) => item.seq)).toEqual([1, 2]);
+    expect(result.pendingItems).toHaveLength(0);
   });
 });
