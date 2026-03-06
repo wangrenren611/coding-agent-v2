@@ -12,7 +12,10 @@ import {
 import { createInterface } from 'node:readline/promises';
 import {
   BashTool,
-  FileTool,
+  FileEditTool,
+  FileReadTool,
+  FileStatTool,
+  FileWriteTool,
   GlobTool,
   GrepTool,
   SkillTool,
@@ -67,6 +70,7 @@ Examples:
 
 This example registers Task V3 tools:
   task / tasks / task_get / task_list / task_update / task_run_*
+  file_read / file_write / file_edit / file_stat
 
 Env:
   AGENT_AUTO_CONFIRM_TOOLS=true   # 自动同意所有待确认工具调用
@@ -113,7 +117,10 @@ function createExampleSubagentToolManager(): ToolManager {
   const manager = new ToolManager();
   manager.register([
     new BashTool(),
-    new FileTool(),
+    new FileReadTool(),
+    new FileWriteTool(),
+    new FileEditTool(),
+    new FileStatTool(),
     new GlobTool(),
     new GrepTool(),
     new SkillTool(),
@@ -258,7 +265,10 @@ async function main(): Promise<void> {
     });
     toolManager.register([
       new BashTool(),
-      new FileTool(),
+      new FileReadTool(),
+      new FileWriteTool(),
+      new FileEditTool(),
+      new FileStatTool(),
       new GlobTool(),
       new GrepTool(),
       new SkillTool(),

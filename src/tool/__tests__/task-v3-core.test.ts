@@ -51,6 +51,8 @@ describe('task-v3 core (repository/service/runner)', () => {
   });
 
   afterEach(async () => {
+    await runner.close().catch(() => undefined);
+    await repository.close().catch(() => undefined);
     await fsp.rm(tempDir, { recursive: true, force: true });
   });
 

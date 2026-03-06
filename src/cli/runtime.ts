@@ -15,7 +15,10 @@ import { ProviderRegistry } from '../providers';
 import type { HistoryMessage } from '../storage';
 import {
   BashTool,
-  FileTool,
+  FileEditTool,
+  FileReadTool,
+  FileStatTool,
+  FileWriteTool,
   GlobTool,
   GrepTool,
   SkillTool,
@@ -281,7 +284,10 @@ export class CliRuntime {
     });
     const tools = [
       new BashTool(),
-      new FileTool({ allowedDirectories: [this.state.cwd] }),
+      new FileReadTool({ allowedDirectories: [this.state.cwd] }),
+      new FileWriteTool({ allowedDirectories: [this.state.cwd] }),
+      new FileEditTool({ allowedDirectories: [this.state.cwd] }),
+      new FileStatTool({ allowedDirectories: [this.state.cwd] }),
       new GlobTool(),
       new GrepTool(),
       new SkillTool(),
@@ -291,7 +297,10 @@ export class CliRuntime {
           const subagentToolManager = new ToolManager();
           subagentToolManager.register([
             new BashTool(),
-            new FileTool({ allowedDirectories: [this.state.cwd] }),
+            new FileReadTool({ allowedDirectories: [this.state.cwd] }),
+            new FileWriteTool({ allowedDirectories: [this.state.cwd] }),
+            new FileEditTool({ allowedDirectories: [this.state.cwd] }),
+            new FileStatTool({ allowedDirectories: [this.state.cwd] }),
             new GlobTool(),
             new GrepTool(),
             new SkillTool(),
@@ -305,7 +314,10 @@ export class CliRuntime {
           const subagentToolManager = new ToolManager();
           subagentToolManager.register([
             new BashTool(),
-            new FileTool({ allowedDirectories: [this.state.cwd] }),
+            new FileReadTool({ allowedDirectories: [this.state.cwd] }),
+            new FileWriteTool({ allowedDirectories: [this.state.cwd] }),
+            new FileEditTool({ allowedDirectories: [this.state.cwd] }),
+            new FileStatTool({ allowedDirectories: [this.state.cwd] }),
             new GlobTool(),
             new GrepTool(),
             new SkillTool(),
@@ -321,7 +333,10 @@ export class CliRuntime {
           const subagentToolManager = new ToolManager();
           subagentToolManager.register([
             new BashTool(),
-            new FileTool({ allowedDirectories: [this.state.cwd] }),
+            new FileReadTool({ allowedDirectories: [this.state.cwd] }),
+            new FileWriteTool({ allowedDirectories: [this.state.cwd] }),
+            new FileEditTool({ allowedDirectories: [this.state.cwd] }),
+            new FileStatTool({ allowedDirectories: [this.state.cwd] }),
             new GlobTool(),
             new GrepTool(),
             new SkillTool(),
@@ -355,7 +370,10 @@ export class CliRuntime {
 
   private autoEditDecision(request: ToolConfirmRequest): ToolConfirmDecision {
     const autoApprove = new Set([
-      'file',
+      'file_read',
+      'file_write',
+      'file_edit',
+      'file_stat',
       'glob',
       'grep',
       'skill',

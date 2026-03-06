@@ -239,4 +239,18 @@ export class SqliteTaskRunner implements TaskRunner {
       this.now()
     );
   }
+
+  async close(): Promise<void> {
+    for (const controller of this.activeControllers.values()) {
+      controller.abort();
+    }
+
+    const deadline = Date.now() + 5_000;
+    while (this.activeControllers.size > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    this.activeControllers.clear();
+    this.adapters.clear();
+  }
 }

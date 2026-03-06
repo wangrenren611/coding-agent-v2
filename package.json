@@ -74,6 +74,7 @@
     ]
   },
   "dependencies": {
+    "@vscode/ripgrep": "^1.17.0",
     "diff": "^8.0.3",
     "ink": "^6.8.0",
     "minimatch": "^10.2.4",

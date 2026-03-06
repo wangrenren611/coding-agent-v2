@@ -5,7 +5,7 @@ export const CLI_CONFIG_DIR = '.agent-cli';
 export const CLI_CONFIG_FILE = 'config.json';
 export const CLI_WORKSPACE_FILE = 'workspaces.json';
 
-export const DEFAULT_MODEL: ModelId = 'minimax-2.5';
+export const DEFAULT_MODEL: ModelId = 'glm-5';
 export const DEFAULT_OUTPUT_FORMAT = 'text';
 export const DEFAULT_APPROVAL_MODE = 'default';
 
@@ -13,7 +13,10 @@ export const DEFAULT_SYSTEM_PROMPT = buildSystemPrompt({ directory: process.cwd(
 
 export const BUILTIN_TOOL_NAMES = [
   'bash',
-  'file',
+  'file_read',
+  'file_write',
+  'file_edit',
+  'file_stat',
   'glob',
   'grep',
   'skill',

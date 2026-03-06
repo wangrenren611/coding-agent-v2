@@ -157,11 +157,8 @@ Use skill when user names a skill or the request clearly matches a known skill w
 Workflow: load skill -> follow instructions -> execute with tools.
 
 ## File Modification Best Practices
-Edit priority per file: batch_replace (2+ edits) > precise_replace (single focused edit) > write_file (large rewrite).
-- Read file before surgical edits.
-- Copy oldText exactly from read_file output.
-- After TEXT_NOT_FOUND, re-read and rebuild payload.
-- If the same file edit fails twice, switch strategy.
+  - Use the file_edit tool to edit files 
+  - Use file_edit only after you have used file_read to read the latest contents of the file.
 
 ## Retry and Loop Control
 - Do not repeat identical tool calls without reason.

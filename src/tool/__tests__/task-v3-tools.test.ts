@@ -24,6 +24,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function removeDirectoryWithRetry(targetPath: string): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      await fsp.rm(targetPath, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if ((code === 'EBUSY' || code === 'EPERM') && attempt < 19) {
+        await sleep(50);
+        continue;
+      }
+      throw error;
+    }
+  }
+}
 function createImmediateProvider(text: string): LLMProvider {
   return {
     config: { model: 'test-model' },
@@ -158,7 +173,8 @@ describe('task-v3 tools', () => {
   });
 
   afterEach(async () => {
-    await fsp.rm(tempDir, { recursive: true, force: true });
+    await runtime.close().catch(() => undefined);
+    await removeDirectoryWithRetry(tempDir);
   });
 
   it('exposes expected tool schema and passes manager validation with minimal args', async () => {
@@ -217,7 +233,7 @@ describe('task-v3 tools', () => {
     const single = await manager.executeTool(
       'task',
       {
-        description: '并行探索项目各模块结构',
+        description: 'Explore project module structure in parallel',
       },
       context
     );
@@ -227,8 +243,8 @@ describe('task-v3 tools', () => {
       'tasks',
       {
         items: [
-          { description: '探索模块A结构' },
-          { description: '探索模块B结构', depends_on: ['item_1'] },
+          { description: 'Explore module A structure' },
+          { description: 'Explore module B structure', depends_on: ['item_1'] },
         ],
         wait: true,
       },
@@ -311,7 +327,7 @@ describe('task-v3 tools', () => {
 
     const result = await taskTool.execute(
       {
-        description: '并行探索项目各模块结构',
+        description: 'Explore project module structure in parallel',
       },
       context
     );
@@ -322,7 +338,7 @@ describe('task-v3 tools', () => {
       run: { status: string };
     };
     expect(data.task.title.length).toBeGreaterThan(0);
-    expect(data.task.description).toContain('并行探索项目各模块结构');
+    expect(data.task.description).toContain('Explore project module structure in parallel');
     expect(data.run.status).toBe('succeeded');
   });
 
@@ -474,10 +490,10 @@ describe('task-v3 tools', () => {
       {
         items: [
           {
-            description: '探索模块A结构',
+            description: 'Explore module A structure',
           },
           {
-            description: '探索模块B结构',
+            description: 'Explore module B structure',
             depends_on: ['item_1'],
           },
         ],

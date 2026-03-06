@@ -5,7 +5,10 @@ import { ToolManager } from './manager';
 import { BaseTool } from './base';
 import type { ToolExecutionContext, ToolResult } from './types';
 import { BashTool } from './bash';
-import { FileTool } from './file-tool';
+import { FileReadTool } from './file-read-tool';
+import { FileWriteTool } from './file-write-tool';
+import { FileEditTool } from './file-edit-tool';
+import { FileStatTool } from './file-stat-tool';
 import type { MemoryManager } from '../storage';
 import { contentToText } from '../utils';
 import type { ToolCall, ToolStreamEvent } from '../core/types';
@@ -325,7 +328,16 @@ function createDefaultSubagentToolManager(workingDirectory: string): ToolManager
   const manager = new ToolManager();
   manager.register([
     new BashTool(),
-    new FileTool({
+    new FileReadTool({
+      allowedDirectories: [workingDirectory],
+    }),
+    new FileWriteTool({
+      allowedDirectories: [workingDirectory],
+    }),
+    new FileEditTool({
+      allowedDirectories: [workingDirectory],
+    }),
+    new FileStatTool({
       allowedDirectories: [workingDirectory],
     }),
   ]);

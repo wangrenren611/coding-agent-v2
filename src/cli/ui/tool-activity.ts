@@ -1,4 +1,4 @@
-﻿import path from 'node:path';
+import path from 'node:path';
 import type { ToolStreamEvent } from '../../tool';
 
 function toRecord(value: unknown): Record<string, unknown> | null {
@@ -7,6 +7,15 @@ function toRecord(value: unknown): Record<string, unknown> | null {
 
 export function isTaskToolName(toolName: string): boolean {
   return toolName === 'task' || toolName === 'tasks' || toolName.startsWith('task_');
+}
+
+function isFileToolName(toolName: string): boolean {
+  return (
+    toolName === 'file_read' ||
+    toolName === 'file_write' ||
+    toolName === 'file_edit' ||
+    toolName === 'file_stat'
+  );
 }
 
 export function isSubagentBubbleEvent(event: ToolStreamEvent): boolean {
@@ -64,36 +73,24 @@ function parseStartArgs(event: ToolStreamEvent): Record<string, unknown> {
   return {};
 }
 
-function formatFileCall(args: Record<string, unknown>): string {
-  const action = typeof args.action === 'string' ? args.action : 'file';
-  const path = typeof args.path === 'string' ? args.path : '';
-  const pattern = typeof args.pattern === 'string' ? args.pattern : '';
+function formatFileCall(toolName: string, args: Record<string, unknown>): string {
+  const targetPath = typeof args.path === 'string' ? args.path : '';
 
   const actionMap: Record<string, string> = {
-    read: 'Read',
-    write: 'Write',
-    edit: 'Edit',
-    patch: 'Update',
-    list: 'List',
-    stat: 'Stat',
-    search: 'Search',
-    head: 'Head',
-    tail: 'Tail',
+    file_read: 'Read',
+    file_write: 'Write',
+    file_edit: 'Edit',
+    file_stat: 'Stat',
   };
 
-  const name = actionMap[action] ?? 'File';
+  const name = actionMap[toolName] ?? 'File';
 
-  if (action === 'search' && path && pattern) {
-    return `${name}(${truncate(`${path}, pattern=${pattern}`, 260)})`;
-  }
-
-  if (path) {
-    return `${name}(${truncate(path, 260)})`;
+  if (targetPath) {
+    return `${name}(${truncate(targetPath, 260)})`;
   }
 
   return `${name}(${truncate(safeJson(args), 260)})`;
 }
-
 function formatTaskCall(args: Record<string, unknown>): string {
   const description =
     typeof args.description === 'string'
@@ -128,8 +125,8 @@ export function formatToolCallLine(event: ToolStreamEvent): string {
     return `Bash(${truncate(command || safeJson(args), 260)})`;
   }
 
-  if (event.toolName === 'file') {
-    return formatFileCall(args);
+  if (isFileToolName(event.toolName)) {
+    return formatFileCall(event.toolName, args);
   }
 
   if (isTaskToolName(event.toolName)) {
@@ -269,7 +266,7 @@ function formatFileEntryName(entry: Record<string, unknown>): string {
   return isDirectory ? `${name}/` : name;
 }
 
-function formatFileToolResult(data: unknown): string {
+function formatFileToolResult(_toolName: string, data: unknown): string {
   const result = getResultRecord(data);
   const payload = toRecord(result?.data);
   if (!payload) {
@@ -409,8 +406,8 @@ export function formatToolEndLines(
     return { lines: resultLines, hiddenLineCount: 0 };
   }
 
-  if (event.toolName === 'file') {
-    const fileResultText = formatFileToolResult(event.data);
+  if (isFileToolName(event.toolName)) {
+    const fileResultText = formatFileToolResult(event.toolName, event.data);
     if (fileResultText) {
       const formatted = formatToolOutputLines(fileResultText, transcriptMode, 9);
       resultLines.push(...formatted.lines);

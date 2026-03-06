@@ -9,7 +9,7 @@ import {
 function createEndEvent(data: unknown) {
   return {
     toolCallId: 'tool-1',
-    toolName: 'file',
+    toolName: 'file_read',
     type: 'end' as const,
     sequence: 3,
     timestamp: Date.now(),

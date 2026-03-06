@@ -2,14 +2,17 @@
  * Tool 模块导出
  */
 
-// 核心类
+// 核心�?
 export { BaseTool } from './base';
 export { SimpleTool, createTool } from './simple-tool';
 export { ToolManager, createToolManager } from './manager';
 
 // 内置工具
 export { BashTool } from './bash';
-export { FileTool } from './file-tool';
+export { FileReadTool } from './file-read-tool';
+export { FileWriteTool } from './file-write-tool';
+export { FileEditTool } from './file-edit-tool';
+export { FileStatTool } from './file-stat-tool';
 export { GlobTool } from './glob';
 export { GrepTool } from './grep';
 export { SkillTool, createSkillTool, defaultSkillTool, simpleSkillTool } from './skill-tool';
@@ -28,30 +31,7 @@ export {
   type SubagentType,
   type ModelHint,
 } from './task-tools';
-export {
-  TaskV2CreateTool,
-  TaskV2GetTool,
-  TaskV2ListTool,
-  TaskV2UpdateTool,
-  TaskV2DeleteTool,
-  TaskV2DependencyAddTool,
-  TaskV2DependencyRemoveTool,
-  TaskV2DependencyListTool,
-  TaskV2SubmitTool,
-  TaskV2DispatchReadyTool,
-  TaskV2RunStartTool,
-  TaskV2RunGetTool,
-  TaskV2RunWaitTool,
-  TaskV2RunCancelTool,
-  TaskV2RunEventsTool,
-  TaskV2ClearSessionTool,
-  TaskV2GcRunsTool,
-  TaskV2Runtime,
-  getDefaultTaskV2Runtime,
-  type TaskV2RuntimeOptions,
-  type TaskV2RunStartToolOptions,
-} from './task-v2-tools';
-export * from './task-v2';
+
 export {
   TaskV3Tool,
   TaskV3TasksTool,
@@ -94,7 +74,7 @@ export type {
   SimpleToolExecutor,
 } from './types';
 
-// 重导出相关类型
+// 重导出相关类�?
 export type { ToolResult, ToolExecutionContext } from './types';
 export type { ToolStreamEvent, ToolStreamEventInput } from './types';
 export type { Tool } from '../providers';

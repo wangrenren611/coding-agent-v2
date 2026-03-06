@@ -50,6 +50,20 @@ export class TaskV3Runtime {
     await this.preparePromise;
   }
 
+  async close(): Promise<void> {
+    const runnerWithClose = this.runner as { close?: () => Promise<void> };
+    if (typeof runnerWithClose.close === 'function') {
+      await runnerWithClose.close();
+    }
+
+    const repositoryWithClose = this.repository as { close?: () => Promise<void> };
+    if (typeof repositoryWithClose.close === 'function') {
+      await repositoryWithClose.close();
+    }
+
+    this.preparePromise = null;
+  }
+
   resolveSessionId(context: ToolExecutionContext): string {
     const fromAgentContext = context.agentContext?.sessionId;
     if (typeof fromAgentContext === 'string' && fromAgentContext.trim().length > 0) {

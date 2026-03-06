@@ -723,4 +723,10 @@ export class SqliteTaskRepository implements TaskRepository {
       return rows.length;
     });
   }
+
+  async close(): Promise<void> {
+    await this.client.close();
+    this.prepared = false;
+    this.preparing = null;
+  }
 }

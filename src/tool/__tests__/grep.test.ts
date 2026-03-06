@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { promises as fsp } from 'fs';
-import { tmpdir } from 'os';
-import path from 'path';
-import { spawnSync } from 'child_process';
+import { promises as fsp } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { rgPath as vscodeRgPath } from '@vscode/ripgrep';
 import { GrepTool } from '../grep';
 import type { ToolExecutionContext } from '../types';
 
@@ -13,9 +14,17 @@ const mockContext: ToolExecutionContext = {
   agent: {} as ToolExecutionContext['agent'],
 };
 
-const hasRipgrep = (() => {
-  const probe = spawnSync('rg', ['--version'], { stdio: 'ignore' });
+function hasExecutable(bin: string | undefined): boolean {
+  if (!bin || !bin.trim()) {
+    return false;
+  }
+  const probe = spawnSync(bin, ['--version'], { stdio: 'ignore' });
   return !probe.error && probe.status === 0;
+}
+
+const hasRipgrep = (() => {
+  const candidates = [process.env.RIPGREP_PATH, vscodeRgPath, 'rg'];
+  return candidates.some((candidate) => hasExecutable(candidate));
 })();
 
 const itIfRipgrep = hasRipgrep ? it : it.skip;
@@ -24,15 +33,8 @@ describe('GrepTool', () => {
   let rootDir: string;
   let tool: GrepTool;
   const defaults = {
-    case_mode: 'smart' as const,
-    word: false,
-    multiline: false,
-    pcre2: false,
-    include_hidden: false,
-    no_ignore: false,
-    timeout: 60000,
-    max_files: 100,
-    max_matches_per_file: 50,
+    timeout_ms: 60000,
+    max_results: 200,
   };
 
   beforeEach(async () => {
@@ -59,7 +61,7 @@ describe('GrepTool', () => {
         ...defaults,
         pattern: 'hello',
         path: rootDir,
-        file_pattern: '**/*.ts',
+        glob: '**/*.ts',
       },
       mockContext
     );
@@ -85,24 +87,21 @@ describe('GrepTool', () => {
     expect((result.data as { countMatches: number }).countMatches).toBe(0);
   });
 
-  itIfRipgrep('should respect max_files truncation', async () => {
-    await fsp.mkdir(path.join(rootDir, 'src'), { recursive: true });
-    for (let index = 0; index < 5; index += 1) {
-      await fsp.writeFile(path.join(rootDir, 'src', `file-${index}.txt`), 'needle', 'utf-8');
-    }
+  itIfRipgrep('should respect max_results truncation', async () => {
+    await fsp.writeFile(path.join(rootDir, 'many.txt'), 'needle\nneedle\nneedle\nneedle', 'utf-8');
 
     const result = await tool.execute(
       {
         ...defaults,
         pattern: 'needle',
         path: rootDir,
-        max_files: 2,
+        max_results: 2,
       },
       mockContext
     );
 
     expect(result.success).toBe(true);
-    expect((result.data as { countFiles: number }).countFiles).toBe(2);
+    expect((result.data as { countMatches: number }).countMatches).toBe(2);
     expect((result.data as { truncated: boolean }).truncated).toBe(true);
   });
 

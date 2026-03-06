@@ -313,7 +313,7 @@ export function Messages(props: {
     <Box marginTop={1} flexDirection="column">
       {timeline.length === 0 ? <Text color="gray">(no activity)</Text> : null}
       <Static key={staticKey} items={splitTimeline.completedItems}>
-        {(item) => <TimelineView items={[item as TimelineItem]} />}
+        {(item: TimelineItem) => <TimelineView items={[item]} />}
       </Static>
       <TimelineView items={splitTimeline.pendingItems} />
     </Box>

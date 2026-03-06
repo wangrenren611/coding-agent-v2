@@ -18,7 +18,7 @@ yarn-error.log*
 # Coverage
 coverage/
 .nyc_output/
-
+.agent-cli
 # IDE
 .vscode/
 .idea/

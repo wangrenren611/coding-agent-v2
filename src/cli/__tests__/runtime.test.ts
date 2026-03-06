@@ -126,3 +126,22 @@ describe('CliRuntime lifecycle', () => {
     expect(runtime.deps).toBeUndefined();
   });
 });
+
+describe('CliRuntime.createToolManager', () => {
+  test('registers split file tools and removes legacy file tool', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'cli-runtime-tools-'));
+    const runtime = new CliRuntime({
+      baseCwd: root,
+      cwd: root,
+      quiet: true,
+    });
+
+    const manager = runtime.createToolManager();
+    const names = manager.getToolNames();
+
+    expect(names).toEqual(
+      expect.arrayContaining(['file_read', 'file_write', 'file_edit', 'file_stat'])
+    );
+    expect(names).not.toContain('file');
+  });
+});
