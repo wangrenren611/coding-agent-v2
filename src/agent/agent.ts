@@ -1225,30 +1225,6 @@ export class Agent {
   }
 }
 
-/**
- * 创建 Agent 实例
- *
- * 这是创建 Agent 实例的推荐工厂函数。
- * 它封装了 new Agent() 调用，提供更简洁的 API。
- *
- * @param config - Agent 配置对象
- * @returns 新创建的 Agent 实例
- *
- * @example
- * ```typescript
- * import { createAgent } from './agent';
- *
- * const agent = createAgent({
- *   provider: myLLMProvider,
- *   toolManager: myToolManager,
- *   systemPrompt: '你是一个有帮助的助手',
- *   plugins: [myPlugin],
- * });
- *
- * const result = await agent.run('你好！');
- * console.log(result.text);
- * ```
- */
 export function createAgent(config: AgentConfig): Agent {
   return new Agent(config);
 }

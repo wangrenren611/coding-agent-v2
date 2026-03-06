@@ -18,12 +18,16 @@ export const BUILTIN_TOOL_NAMES = [
   'grep',
   'skill',
   'task',
-  'task_create',
+  'tasks',
   'task_get',
   'task_list',
   'task_update',
-  'task_stop',
-  'task_output',
+  'task_run_get',
+  'task_run_wait',
+  'task_run_cancel',
+  'task_run_events',
+  'task_clear_session',
+  'task_gc_runs',
 ] as const;
 
 export type BuiltinToolName = (typeof BUILTIN_TOOL_NAMES)[number];
@@ -35,6 +39,7 @@ export const SUPPORTED_COMMANDS = [
   'log',
   'model',
   'tool',
+  'task',
   'session',
   'workspace',
   'skill',

@@ -102,7 +102,8 @@ export async function runCli(argv: string[] = process.argv.slice(2)): Promise<nu
   await runtime.initialize();
 
   try {
-    const resolvedSessionId = runtime.resolveSessionId(args.resume, args.continueSession);
+    const continueSession = args.newSession ? false : args.continueSession || !args.resume;
+    const resolvedSessionId = runtime.resolveSessionId(args.resume, continueSession);
     runtime.setSession(resolvedSessionId);
 
     const command = detectCommand(args);

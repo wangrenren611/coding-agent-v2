@@ -158,6 +158,85 @@ function commandTool(args: string[], runtime: CliRuntime): void {
   throw new Error(`Unknown tool action: ${action}`);
 }
 
+function commandTask(args: string[], runtime: CliRuntime): void {
+  const action = args[0] ?? 'help';
+
+  if (action === 'help' || action === 'flow') {
+    console.log(`Task V3 CLI Usage
+
+Single-task flow (recommended):
+  1) Use task with required fields:
+     prompt + profile + title + description
+  2) wait=true for blocking completion (default), wait=false for async orchestration
+  3) Inspect run with task_run_get / task_run_wait / task_run_events
+
+Dependency + parallel flow:
+  1) Use tasks with items[] and depends_on
+  2) Set max_parallel for concurrency
+  3) Use wait=true to run orchestration rounds until completion
+
+Profiles (examples):
+  general-purpose, explore, plan, bug-analyzer, code-reviewer
+
+Run "coding-agent task tools" to see task tool enablement.
+Run "coding-agent task examples" for ready-to-use prompt templates.`);
+    return;
+  }
+
+  if (action === 'tools') {
+    const groups: Array<{ group: string; tools: string[] }> = [
+      {
+        group: 'Task workflow',
+        tools: ['task', 'tasks'],
+      },
+      {
+        group: 'Task lifecycle',
+        tools: ['task_get', 'task_list', 'task_update'],
+      },
+      {
+        group: 'Run control',
+        tools: ['task_run_get', 'task_run_wait', 'task_run_cancel', 'task_run_events'],
+      },
+      {
+        group: 'Maintenance',
+        tools: ['task_clear_session', 'task_gc_runs'],
+      },
+    ];
+    const enabled = new Set(runtime.getEnabledToolNames());
+    const rows = groups.flatMap((group) =>
+      group.tools.map((name) => ({
+        group: group.group,
+        name,
+        enabled: enabled.has(name),
+      }))
+    );
+    console.table(rows);
+    return;
+  }
+
+  if (action === 'examples') {
+    console.log(`Task Prompt Examples
+
+1) Single delegated bug task:
+请使用 task 创建并执行任务：
+- title: "修复登录接口 500 错误"
+- description: "先定位根因，再给最小修复方案"
+- prompt: "检查认证链路，定位 500 根因，并给出最小可回滚修复"
+- profile: "bug-analyzer"
+- include_events: true
+
+2) Parallel dependency batch:
+请使用 tasks：
+- items: A/B/C（C.depends_on=["A","B"]）
+- max_parallel: 2
+- wait: true
+- 汇总每个 run 的状态与关键事件`);
+    return;
+  }
+
+  throw new Error(`Unknown task action: ${action}`);
+}
+
 async function commandSession(args: string[], runtime: CliRuntime): Promise<void> {
   const action = args[0] ?? 'list';
   if (action === 'list') {
@@ -362,6 +441,11 @@ export async function runCommand(
     commandTool(args, runtime);
     config.disabledTools = Array.from(runtime.state.disabledTools).sort();
     await saveCliConfig(baseCwd, config);
+    return true;
+  }
+
+  if (command === 'task') {
+    commandTask(args, runtime);
     return true;
   }
 

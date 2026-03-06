@@ -898,7 +898,6 @@ describe('bash-policy', () => {
           'git status',
           'node index.js',
           'python script.py',
-          'docker ps',
         ];
 
         for (const cmd of commands) {
@@ -1071,6 +1070,11 @@ describe('bash-policy', () => {
         expect(result.reason).toContain('not in allowed command list');
       });
 
+      it('should deny docker and kubectl in guarded mode', () => {
+        expect(evaluateBashPolicy('docker ps').effect).toBe('deny');
+        expect(evaluateBashPolicy('kubectl get pods').effect).toBe('deny');
+      });
+
       it('should use custom allowlistMissReason', () => {
         const result = evaluateBashPolicy('unknown-command', {
           mode: 'guarded',
@@ -1173,7 +1177,8 @@ describe('bash-policy', () => {
       expect(commands.has('npm')).toBe(true);
       expect(commands.has('node')).toBe(true);
       expect(commands.has('python')).toBe(true);
-      expect(commands.has('docker')).toBe(true);
+      expect(commands.has('docker')).toBe(false);
+      expect(commands.has('kubectl')).toBe(false);
     });
 
     it('should include macOS specific commands on darwin', () => {

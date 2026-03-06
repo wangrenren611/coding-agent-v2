@@ -16,6 +16,7 @@ export interface CliArgs {
   quiet: boolean;
   resume?: string;
   continueSession: boolean;
+  newSession: boolean;
   cwd?: string;
   model?: string;
   outputFormat?: OutputFormat;

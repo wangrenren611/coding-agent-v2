@@ -21,7 +21,7 @@ describe('formatToolEndLines', () => {
   test('formats task result into a concise summary', () => {
     const event = {
       toolCallId: 'tool-task-1',
-      toolName: 'task',
+      toolName: 'task_submit',
       type: 'end' as const,
       sequence: 3,
       timestamp: Date.now(),
@@ -158,7 +158,7 @@ describe('isSubagentBubbleEvent', () => {
   test('returns true for subagent bubble event', () => {
     const result = isSubagentBubbleEvent({
       toolCallId: 'task-call-1',
-      toolName: 'task',
+      toolName: 'task_submit',
       type: 'info',
       sequence: 1,
       timestamp: Date.now(),
@@ -174,7 +174,7 @@ describe('isSubagentBubbleEvent', () => {
   test('returns false for normal task event', () => {
     const result = isSubagentBubbleEvent({
       toolCallId: 'task-call-1',
-      toolName: 'task',
+      toolName: 'task_submit',
       type: 'end',
       sequence: 2,
       timestamp: Date.now(),
@@ -196,7 +196,7 @@ describe('formatToolCallLine', () => {
   test('formats task start line without exposing long prompt json', () => {
     const result = formatToolCallLine({
       toolCallId: 'tool-call-1',
-      toolName: 'task',
+      toolName: 'task_submit',
       type: 'start',
       sequence: 1,
       timestamp: Date.now(),

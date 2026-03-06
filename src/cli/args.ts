@@ -27,6 +27,7 @@ export function parseCliArgs(argv: string[]): CliArgs {
     version: false,
     quiet: false,
     continueSession: false,
+    newSession: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -52,6 +53,9 @@ export function parseCliArgs(argv: string[]): CliArgs {
           break;
         case '--continue':
           parsed.continueSession = true;
+          break;
+        case '--new-session':
+          parsed.newSession = true;
           break;
         case '--resume': {
           const value = inlineValue ?? readValue(argv, i, name).value;
@@ -131,6 +135,10 @@ export function parseCliArgs(argv: string[]): CliArgs {
         parsed.continueSession = true;
         continue;
       }
+      if (short === 'n') {
+        parsed.newSession = true;
+        continue;
+      }
       if (short === 'r') {
         const { value, next } = readValue(argv, i, '-r');
         i = next;
@@ -151,6 +159,12 @@ export function parseCliArgs(argv: string[]): CliArgs {
 
   if (parsed.resume && parsed.continueSession) {
     throw new Error('Cannot use --resume and --continue together');
+  }
+  if (parsed.newSession && parsed.continueSession) {
+    throw new Error('Cannot use --new-session and --continue together');
+  }
+  if (parsed.newSession && parsed.resume) {
+    throw new Error('Cannot use --new-session and --resume together');
   }
 
   return parsed;
@@ -176,6 +190,7 @@ Options:
   -m, --model <id>                Set model id
   -r, --resume <session-id>       Resume a session
   -c, --continue                  Continue latest session
+  -n, --new-session               Start a new session
   --cwd <path>                    Working directory
   --system-prompt <text>          Override system prompt
   --append-system-prompt <text>   Append text to system prompt
@@ -188,6 +203,7 @@ Commands:
   config [show|set|unset]         Manage CLI config
   model [list|set <id>]           List/set model
   tool [list|enable|disable]      Manage tool toggles
+  task [help|tools|examples]      Task V2 workflow usage
   session [list|show|clear]       Session management
   log [session-id]                Print session history log
   workspace [list|add|remove|use] Workspace profiles

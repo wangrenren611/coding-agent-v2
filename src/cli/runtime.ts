@@ -19,13 +19,18 @@ import {
   GlobTool,
   GrepTool,
   SkillTool,
-  TaskCreateTool,
-  TaskGetTool,
-  TaskListTool,
-  TaskOutputTool,
-  TaskStopTool,
-  TaskTool,
-  TaskUpdateTool,
+  TaskV3ClearSessionTool,
+  TaskV3GcRunsTool,
+  TaskV3GetTool,
+  TaskV3ListTool,
+  TaskV3RunCancelTool,
+  TaskV3RunEventsTool,
+  TaskV3RunGetTool,
+  TaskV3RunWaitTool,
+  TaskV3Runtime,
+  TaskV3TasksTool,
+  TaskV3Tool,
+  TaskV3UpdateTool,
   ToolManager,
 } from '../tool';
 import type { ToolConfirmDecision, ToolConfirmRequest } from '../tool';
@@ -271,19 +276,65 @@ export class CliRuntime {
 
   createToolManager(): ToolManager {
     const manager = new ToolManager();
+    const taskRuntime = new TaskV3Runtime({
+      dbPath: path.join(this.baseCwd, '.agent-cli', 'tasks.db'),
+    });
     const tools = [
       new BashTool(),
       new FileTool({ allowedDirectories: [this.state.cwd] }),
       new GlobTool(),
       new GrepTool(),
       new SkillTool(),
-      new TaskTool({ workingDirectory: this.state.cwd }),
-      new TaskCreateTool(),
-      new TaskGetTool(),
-      new TaskListTool(),
-      new TaskUpdateTool(),
-      new TaskStopTool(),
-      new TaskOutputTool(),
+      new TaskV3Tool({
+        runtime: taskRuntime,
+        createSubagentToolManager: () => {
+          const subagentToolManager = new ToolManager();
+          subagentToolManager.register([
+            new BashTool(),
+            new FileTool({ allowedDirectories: [this.state.cwd] }),
+            new GlobTool(),
+            new GrepTool(),
+            new SkillTool(),
+          ]);
+          return subagentToolManager;
+        },
+      }),
+      new TaskV3TasksTool({
+        runtime: taskRuntime,
+        createSubagentToolManager: () => {
+          const subagentToolManager = new ToolManager();
+          subagentToolManager.register([
+            new BashTool(),
+            new FileTool({ allowedDirectories: [this.state.cwd] }),
+            new GlobTool(),
+            new GrepTool(),
+            new SkillTool(),
+          ]);
+          return subagentToolManager;
+        },
+      }),
+      new TaskV3GetTool({ runtime: taskRuntime }),
+      new TaskV3ListTool({ runtime: taskRuntime }),
+      new TaskV3UpdateTool({
+        runtime: taskRuntime,
+        createSubagentToolManager: () => {
+          const subagentToolManager = new ToolManager();
+          subagentToolManager.register([
+            new BashTool(),
+            new FileTool({ allowedDirectories: [this.state.cwd] }),
+            new GlobTool(),
+            new GrepTool(),
+            new SkillTool(),
+          ]);
+          return subagentToolManager;
+        },
+      }),
+      new TaskV3RunGetTool({ runtime: taskRuntime }),
+      new TaskV3RunWaitTool({ runtime: taskRuntime }),
+      new TaskV3RunCancelTool({ runtime: taskRuntime }),
+      new TaskV3RunEventsTool({ runtime: taskRuntime }),
+      new TaskV3ClearSessionTool({ runtime: taskRuntime }),
+      new TaskV3GcRunsTool({ runtime: taskRuntime }),
     ];
 
     for (const tool of tools) {
@@ -308,9 +359,12 @@ export class CliRuntime {
       'glob',
       'grep',
       'skill',
+      'task',
+      'tasks',
       'task_get',
       'task_list',
-      'task_output',
+      'task_run_get',
+      'task_run_events',
     ]);
     return autoApprove.has(request.toolName) ? 'approve' : 'deny';
   }

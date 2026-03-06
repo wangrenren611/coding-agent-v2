@@ -29,6 +29,7 @@ import {
   formatToolEndLines,
   formatToolOutputLines,
   formatToolOutputTailLines,
+  isTaskToolName,
   isSubagentBubbleEvent,
 } from './tool-activity';
 import type { ActivityLevel } from './types';
@@ -836,7 +837,7 @@ export function App(props: {
             updateMessage(id, (current) => `${current}${text}`);
           },
           onToolEvent: ({ event, messageId }) => {
-            if (event.toolName === 'task' && isSubagentBubbleEvent(event)) {
+            if (isTaskToolName(event.toolName) && isSubagentBubbleEvent(event)) {
               return;
             }
             if (messageId) {

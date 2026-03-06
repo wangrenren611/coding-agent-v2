@@ -5,6 +5,10 @@ function toRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
 }
 
+export function isTaskToolName(toolName: string): boolean {
+  return toolName === 'task' || toolName === 'tasks' || toolName.startsWith('task_');
+}
+
 export function isSubagentBubbleEvent(event: ToolStreamEvent): boolean {
   const data = toRecord(event.data);
   return data?.source === 'subagent';
@@ -128,7 +132,7 @@ export function formatToolCallLine(event: ToolStreamEvent): string {
     return formatFileCall(args);
   }
 
-  if (event.toolName === 'task') {
+  if (isTaskToolName(event.toolName)) {
     return formatTaskCall(args);
   }
 
@@ -417,7 +421,7 @@ export function formatToolEndLines(
     }
   }
 
-  if (event.toolName === 'task') {
+  if (isTaskToolName(event.toolName)) {
     const taskResultText = formatTaskToolResult(event.data);
     if (taskResultText) {
       const formatted = formatToolOutputLines(taskResultText, transcriptMode, 6);

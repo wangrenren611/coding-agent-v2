@@ -21,6 +21,21 @@ describe('parseCliArgs', () => {
     );
   });
 
+  it('throws when new-session conflicts with continue/resume', () => {
+    expect(() => parseCliArgs(['--new-session', '--continue'])).toThrow(
+      'Cannot use --new-session and --continue together'
+    );
+    expect(() => parseCliArgs(['--new-session', '--resume', 's1'])).toThrow(
+      'Cannot use --new-session and --resume together'
+    );
+  });
+
+  it('parses short new-session flag', () => {
+    const parsed = parseCliArgs(['-n', 'hello']);
+    expect(parsed.newSession).toBe(true);
+    expect(parsed.positional).toEqual(['hello']);
+  });
+
   it('supports tools json option', () => {
     const parsed = parseCliArgs(['--tools', '{"bash":false}']);
     expect(parsed.tools).toBe('{"bash":false}');
@@ -31,6 +46,11 @@ describe('detectCommand', () => {
   it('detects supported command', () => {
     const parsed = parseCliArgs(['session', 'list']);
     expect(detectCommand(parsed)).toBe('session');
+  });
+
+  it('detects task command', () => {
+    const parsed = parseCliArgs(['task', 'help']);
+    expect(detectCommand(parsed)).toBe('task');
   });
 
   it('returns undefined for prompt input', () => {
