@@ -846,6 +846,7 @@ export function App(props: {
   const runPrompt = useCallback(
     async (prompt: string) => {
       let assistantMessageId: string | null = null;
+      const streamedToolCallIds = new Set<string>();
       setErrorText(null);
 
       addMessage('user', prompt);
@@ -916,6 +917,7 @@ export function App(props: {
               ensureAssistantMessage('', messageId);
             }
             if (event.type === 'start') {
+              streamedToolCallIds.delete(event.toolCallId);
               setProcessingToolCalls((prev) => prev + 1);
               addActivity('tool', formatToolCallLine(event), {
                 kind: 'tool_call',
@@ -927,6 +929,7 @@ export function App(props: {
             }
 
             if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
+              streamedToolCallIds.add(event.toolCallId);
               const chunk = formatToolOutputLines(event.content, transcriptMode, 3);
               const level: ActivityLevel = event.type === 'stderr' ? 'error' : 'tool';
               const outputLines = [...chunk.lines];
@@ -958,6 +961,10 @@ export function App(props: {
             }
 
             if (event.type === 'end') {
+              if (event.toolName === 'bash' && streamedToolCallIds.has(event.toolCallId)) {
+                streamedToolCallIds.delete(event.toolCallId);
+                return;
+              }
               const endSummary = formatToolEndLines(event, transcriptMode);
               const endLines = [...endSummary.lines];
               if (endSummary.hiddenLineCount > 0) {
@@ -971,6 +978,7 @@ export function App(props: {
                   toolCallId: event.toolCallId,
                 });
               }
+              streamedToolCallIds.delete(event.toolCallId);
               return;
             }
 
@@ -1569,9 +1577,7 @@ export function App(props: {
 
       <QueueDisplay queuedMessages={queuedMessages} />
 
-      <BackgroundPrompt
-        queuedMessages={queuedMessages}
-      />
+      <BackgroundPrompt queuedMessages={queuedMessages} />
 
       <ChatInput
         input={input}
