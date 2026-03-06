@@ -132,11 +132,12 @@ export class Agent {
    *   - sessionId: 会话 ID
    *   - state: 完整的 Agent 状态副本
    */
-  private getHookContext(): HookContext {
+  private getHookContext(messageId?: string): HookContext {
     return {
       loopIndex: this.state.loopIndex,
       stepIndex: this.state.stepIndex,
       sessionId: this.sessionId,
+      messageId,
       state: { ...this.state },
     };
   }
@@ -729,7 +730,7 @@ export class Agent {
           memoryManager: this.config.memoryManager,
           onToolConfirm: this.config.onToolConfirm,
         },
-        getHookContext: () => this.getHookContext(),
+        getHookContext: (messageId) => this.getHookContext(messageId),
         getLLMMessages: () => this.getLLMMessages(),
         saveMessages: (startIndex) => this.saveMessages(startIndex),
         agentRef: this,
@@ -987,7 +988,7 @@ export class Agent {
       systemPrompt: this.config.systemPrompt,
       userContent,
       hookManager: this.hookManager,
-      getHookContext: () => this.getHookContext(),
+      getHookContext: (messageId) => this.getHookContext(messageId),
       createMessageId: () => crypto.randomUUID(),
     });
   }
@@ -1006,7 +1007,7 @@ export class Agent {
     return buildAgentUserMessage({
       userContent,
       hookManager: this.hookManager,
-      getHookContext: () => this.getHookContext(),
+      getHookContext: (messageId) => this.getHookContext(messageId),
       createMessageId: () => crypto.randomUUID(),
     });
   }
@@ -1090,7 +1091,7 @@ export class Agent {
       existingSessionPrompt,
       systemPrompt: this.config.systemPrompt,
       hookManager: this.hookManager,
-      getHookContext: () => this.getHookContext(),
+      getHookContext: (messageId) => this.getHookContext(messageId),
       createMessageId: () => crypto.randomUUID(),
     });
   }

@@ -94,7 +94,7 @@ export type StopHook = (
  * Text Delta Hook - 文本增量输出
  */
 export type TextDeltaHook = (
-  delta: { text: string; isReasoning?: boolean },
+  delta: { text: string; isReasoning?: boolean; messageId?: string },
   ctx: HookContext
 ) => void | Promise<void>;
 

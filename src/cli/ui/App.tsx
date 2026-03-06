@@ -1,7 +1,7 @@
-﻿import path from 'node:path';
+import path from 'node:path';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, useApp, useInput } from 'ink';
-import type { ToolConfirmDecision, ToolConfirmRequest, ToolStreamEvent } from '../../tool';
+import { Box, useApp, useInput } from 'ink';
+import type { ToolConfirmDecision, ToolConfirmRequest } from '../../tool';
 import { getSkillLoader, initializeSkillLoader } from '../../tool/skill';
 import { saveCliConfig } from '../config-store';
 import { createInkRenderer } from '../output';
@@ -16,7 +16,10 @@ import { QueueDisplay } from './QueueDisplay';
 import { TranscriptModeIndicator } from './TranscriptModeIndicator';
 import { Debug } from './Debug';
 import { ApprovalModal } from './ApprovalModal';
+import { BackgroundPrompt } from './BackgroundPrompt';
+import { ExitHint } from './ExitHint';
 import { buildPathIndex, searchPathIndex } from './path-search';
+import { mergeAssistantText, shouldStartNewAssistantMessage } from './assistant-text';
 import { matchSlashCommands } from './slash-commands';
 import {
   extractToolErrorLine,
@@ -24,6 +27,7 @@ import {
   formatToolCallLine,
   formatToolEndLines,
   formatToolOutputLines,
+  isSubagentBubbleEvent,
 } from './tool-activity';
 import type {
   ActivityEvent,
@@ -162,24 +166,6 @@ function getTabFileMatch(
   };
 }
 
-function HelpPanel({ binName }: { binName: string }) {
-  return (
-    <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
-      <Text color="gray">{binName} interactive mode (ink + neovate-style ui)</Text>
-      <Text color="gray">
-        /help /exit /quit /model /models /tool /tools /session /sessions /new /resume /history /log
-        /approval
-      </Text>
-      <Text color="gray">
-        /cwd /workspace /clear /stats /format /system /config /skill /panel /mode /debug /transcript
-      </Text>
-      <Text color="gray">
-        快捷键: Enter发送, Up/Down历史, Tab建议, Shift+Tab切换模式, Ctrl+R反向搜索, Ctrl+O转录模式
-      </Text>
-    </Box>
-  );
-}
-
 export function App(props: {
   runtime: CliRuntime;
   initialPrompt?: string;
@@ -188,7 +174,7 @@ export function App(props: {
   config: PersistedCliConfig;
 }) {
   const { exit } = useApp();
-  const { runtime, initialPrompt, binName, baseCwd, config } = props;
+  const { runtime, initialPrompt, baseCwd, config } = props;
 
   const [messages, setMessages] = useState<ChatLine[]>(() => [
     {
@@ -214,6 +200,7 @@ export function App(props: {
   const [totalTokens, setTotalTokens] = useState(0);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [confirmDecision, setConfirmDecision] = useState<ToolConfirmDecision>('approve');
   const [history, setHistory] = useState<string[]>([]);
   const [historyCursor, setHistoryCursor] = useState<number | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>('split');
@@ -229,7 +216,9 @@ export function App(props: {
   const [reverseSearchActive, setReverseSearchActive] = useState(false);
   const [reverseSearchQuery, setReverseSearchQuery] = useState('');
   const [reverseSearchIndex, setReverseSearchIndex] = useState(0);
+  const [exitRequested, setExitRequested] = useState(false);
   const booted = useRef(false);
+  const assistantLineByMessageIdRef = useRef<Map<string, string>>(new Map());
 
   const confirmQueueRef = useRef<
     Array<{ request: ToolConfirmRequest; resolve: (d: ToolConfirmDecision) => void }>
@@ -253,7 +242,7 @@ export function App(props: {
     (
       level: ActivityLevel,
       text: string,
-      extra?: Partial<Pick<ActivityEvent, 'kind' | 'indent' | 'toolCallId'>>
+      extra?: Partial<Pick<ActivityEvent, 'kind' | 'phase' | 'indent' | 'toolCallId'>>
     ) => {
       const normalized = text.trim();
       if (!normalized) {
@@ -270,6 +259,7 @@ export function App(props: {
             text: normalized,
             time: nowTime(),
             kind: extra?.kind,
+            phase: extra?.phase,
             indent: extra?.indent,
             toolCallId: extra?.toolCallId,
           },
@@ -355,6 +345,7 @@ export function App(props: {
       return;
     }
     pendingConfirmRef.current = next;
+    setConfirmDecision('approve');
     setPendingConfirm({ request: next.request });
   }, []);
 
@@ -367,23 +358,18 @@ export function App(props: {
       current.resolve(decision);
       pendingConfirmRef.current = null;
       setPendingConfirm(null);
-      addActivity(
-        'warn',
-        `tool ${decision === 'approve' ? 'approved' : 'denied'}: ${current.request.toolName}`
-      );
       pumpConfirmQueue();
     },
-    [addActivity, pumpConfirmQueue]
+    [pumpConfirmQueue]
   );
 
   const enqueueConfirmRequest = useCallback(
     (request: ToolConfirmRequest): Promise<ToolConfirmDecision> =>
       new Promise<ToolConfirmDecision>((resolve) => {
         confirmQueueRef.current.push({ request, resolve });
-        addActivity('warn', `approval requested: ${request.toolName}`);
         pumpConfirmQueue();
       }),
-    [addActivity, pumpConfirmQueue]
+    [pumpConfirmQueue]
   );
 
   const executeWorkspaceSlash = useCallback(
@@ -607,7 +593,7 @@ export function App(props: {
 
       if (command === 'exit' || command === 'quit') {
         setStatus('exit');
-        exit();
+        setExitRequested(true);
         return;
       }
 
@@ -868,36 +854,72 @@ export function App(props: {
       setProcessingStartTime(Date.now());
       setProcessingToolCalls(0);
 
-      const ensureAssistantMessage = (initialText = ''): string => {
+      const ensureAssistantMessage = (initialText = '', messageId?: string): string => {
+        if (messageId) {
+          const mapped = assistantLineByMessageIdRef.current.get(messageId);
+          if (mapped) {
+            assistantMessageId = mapped;
+            return mapped;
+          }
+        }
+
         if (assistantMessageId) {
+          if (messageId) {
+            assistantLineByMessageIdRef.current.set(messageId, assistantMessageId);
+            setMessages((prev) =>
+              prev.map((item) =>
+                item.id === assistantMessageId && !item.sourceMessageId
+                  ? {
+                      ...item,
+                      sourceMessageId: messageId,
+                    }
+                  : item
+              )
+            );
+          }
           return assistantMessageId;
         }
-        const id = createId();
+        const id = messageId ?? createId();
         const seq = nextTimelineSeq();
         assistantMessageId = id;
-        setMessages((prev) => [...prev, { id, seq, role: 'assistant', text: initialText }]);
+        if (messageId) {
+          assistantLineByMessageIdRef.current.set(messageId, id);
+        }
+        setMessages((prev) => [
+          ...prev,
+          {
+            id,
+            seq,
+            role: 'assistant',
+            text: initialText,
+            sourceMessageId: messageId,
+          },
+        ]);
         return id;
       };
 
       try {
         const renderer = createInkRenderer({
-          onTextDelta: ({ text }) => {
+          onTextDelta: ({ text, messageId }) => {
             if (!text) {
               return;
             }
             setTotalTokens((prev) => prev + approxTokens(text));
-            if (!assistantMessageId) {
-              ensureAssistantMessage(text);
-              return;
-            }
-            const id = ensureAssistantMessage();
+            const id = ensureAssistantMessage('', messageId);
             updateMessage(id, (current) => `${current}${text}`);
           },
-          onToolEvent: (event: ToolStreamEvent) => {
+          onToolEvent: ({ event, messageId }) => {
+            if (event.toolName === 'task' && isSubagentBubbleEvent(event)) {
+              return;
+            }
+            if (messageId) {
+              ensureAssistantMessage('', messageId);
+            }
             if (event.type === 'start') {
               setProcessingToolCalls((prev) => prev + 1);
               addActivity('tool', formatToolCallLine(event), {
                 kind: 'tool_call',
+                phase: 'start',
                 indent: 0,
                 toolCallId: event.toolCallId,
               });
@@ -907,16 +929,14 @@ export function App(props: {
             if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
               const chunk = formatToolOutputLines(event.content, transcriptMode, 3);
               const level: ActivityLevel = event.type === 'stderr' ? 'error' : 'tool';
-              for (const line of chunk.lines) {
-                addActivity(level, line, {
-                  kind: 'tool_output',
-                  indent: 1,
-                  toolCallId: event.toolCallId,
-                });
-              }
+              const outputLines = [...chunk.lines];
               if (chunk.hiddenLineCount > 0) {
-                addActivity('tool', `... +${chunk.hiddenLineCount} lines (ctrl+o to expand)`, {
+                outputLines.push(`… +${chunk.hiddenLineCount} lines (ctrl+o to expand)`);
+              }
+              if (outputLines.length > 0) {
+                addActivity(level, outputLines.join('\n'), {
                   kind: 'tool_output',
+                  phase: 'stream',
                   indent: 1,
                   toolCallId: event.toolCallId,
                 });
@@ -929,6 +949,7 @@ export function App(props: {
               if (line) {
                 addActivity('error', line, {
                   kind: 'tool_output',
+                  phase: 'error',
                   indent: 1,
                   toolCallId: event.toolCallId,
                 });
@@ -938,16 +959,14 @@ export function App(props: {
 
             if (event.type === 'end') {
               const endSummary = formatToolEndLines(event, transcriptMode);
-              for (const line of endSummary.lines) {
-                addActivity('tool', line, {
-                  kind: 'tool_output',
-                  indent: 1,
-                  toolCallId: event.toolCallId,
-                });
-              }
+              const endLines = [...endSummary.lines];
               if (endSummary.hiddenLineCount > 0) {
-                addActivity('tool', `... +${endSummary.hiddenLineCount} lines (ctrl+o to expand)`, {
+                endLines.push(`… +${endSummary.hiddenLineCount} lines (ctrl+o to expand)`);
+              }
+              if (endLines.length > 0) {
+                addActivity('tool', endLines.join('\n'), {
                   kind: 'tool_output',
+                  phase: 'end',
                   indent: 1,
                   toolCallId: event.toolCallId,
                 });
@@ -957,9 +976,18 @@ export function App(props: {
 
             addActivity('tool', formatGenericToolEventLine(event), {
               kind: 'tool_output',
+              phase: 'info',
               indent: 1,
               toolCallId: event.toolCallId,
             });
+          },
+          onStep: (step) => {
+            if (step.messageId) {
+              ensureAssistantMessage('', step.messageId);
+            }
+            if (shouldStartNewAssistantMessage(step)) {
+              assistantMessageId = null;
+            }
           },
           onResult: (result) => {
             const resultText = result.text?.trim() ?? '';
@@ -971,7 +999,7 @@ export function App(props: {
             if (!hadAssistantMessage) {
               return;
             }
-            updateMessage(id, (current) => (current.trim().length > 0 ? current : resultText));
+            updateMessage(id, (current) => mergeAssistantText(current, resultText));
           },
         });
 
@@ -1047,7 +1075,7 @@ export function App(props: {
 
   useEffect(() => {
     setSelectedSuggestionIndex(0);
-  }, [suggestions.length]);
+  }, [suggestions]);
 
   const reverseSearchMatches = useMemo(() => {
     const base = [...history].reverse();
@@ -1148,7 +1176,7 @@ export function App(props: {
   );
 
   useEffect(() => {
-    if (running || pendingConfirmRef.current || queuedMessages.length === 0) {
+    if (running || pendingConfirm !== null || queuedMessages.length === 0) {
       return;
     }
 
@@ -1159,7 +1187,7 @@ export function App(props: {
 
     setQueuedMessages(rest);
     void submitInput(next);
-  }, [queuedMessages, running, submitInput]);
+  }, [pendingConfirm, queuedMessages, running, submitInput]);
 
   useEffect(() => {
     let canceled = false;
@@ -1210,14 +1238,39 @@ export function App(props: {
     }
   }, [initialPrompt, submitInput]);
 
+  useEffect(() => {
+    if (!exitRequested) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      exit();
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [exit, exitRequested]);
+
   useInput((value, key) => {
     if (pendingConfirmRef.current) {
+      if (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow) {
+        setConfirmDecision((prev) => (prev === 'approve' ? 'deny' : 'approve'));
+        return;
+      }
       if (value.toLowerCase() === 'y') {
+        setConfirmDecision('approve');
         resolvePendingConfirm('approve');
         return;
       }
-      if (value.toLowerCase() === 'n' || key.return) {
+      if (value.toLowerCase() === 'n') {
+        setConfirmDecision('deny');
         resolvePendingConfirm('deny');
+        return;
+      }
+      if (key.escape) {
+        setConfirmDecision('deny');
+        resolvePendingConfirm('deny');
+        return;
+      }
+      if (key.return) {
+        resolvePendingConfirm(confirmDecision);
         return;
       }
       return;
@@ -1225,7 +1278,7 @@ export function App(props: {
 
     if (key.ctrl && value.toLowerCase() === 'c') {
       setStatus('exit');
-      exit();
+      setExitRequested(true);
       return;
     }
 
@@ -1472,41 +1525,35 @@ export function App(props: {
   });
 
   const spinner = ['|', '/', '-', '\\'][tick];
-  const visibleMessages = useMemo(
-    () => messages.slice(transcriptMode ? -120 : -48),
-    [messages, transcriptMode]
-  );
-  const visibleActivities = useMemo(
-    () => activities.slice(transcriptMode ? -120 : -48),
-    [activities, transcriptMode]
-  );
   const historyCount = runtime.getSessionHistory(runtime.state.sessionId).length;
 
   return (
     <Box flexDirection="column">
-      <HelpPanel binName={binName} />
       <TranscriptModeIndicator transcriptMode={transcriptMode} />
 
-      <StatusLine
-        running={running}
-        approvalPending={pendingConfirm !== null}
-        spinner={spinner}
-        modelId={runtime.state.modelId}
-        sessionId={runtime.state.sessionId}
-        cwd={runtime.state.cwd}
-        approvalMode={runtime.state.approvalMode}
-        panelMode={panelMode}
-        outputFormat={runtime.state.outputFormat}
-        historyCount={historyCount}
-        messageCount={messages.length}
-        activityCount={activities.length}
-      />
+      {running || pendingConfirm !== null || status === 'failed' ? (
+        <StatusLine
+          running={running}
+          approvalPending={pendingConfirm !== null}
+          spinner={spinner}
+          modelId={runtime.state.modelId}
+          sessionId={runtime.state.sessionId}
+          cwd={runtime.state.cwd}
+          approvalMode={runtime.state.approvalMode}
+          panelMode={panelMode}
+          outputFormat={runtime.state.outputFormat}
+          historyCount={historyCount}
+          messageCount={messages.length}
+          activityCount={activities.length}
+        />
+      ) : null}
 
       <Messages
-        messages={visibleMessages}
-        activities={visibleActivities}
+        messages={messages}
+        activities={activities}
         panelMode={panelMode}
         transcriptMode={transcriptMode}
+        maxTimelineItems={transcriptMode ? 240 : 96}
       />
 
       <ActivityIndicator
@@ -1521,6 +1568,10 @@ export function App(props: {
       />
 
       <QueueDisplay queuedMessages={queuedMessages} />
+
+      <BackgroundPrompt
+        queuedMessages={queuedMessages}
+      />
 
       <ChatInput
         input={input}
@@ -1538,7 +1589,15 @@ export function App(props: {
 
       <Debug enabled={debugMode} logs={debugLogs} />
 
-      <ApprovalModal pendingConfirm={pendingConfirm} input={input} denyInputMode={false} />
+      <ExitHint
+        status={status}
+        cwd={runtime.state.cwd}
+        modelId={runtime.state.modelId}
+        sessionId={runtime.state.sessionId}
+        totalTokens={totalTokens}
+      />
+
+      <ApprovalModal pendingConfirm={pendingConfirm} selectedDecision={confirmDecision} />
     </Box>
   );
 }

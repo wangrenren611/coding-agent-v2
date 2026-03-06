@@ -40,7 +40,7 @@ export interface ExecuteAgentStepOptions {
   hookManager: HookManager;
   logger?: Logger;
   config: StepRunnerConfig;
-  getHookContext: () => HookContext;
+  getHookContext: (messageId?: string) => HookContext;
   getLLMMessages: () => LLMRequestMessage[];
   saveMessages: (startIndex: number) => Promise<void>;
   agentRef: import('../agent').Agent;
@@ -90,7 +90,6 @@ export async function executeAgentStep(
 async function processStreamChunk(deps: ExecuteAgentStepOptions, chunk: Chunk): Promise<void> {
   const choice = chunk.choices?.[0];
   const delta = choice?.delta;
-  const ctx = deps.getHookContext();
   const streamMessage = await ensureInProgressAssistantMessage({
     state: deps.persistenceState,
     messages: deps.messages,
@@ -109,16 +108,27 @@ async function processStreamChunk(deps: ExecuteAgentStepOptions, chunk: Chunk): 
     logger: deps.logger,
     stepIndex: deps.state.stepIndex,
   });
+  const ctx = deps.getHookContext(streamMessage?.messageId);
 
   if (delta?.content && typeof delta.content === 'string') {
     deps.state.currentText += delta.content;
-    await deps.hookManager.executeTextDeltaHooks({ text: delta.content }, ctx);
+    await deps.hookManager.executeTextDeltaHooks(
+      {
+        text: delta.content,
+        messageId: streamMessage?.messageId,
+      },
+      ctx
+    );
   }
 
   if (delta?.reasoning_content) {
     deps.setCurrentReasoningContent(deps.getCurrentReasoningContent() + delta.reasoning_content);
     await deps.hookManager.executeTextDeltaHooks(
-      { text: delta.reasoning_content, isReasoning: true },
+      {
+        text: delta.reasoning_content,
+        isReasoning: true,
+        messageId: streamMessage?.messageId,
+      },
       ctx
     );
   }
@@ -171,7 +181,9 @@ async function finalizeStep(
   rawChunks: Chunk[],
   finishReason: FinishReason
 ): Promise<void> {
-  const ctx = deps.getHookContext();
+  const existingAssistantMessage = getInProgressAssistantMessage(deps.messages, deps.persistenceState);
+  const assistantMessageId = existingAssistantMessage?.messageId ?? crypto.randomUUID();
+  const ctx = deps.getHookContext(assistantMessageId);
 
   if (deps.state.currentText) {
     await deps.hookManager.executeTextCompleteHooks(deps.state.currentText, ctx);
@@ -241,10 +253,10 @@ async function finalizeStep(
   };
   deps.steps.push(stepResult);
 
-  let assistantMessage = getInProgressAssistantMessage(deps.messages, deps.persistenceState);
+  let assistantMessage = existingAssistantMessage;
   if (!assistantMessage) {
     assistantMessage = {
-      messageId: crypto.randomUUID(),
+      messageId: assistantMessageId,
       role: 'assistant',
       content: deps.state.currentText || '',
       reasoning_content: deps.getCurrentReasoningContent() || undefined,
@@ -254,6 +266,7 @@ async function finalizeStep(
       usage: { ...deps.state.stepUsage },
     };
     deps.messages.push(assistantMessage);
+    deps.persistenceState.inProgressAssistantMessageId = assistantMessage.messageId;
   } else {
     assistantMessage.content = deps.state.currentText || '';
     assistantMessage.reasoning_content = deps.getCurrentReasoningContent() || undefined;

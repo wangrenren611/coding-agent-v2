@@ -4,6 +4,11 @@ function toRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
 }
 
+export function isSubagentBubbleEvent(event: ToolStreamEvent): boolean {
+  const data = toRecord(event.data);
+  return data?.source === 'subagent';
+}
+
 function safeJson(value: unknown): string {
   try {
     return JSON.stringify(value);
@@ -126,7 +131,7 @@ export function formatToolOutputLines(
 
   const visible = transcriptMode ? lines : lines.slice(0, maxLines);
   return {
-    lines: visible.map((line) => `> ${truncate(line, 320)}`),
+    lines: visible.map((line) => truncate(line, 320)),
     hiddenLineCount: transcriptMode ? 0 : Math.max(0, lines.length - visible.length),
   };
 }
@@ -187,9 +192,9 @@ function extractResultText(data: unknown): string {
   }
   if (typeof payload?.content === 'string' && payload.content.trim()) {
     return payload.content.trim();
-    if (payload) {
-      return safeJson(payload);
-    }
+  }
+  if (payload) {
+    return safeJson(payload);
   }
 
   const metadata = toRecord(result.metadata);
@@ -198,6 +203,23 @@ function extractResultText(data: unknown): string {
   }
 
   return '';
+}
+
+function shouldSuppressEmptyBashSuccess(event: ToolStreamEvent): boolean {
+  if (event.toolName !== 'bash') {
+    return false;
+  }
+  const result = getResultRecord(event.data);
+  if (!result || result.success !== true) {
+    return false;
+  }
+  const payload = toRecord(result.data);
+  if (!payload) {
+    return false;
+  }
+  const output = typeof payload.output === 'string' ? payload.output.trim() : '';
+  const content = typeof payload.content === 'string' ? payload.content.trim() : '';
+  return output.length === 0 && content.length === 0;
 }
 
 export function extractToolErrorLine(event: ToolStreamEvent): string | null {
@@ -245,6 +267,10 @@ export function formatToolEndLines(
     if (errorLine && !resultLines.includes(errorLine)) {
       resultLines.push(errorLine);
     }
+    return { lines: resultLines, hiddenLineCount: 0 };
+  }
+
+  if (shouldSuppressEmptyBashSuccess(event)) {
     return { lines: resultLines, hiddenLineCount: 0 };
   }
 

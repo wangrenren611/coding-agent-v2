@@ -75,10 +75,6 @@ export async function ensureInProgressAssistantMessage(options: {
     stepIndex,
   } = options;
 
-  if (!memoryManager) {
-    return undefined;
-  }
-
   const existing = getInProgressAssistantMessage(messages, state);
   if (existing) {
     return existing;
@@ -100,6 +96,10 @@ export async function ensureInProgressAssistantMessage(options: {
   messages.push(assistantMessage);
   state.inProgressAssistantMessageId = assistantMessage.messageId;
   state.inProgressAssistantPersisted = false;
+
+  if (!memoryManager) {
+    return assistantMessage;
+  }
 
   try {
     await memoryManager.addMessages(sessionId, [assistantMessage]);

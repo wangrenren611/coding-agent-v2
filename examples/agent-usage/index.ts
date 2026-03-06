@@ -24,6 +24,7 @@ import {
   type ToolConfirmDecision,
   type ToolConfirmRequest,
 } from '../../src/tool/index.ts';
+import { buildSystemPrompt } from '../../src/prompts/system.ts';
 
 const DEFAULT_MODEL: ModelId = 'glm-4.7';
 const DEFAULT_PROMPT = '初始化一个 Node.js + TypeScript + Vitest 项目，给出执行步骤。';
@@ -259,7 +260,7 @@ async function main(): Promise<void> {
       memoryManager,
       logger,
       sessionId,
-      systemPrompt: 'You are a practical coding assistant. Respond in Chinese with concise steps.',
+      systemPrompt: buildSystemPrompt({ directory: process.cwd() }),
       maxSteps,
       plugins: [createConsoleStreamPlugin()],
       onToolConfirm: confirmToolExecution,

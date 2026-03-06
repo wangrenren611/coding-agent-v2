@@ -1,4 +1,4 @@
-﻿import { Box, Text } from 'ink';
+import { Box, Text } from 'ink';
 import type { AppStatus } from './types';
 
 export function ActivityIndicator(props: {
@@ -52,9 +52,5 @@ export function ActivityIndicator(props: {
     );
   }
 
-  return (
-    <Box marginTop={1}>
-      <Text color="gray">idle | tokens~{totalTokens}</Text>
-    </Box>
-  );
+  return null;
 }

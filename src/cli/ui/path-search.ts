@@ -1,5 +1,6 @@
-﻿import path from 'node:path';
+import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { sortFilePaths } from './sortFilePaths';
 
 const IGNORED_DIRS = new Set([
   '.git',
@@ -63,12 +64,9 @@ export async function buildPathIndex(cwd: string, maxItems = 6000): Promise<stri
 export function searchPathIndex(index: string[], query: string, maxResults = 40): string[] {
   const q = query.trim().toLowerCase();
   if (!q) {
-    return index.slice(0, maxResults);
+    return sortFilePaths(index, '').slice(0, maxResults);
   }
 
-  const starts = index.filter((item) => item.toLowerCase().startsWith(q));
-  const includes = index.filter(
-    (item) => !item.toLowerCase().startsWith(q) && item.toLowerCase().includes(q)
-  );
-  return [...starts, ...includes].slice(0, maxResults);
+  const matched = index.filter((item) => item.toLowerCase().includes(q));
+  return sortFilePaths(matched, query).slice(0, maxResults);
 }

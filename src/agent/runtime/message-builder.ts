@@ -10,7 +10,7 @@ interface PromptHookExecutor {
 
 interface BuildMessageBaseOptions {
   hookManager: PromptHookExecutor;
-  getHookContext: () => HookContext;
+  getHookContext: (messageId?: string) => HookContext;
   createMessageId?: () => string;
 }
 
@@ -25,7 +25,8 @@ export async function buildUserMessage(
     getHookContext,
     createMessageId = () => crypto.randomUUID(),
   } = options;
-  const ctx = getHookContext();
+  const messageId = createMessageId();
+  const ctx = getHookContext(messageId);
   let processedUserContent = userContent;
   if (typeof processedUserContent === 'string') {
     processedUserContent = await hookManager.executeUserPromptHooks(processedUserContent, ctx);
@@ -43,7 +44,7 @@ export async function buildUserMessage(
   }
 
   return {
-    messageId: createMessageId(),
+    messageId,
     role: 'user',
     content: processedUserContent,
   };
@@ -63,12 +64,13 @@ export async function buildInitialMessages(
     createMessageId = () => crypto.randomUUID(),
   } = options;
   const messages: Message[] = [];
-  const ctx = getHookContext();
 
   if (systemPrompt) {
+    const systemMessageId = createMessageId();
+    const ctx = getHookContext(systemMessageId);
     const processedSystemPrompt = await hookManager.executeSystemPromptHooks(systemPrompt, ctx);
     messages.push({
-      messageId: createMessageId(),
+      messageId: systemMessageId,
       role: 'system',
       content: processedSystemPrompt,
     });
@@ -112,17 +114,24 @@ export async function ensureSystemMessageForExistingSession(
   }
 
   let prompt = existingSessionPrompt;
+  let resolvedMessageId: string | undefined;
   if (!prompt && systemPrompt) {
-    prompt = await hookManager.executeSystemPromptHooks(systemPrompt, getHookContext());
+    resolvedMessageId = createMessageId();
+    prompt = await hookManager.executeSystemPromptHooks(
+      systemPrompt,
+      getHookContext(resolvedMessageId)
+    );
   }
 
   if (!prompt) {
     return messages;
   }
 
+  const messageId = resolvedMessageId ?? createMessageId();
+
   return [
     {
-      messageId: createMessageId(),
+      messageId,
       role: 'system',
       content: prompt,
     },

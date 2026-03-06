@@ -28,22 +28,32 @@ function printToolEventReadable(event: ToolStreamEvent): void {
 }
 
 export interface InkRendererCallbacks {
-  onTextDelta?: (payload: { text: string; isReasoning: boolean }) => void;
-  onToolEvent?: (event: ToolStreamEvent) => void;
+  onTextDelta?: (payload: { text: string; isReasoning: boolean; messageId?: string }) => void;
+  onToolEvent?: (payload: { event: ToolStreamEvent; messageId?: string }) => void;
+  onStep?: (step: {
+    stepIndex: number;
+    finishReason?: string;
+    toolCallsCount: number;
+    messageId?: string;
+  }) => void;
   onResult?: (result: AgentResult) => void;
 }
 
 export function createInkRenderer(callbacks: InkRendererCallbacks): RunRenderer {
   const plugin: Plugin = {
     name: 'cli-ink-renderer',
-    textDelta: ({ text, isReasoning }) => {
+    textDelta: ({ text, isReasoning, messageId }) => {
       callbacks.onTextDelta?.({
         text,
         isReasoning: isReasoning === true,
+        messageId,
       });
     },
-    toolStream: (event) => {
-      callbacks.onToolEvent?.(event);
+    toolStream: (event, ctx) => {
+      callbacks.onToolEvent?.({ event, messageId: ctx.messageId });
+    },
+    step: (step, ctx) => {
+      callbacks.onStep?.({ ...step, messageId: ctx.messageId });
     },
   };
 

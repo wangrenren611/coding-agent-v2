@@ -1,8 +1,9 @@
-﻿import type { ToolConfirmRequest } from '../../tool';
+import type { ToolConfirmRequest } from '../../tool';
 
 export type ChatRole = 'system' | 'user' | 'assistant';
 export type ActivityLevel = 'info' | 'warn' | 'error' | 'tool';
 export type ActivityKind = 'log' | 'tool_call' | 'tool_output';
+export type ActivityPhase = 'start' | 'stream' | 'end' | 'error' | 'info';
 export type PanelMode = 'split' | 'conversation' | 'activity';
 export type InputMode = 'prompt' | 'bash' | 'memory' | 'plan' | 'brainstorm';
 export type AppStatus = 'idle' | 'processing' | 'failed' | 'exit';
@@ -12,6 +13,8 @@ export interface ChatLine {
   seq: number;
   role: ChatRole;
   text: string;
+  sourceMessageId?: string;
+  sourceSequence?: number;
 }
 
 export interface ActivityEvent {
@@ -21,6 +24,7 @@ export interface ActivityEvent {
   text: string;
   time: string;
   kind?: ActivityKind;
+  phase?: ActivityPhase;
   indent?: number;
   toolCallId?: string;
 }
@@ -35,3 +39,7 @@ export interface SuggestionItem {
   title: string;
   description?: string;
 }
+
+export type TimelineItem =
+  | { kind: 'message'; seq: number; message: ChatLine }
+  | { kind: 'activity'; seq: number; activity: ActivityEvent };

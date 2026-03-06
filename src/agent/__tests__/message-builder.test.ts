@@ -28,6 +28,10 @@ const mockContext: HookContext = {
   },
 };
 
+function getHookContext(messageId?: string): HookContext {
+  return { ...mockContext, messageId };
+}
+
 function createHookManager() {
   return {
     executeSystemPromptHooks: vi.fn(async (prompt: string) => `[SYS] ${prompt}`),
@@ -41,7 +45,7 @@ describe('message-builder runtime helpers', () => {
     const message = await buildUserMessage({
       userContent: 'hello',
       hookManager,
-      getHookContext: () => mockContext,
+      getHookContext,
       createMessageId: () => 'u1',
     });
 
@@ -50,6 +54,10 @@ describe('message-builder runtime helpers', () => {
       role: 'user',
       content: '[USR] hello',
     });
+    expect(hookManager.executeUserPromptHooks).toHaveBeenCalledWith(
+      'hello',
+      expect.objectContaining({ messageId: 'u1' })
+    );
   });
 
   it('buildUserMessage should process only text parts in multimodal content', async () => {
@@ -62,7 +70,7 @@ describe('message-builder runtime helpers', () => {
     const message = await buildUserMessage({
       userContent: content,
       hookManager,
-      getHookContext: () => mockContext,
+      getHookContext,
       createMessageId: () => 'u2',
     });
 
@@ -71,6 +79,16 @@ describe('message-builder runtime helpers', () => {
       { type: 'image_url', image_url: { url: 'https://example.com/a.png' } },
       { type: 'text', text: '[USR] b' },
     ]);
+    expect(hookManager.executeUserPromptHooks).toHaveBeenNthCalledWith(
+      1,
+      'a',
+      expect.objectContaining({ messageId: 'u2' })
+    );
+    expect(hookManager.executeUserPromptHooks).toHaveBeenNthCalledWith(
+      2,
+      'b',
+      expect.objectContaining({ messageId: 'u2' })
+    );
   });
 
   it('buildInitialMessages should include hooked system prompt and user message', async () => {
@@ -79,7 +97,7 @@ describe('message-builder runtime helpers', () => {
       systemPrompt: 'base system',
       userContent: 'hello',
       hookManager,
-      getHookContext: () => mockContext,
+      getHookContext,
       createMessageId: (() => {
         let i = 0;
         return () => `m${++i}`;
@@ -90,6 +108,14 @@ describe('message-builder runtime helpers', () => {
       { messageId: 'm1', role: 'system', content: '[SYS] base system' },
       { messageId: 'm2', role: 'user', content: '[USR] hello' },
     ]);
+    expect(hookManager.executeSystemPromptHooks).toHaveBeenCalledWith(
+      'base system',
+      expect.objectContaining({ messageId: 'm1' })
+    );
+    expect(hookManager.executeUserPromptHooks).toHaveBeenCalledWith(
+      'hello',
+      expect.objectContaining({ messageId: 'm2' })
+    );
   });
 
   it('ensureSystemMessageForExistingSession should keep messages when system already exists', async () => {
@@ -104,7 +130,7 @@ describe('message-builder runtime helpers', () => {
       existingSessionPrompt: 'session prompt',
       systemPrompt: 'config prompt',
       hookManager,
-      getHookContext: () => mockContext,
+      getHookContext,
       createMessageId: () => 's2',
     });
 
@@ -120,7 +146,7 @@ describe('message-builder runtime helpers', () => {
       existingSessionPrompt: 'session prompt',
       systemPrompt: 'config prompt',
       hookManager,
-      getHookContext: () => mockContext,
+      getHookContext,
       createMessageId: () => 's2',
     });
 
@@ -128,6 +154,29 @@ describe('message-builder runtime helpers', () => {
       { messageId: 's2', role: 'system', content: 'session prompt' },
       { messageId: 'u1', role: 'user', content: 'hello' },
     ]);
+  });
+
+  it('ensureSystemMessageForExistingSession should pass messageId to system hook when fallbacking', async () => {
+    const hookManager = createHookManager();
+    const messages = [{ messageId: 'u1', role: 'user' as const, content: 'hello' }];
+
+    const next = await ensureSystemMessageForExistingSession({
+      messages,
+      existingSessionPrompt: undefined,
+      systemPrompt: 'config prompt',
+      hookManager,
+      getHookContext,
+      createMessageId: () => 's2',
+    });
+
+    expect(next).toEqual([
+      { messageId: 's2', role: 'system', content: '[SYS] config prompt' },
+      { messageId: 'u1', role: 'user', content: 'hello' },
+    ]);
+    expect(hookManager.executeSystemPromptHooks).toHaveBeenCalledWith(
+      'config prompt',
+      expect.objectContaining({ messageId: 's2' })
+    );
   });
 
   it('extractSystemPrompt should return text content', () => {

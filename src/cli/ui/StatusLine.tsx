@@ -1,4 +1,4 @@
-﻿import { Box, Text } from 'ink';
+import { Box, Text } from 'ink';
 
 export function StatusLine(props: {
   running: boolean;
@@ -30,19 +30,16 @@ export function StatusLine(props: {
   } = props;
 
   const stateText = running ? `${spinner} running` : approvalPending ? 'approval pending' : 'idle';
-  const color = running || approvalPending ? 'yellow' : 'green';
+  const color = running || approvalPending ? 'yellow' : 'gray';
 
   return (
-    <Box marginTop={1} flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
+    <Box marginTop={1} flexDirection="column">
       <Text color={color}>
         {stateText} | model={modelId} | session={sessionId} | approval={approvalMode}
       </Text>
       <Text color="gray">
         cwd={cwd} | view={panelMode} | format={outputFormat} | history={historyCount} | messages=
         {messageCount} | activities={activityCount}
-      </Text>
-      <Text color="gray">
-        Ctrl+R reverse-search | Shift+Tab mode | Ctrl+O transcript | Ctrl+L clear
       </Text>
     </Box>
   );

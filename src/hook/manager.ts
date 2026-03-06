@@ -226,7 +226,7 @@ export class HookManager {
    * 执行 textDelta hooks（通知类型）
    */
   async executeTextDeltaHooks(
-    delta: { text: string; isReasoning?: boolean },
+    delta: { text: string; isReasoning?: boolean; messageId?: string },
     ctx: HookContext
   ): Promise<void> {
     await this.executeSeries('textDelta', (plugin) => plugin.textDelta, delta, ctx);

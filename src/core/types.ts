@@ -203,6 +203,8 @@ export interface HookContext {
   stepIndex: number;
   /** 会话 ID */
   sessionId: string;
+  /** 当前 hook 对应的消息 ID（如果有） */
+  messageId?: string;
   /** Agent 状态 */
   state: AgentLoopState;
 }
