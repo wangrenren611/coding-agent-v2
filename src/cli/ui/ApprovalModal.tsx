@@ -2,7 +2,10 @@
 import type { ToolConfirmDecision } from '../../tool';
 import type { PendingConfirm } from './types';
 
-function formatArgs(args: Record<string, unknown>, maxLines = 10): { lines: string[]; truncated: boolean } {
+function formatArgs(
+  args: Record<string, unknown>,
+  maxLines = 10
+): { lines: string[]; truncated: boolean } {
   const text = JSON.stringify(args, null, 2) ?? '{}';
   const lines = text.split('\n');
   if (lines.length <= maxLines) {

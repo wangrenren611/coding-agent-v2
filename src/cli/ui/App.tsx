@@ -27,6 +27,7 @@ import {
   formatToolCallLine,
   formatToolEndLines,
   formatToolOutputLines,
+  formatToolOutputTailLines,
   isSubagentBubbleEvent,
 } from './tool-activity';
 import type {
@@ -846,7 +847,10 @@ export function App(props: {
   const runPrompt = useCallback(
     async (prompt: string) => {
       let assistantMessageId: string | null = null;
-      const streamedToolCallIds = new Set<string>();
+      const bufferedBashOutputByToolCallId = new Map<
+        string,
+        { content: string; hasStderr: boolean; activityId?: string }
+      >();
       setErrorText(null);
 
       addMessage('user', prompt);
@@ -899,6 +903,56 @@ export function App(props: {
         return id;
       };
 
+      const upsertBufferedBashOutputActivity = (
+        toolCallId: string,
+        level: ActivityLevel,
+        text: string,
+        phase: 'stream' | 'end' | 'error'
+      ): void => {
+        const buffered = bufferedBashOutputByToolCallId.get(toolCallId);
+        const existingId = buffered?.activityId;
+
+        if (existingId) {
+          setActivities((prev) =>
+            prev.map((item) =>
+              item.id === existingId
+                ? {
+                    ...item,
+                    level,
+                    text,
+                    phase,
+                  }
+                : item
+            )
+          );
+          return;
+        }
+
+        const id = createId();
+        const seq = nextTimelineSeq();
+        bufferedBashOutputByToolCallId.set(toolCallId, {
+          content: buffered?.content ?? '',
+          hasStderr: buffered?.hasStderr ?? false,
+          activityId: id,
+        });
+        setActivities((prev) =>
+          [
+            ...prev,
+            {
+              id,
+              seq,
+              level,
+              text,
+              time: nowTime(),
+              kind: 'tool_output' as const,
+              phase,
+              indent: 1,
+              toolCallId,
+            },
+          ].slice(-120)
+        );
+      };
+
       try {
         const renderer = createInkRenderer({
           onTextDelta: ({ text, messageId }) => {
@@ -917,7 +971,7 @@ export function App(props: {
               ensureAssistantMessage('', messageId);
             }
             if (event.type === 'start') {
-              streamedToolCallIds.delete(event.toolCallId);
+              bufferedBashOutputByToolCallId.delete(event.toolCallId);
               setProcessingToolCalls((prev) => prev + 1);
               addActivity('tool', formatToolCallLine(event), {
                 kind: 'tool_call',
@@ -929,7 +983,31 @@ export function App(props: {
             }
 
             if ((event.type === 'stdout' || event.type === 'stderr') && event.content) {
-              streamedToolCallIds.add(event.toolCallId);
+              if (event.toolName === 'bash') {
+                const prev = bufferedBashOutputByToolCallId.get(event.toolCallId);
+                const nextContent = `${prev?.content ?? ''}${event.content}`;
+                const nextBuffered = {
+                  content: nextContent,
+                  hasStderr: (prev?.hasStderr ?? false) || event.type === 'stderr',
+                  activityId: prev?.activityId,
+                };
+                bufferedBashOutputByToolCallId.set(event.toolCallId, nextBuffered);
+
+                const chunk = formatToolOutputTailLines(nextContent, transcriptMode, 3);
+                const lines = [...chunk.lines];
+                if (chunk.hiddenLineCount > 0) {
+                  lines.unshift(`… +${chunk.hiddenLineCount} lines (ctrl+o to expand)`);
+                }
+                if (lines.length > 0) {
+                  upsertBufferedBashOutputActivity(
+                    event.toolCallId,
+                    nextBuffered.hasStderr ? 'error' : 'tool',
+                    lines.join('\n'),
+                    'stream'
+                  );
+                }
+                return;
+              }
               const chunk = formatToolOutputLines(event.content, transcriptMode, 3);
               const level: ActivityLevel = event.type === 'stderr' ? 'error' : 'tool';
               const outputLines = [...chunk.lines];
@@ -961,9 +1039,36 @@ export function App(props: {
             }
 
             if (event.type === 'end') {
-              if (event.toolName === 'bash' && streamedToolCallIds.has(event.toolCallId)) {
-                streamedToolCallIds.delete(event.toolCallId);
-                return;
+              if (event.toolName === 'bash') {
+                const buffered = bufferedBashOutputByToolCallId.get(event.toolCallId);
+                if (buffered?.activityId) {
+                  const chunk = formatToolOutputTailLines(buffered.content, transcriptMode, 3);
+                  const lines = [...chunk.lines];
+                  if (chunk.hiddenLineCount > 0) {
+                    lines.unshift(`… +${chunk.hiddenLineCount} lines (ctrl+o to expand)`);
+                  }
+                  if (lines.length > 0) {
+                    upsertBufferedBashOutputActivity(
+                      event.toolCallId,
+                      buffered.hasStderr ? 'error' : 'tool',
+                      lines.join('\n'),
+                      'end'
+                    );
+                  } else {
+                    setActivities((prev) =>
+                      prev.map((item) =>
+                        item.id === buffered.activityId
+                          ? {
+                              ...item,
+                              phase: 'end',
+                            }
+                          : item
+                      )
+                    );
+                  }
+                  bufferedBashOutputByToolCallId.delete(event.toolCallId);
+                  return;
+                }
               }
               const endSummary = formatToolEndLines(event, transcriptMode);
               const endLines = [...endSummary.lines];
@@ -978,7 +1083,7 @@ export function App(props: {
                   toolCallId: event.toolCallId,
                 });
               }
-              streamedToolCallIds.delete(event.toolCallId);
+              bufferedBashOutputByToolCallId.delete(event.toolCallId);
               return;
             }
 

@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { formatToolEndLines, isSubagentBubbleEvent } from './tool-activity';
+import {
+  formatToolEndLines,
+  formatToolOutputTailLines,
+  isSubagentBubbleEvent,
+} from './tool-activity';
 
 function createEndEvent(data: unknown) {
   return {
@@ -90,5 +94,14 @@ describe('isSubagentBubbleEvent', () => {
     });
 
     expect(result).toBe(false);
+  });
+});
+
+describe('formatToolOutputTailLines', () => {
+  test('keeps the latest lines and truncates front lines in non-transcript mode', () => {
+    const content = ['line-1', 'line-2', 'line-3', 'line-4', 'line-5'].join('\n');
+    const result = formatToolOutputTailLines(content, false, 2);
+    expect(result.lines).toEqual(['line-4', 'line-5']);
+    expect(result.hiddenLineCount).toBe(3);
   });
 });

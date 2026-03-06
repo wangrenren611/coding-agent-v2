@@ -44,7 +44,7 @@ import type {
   ToolConfirmIO,
 } from './types';
 
-const DEFAULT_MAX_STEPS = 40;
+const DEFAULT_MAX_STEPS = 10000;
 
 function parsePositiveInt(raw: string | undefined, fallback: number): number {
   if (!raw) return fallback;

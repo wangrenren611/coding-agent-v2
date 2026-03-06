@@ -1,8 +1,6 @@
 import { Box, Text } from 'ink';
 
-export function BackgroundPrompt(props: {
-  queuedMessages: string[];
-}) {
+export function BackgroundPrompt(props: { queuedMessages: string[] }) {
   const { queuedMessages } = props;
 
   if (queuedMessages.length === 0) {

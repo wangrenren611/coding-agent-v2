@@ -181,7 +181,10 @@ async function finalizeStep(
   rawChunks: Chunk[],
   finishReason: FinishReason
 ): Promise<void> {
-  const existingAssistantMessage = getInProgressAssistantMessage(deps.messages, deps.persistenceState);
+  const existingAssistantMessage = getInProgressAssistantMessage(
+    deps.messages,
+    deps.persistenceState
+  );
   const assistantMessageId = existingAssistantMessage?.messageId ?? crypto.randomUUID();
   const ctx = deps.getHookContext(assistantMessageId);
 

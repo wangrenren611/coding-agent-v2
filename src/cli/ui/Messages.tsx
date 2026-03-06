@@ -122,7 +122,7 @@ function ActivityLine({ event }: { event: ActivityEvent }) {
         </Box>
         {rest.map((line, index) => (
           <Box key={`${event.id}-tool-call-${index}`}>
-            <Text color="gray">  ⎿  </Text>
+            <Text color="gray"> ⎿ </Text>
             <InlineRichText text={line} />
           </Box>
         ))}
@@ -135,12 +135,12 @@ function ActivityLine({ event }: { event: ActivityEvent }) {
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Box>
-          <Text color="gray">  ⎿  </Text>
+          <Text color="gray"> ⎿ </Text>
           <InlineRichText text={firstLine} color={outputColor} />
         </Box>
         {rest.map((line, index) => (
           <Box key={`${event.id}-tool-out-${index}`}>
-            <Text color="gray">     </Text>
+            <Text color="gray"> </Text>
             <InlineRichText text={line} color={outputColor} />
           </Box>
         ))}

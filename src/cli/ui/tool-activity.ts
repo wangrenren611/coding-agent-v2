@@ -136,6 +136,31 @@ export function formatToolOutputLines(
   };
 }
 
+export function formatToolOutputTailLines(
+  content: string | undefined,
+  transcriptMode: boolean,
+  maxLines = 3
+): { lines: string[]; hiddenLineCount: number } {
+  if (!content) {
+    return { lines: [], hiddenLineCount: 0 };
+  }
+
+  const lines = normalizeText(content)
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0);
+
+  if (lines.length === 0) {
+    return { lines: [], hiddenLineCount: 0 };
+  }
+
+  const visible = transcriptMode ? lines : lines.slice(-maxLines);
+  return {
+    lines: visible.map((line) => truncate(line, 320)),
+    hiddenLineCount: transcriptMode ? 0 : Math.max(0, lines.length - visible.length),
+  };
+}
+
 function getResultRecord(data: unknown): Record<string, unknown> | null {
   const record = toRecord(data);
   return toRecord(record?.result);

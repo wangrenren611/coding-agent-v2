@@ -7,12 +7,8 @@
 import * as path from 'path';
 import * as fs from 'fs';
 
-
-
-
-
 function buildSystemDirectives(): string {
-    return `# System Directives
+  return `# System Directives
 ## Primary Objective
 Deliver correct, executable outcomes with minimal assumptions. Prefer verified facts over fluent guesses.
 
@@ -164,58 +160,51 @@ Do not declare completion if constraints/artifacts are unmet.
 `;
 }
 
-
-
 type SystemPromptOptions = {
-    /** 工作目录 */
-    directory: string;
-    /** 响应语言 */
-    language?: string;
-    /** 当前日期时间 */
-    currentDateTime?: string;
-    /** 运行时沙箱模式（可选） */
-    sandboxMode?: string;
-    /** 运行时网络策略（可选） */
-    networkPolicy?: string;
-    /** 运行时可用工具名（可选） */
-    runtimeToolNames?: string[];
-}
+  /** 工作目录 */
+  directory: string;
+  /** 响应语言 */
+  language?: string;
+  /** 当前日期时间 */
+  currentDateTime?: string;
+  /** 运行时沙箱模式（可选） */
+  sandboxMode?: string;
+  /** 运行时网络策略（可选） */
+  networkPolicy?: string;
+  /** 运行时可用工具名（可选） */
+  runtimeToolNames?: string[];
+};
 
 /**
  * 构建完整的系统提示词
  */
 export function buildSystemPrompt({
-    directory = process.cwd(),
-    // language = 'English',
-    currentDateTime,
-    sandboxMode,
-    networkPolicy,
-    runtimeToolNames,
+  directory = process.cwd(),
+  // language = 'English',
+  currentDateTime,
+  sandboxMode,
+  networkPolicy,
+  runtimeToolNames,
 }: SystemPromptOptions): string {
-  
+  // 1. 身份定义
+  const identity = `You are coding agent, an interactive CLI coding agent focused on software engineering tasks.`;
 
-    // 1. 身份定义
-    const identity = `You are coding agent, an interactive CLI coding agent focused on software engineering tasks.`;
+  // 3. 环境信息
+  const environmentInfo = [
+    'Here is some useful information about the environment you are running in:',
+    '<env>',
+    `  Working directory: ${directory}`,
+    `  Is directory a git repo: ${fs.existsSync(path.resolve(directory, '.git')) ? 'yes' : 'no'}`,
+    `  Platform: ${process.platform}`,
+    // `  Preferred response language: ${language}`,
+    `  Today's date: ${currentDateTime || new Date().toISOString().split('T')[0]}`,
+    ...(sandboxMode ? [`  Sandbox mode: ${sandboxMode}`] : []),
+    ...(networkPolicy ? [`  Network policy: ${networkPolicy}`] : []),
+    ...(runtimeToolNames?.length ? [`  Runtime tools: ${runtimeToolNames.join(', ')}`] : []),
+    '</env>',
+  ].join('\n');
 
-
-
-    // 3. 环境信息
-    const environmentInfo = [
-        'Here is some useful information about the environment you are running in:',
-        '<env>',
-        `  Working directory: ${directory}`,
-        `  Is directory a git repo: ${fs.existsSync(path.resolve(directory, '.git')) ? 'yes' : 'no'}`,
-        `  Platform: ${process.platform}`,
-        // `  Preferred response language: ${language}`,
-        `  Today's date: ${currentDateTime || new Date().toISOString().split('T')[0]}`,
-        ...(sandboxMode ? [`  Sandbox mode: ${sandboxMode}`] : []),
-        ...(networkPolicy ? [`  Network policy: ${networkPolicy}`] : []),
-        ...(runtimeToolNames?.length ? [`  Runtime tools: ${runtimeToolNames.join(', ')}`] : []),
-        '</env>',
-    ].join('\n');
-
-
-    return `${identity}
+  return `${identity}
         ${buildSystemDirectives()}
         ${environmentInfo}
      `;
