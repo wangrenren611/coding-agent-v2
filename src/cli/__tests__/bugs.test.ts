@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createRawInputParseState, parseRawInputChunk } from '../input-parser';
 import { LiveRegionManager } from '../live-region';
 
@@ -215,9 +215,7 @@ describe('P2: Submit handling with newline', () => {
 describe('P2: Multi-chunk submit handling', () => {
   // BUG REPRODUCTION: Second chunk with newline triggers paste heuristic
   it('[BUG] should submit when second chunk ends with newline', () => {
-    let state = createRawInputParseState();
-
-    state = parseRawInputChunk(state, 'hel');
+    let state = parseRawInputChunk(createRawInputParseState(), 'hel');
     expect(state.buffer).toBe('hel');
     expect(state.submitted).toBe(false);
 
@@ -232,9 +230,7 @@ describe('P2: Multi-chunk submit handling', () => {
   });
 
   it('should accumulate buffer across multiple chunks without newline', () => {
-    let state = createRawInputParseState();
-
-    state = parseRawInputChunk(state, 'hel');
+    let state = parseRawInputChunk(createRawInputParseState(), 'hel');
     expect(state.buffer).toBe('hel');
 
     state = parseRawInputChunk(state, 'lo');

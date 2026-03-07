@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createRawInputParseState, parseRawInputChunk } from '../input-parser';
 import { LiveRegionManager } from '../live-region';
 import { TerminalUi } from '../terminal-ui';
@@ -266,32 +266,6 @@ describe('Deep Analysis: Input state consistency', () => {
     expect(afterSubmit.pending).toBe('');
   });
 });
-
-import * as readline from 'node:readline/promises';
-
-// Mock for controller tests
-class MockReadStream {
-  isTTY = true;
-  setRawMode = vi.fn();
-  on = vi.fn();
-  off = vi.fn();
-  pause = vi.fn();
-  resume = vi.fn();
-}
-
-class MockWriteStream {
-  isTTY = true;
-  columns = 80;
-  rows = 24;
-  private output = '';
-  write = vi.fn((chunk: string) => {
-    this.output += chunk;
-    return true;
-  });
-  getOutput() {
-    return this.output;
-  }
-}
 
 describe('Deep Analysis: Security considerations', () => {
   it('should handle extremely long input without crashing', () => {
