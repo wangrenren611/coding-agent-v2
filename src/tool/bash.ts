@@ -57,6 +57,13 @@ interface PolicyDecision {
   reason?: string;
 }
 
+const CONFIRMABLE_DENY_REASON_PATTERNS: RegExp[] = [
+  /Inline Python execution is blocked for security reasons/i,
+  /Inline Node\.js execution is blocked for security reasons/i,
+  /eval command is blocked for security reasons/i,
+  /exec command is blocked for security reasons/i,
+];
+
 interface ExecutionResult {
   exitCode: number;
   output: string;
@@ -200,6 +207,17 @@ export class BashTool extends BaseTool<typeof schema> {
       allowlistMissReason: (cmd) =>
         `Command "${cmd}" is not in allowed command list and requires user confirmation`,
     });
+
+    if (
+      decision.effect === 'deny' &&
+      typeof decision.reason === 'string' &&
+      CONFIRMABLE_DENY_REASON_PATTERNS.some((pattern) => pattern.test(decision.reason!))
+    ) {
+      return {
+        effect: 'ask',
+        reason: `${decision.reason} (requires explicit confirmation)`,
+      };
+    }
 
     return { effect: decision.effect, reason: decision.reason };
   }

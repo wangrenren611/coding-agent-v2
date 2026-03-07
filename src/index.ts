@@ -19,3 +19,6 @@ export * from './logger';
 
 // Runtime config
 export * from './config';
+
+// Terminal UI
+export * from './cli';

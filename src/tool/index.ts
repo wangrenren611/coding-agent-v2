@@ -17,39 +17,6 @@ export { GlobTool } from './glob';
 export { GrepTool } from './grep';
 export { SkillTool, createSkillTool, defaultSkillTool, simpleSkillTool } from './skill-tool';
 export {
-  TaskTool,
-  TaskCreateTool,
-  TaskGetTool,
-  TaskListTool,
-  TaskUpdateTool,
-  TaskStopTool,
-  TaskOutputTool,
-  clearTaskState,
-  getDefaultTaskRuntime,
-  TaskRuntime,
-  type TaskRuntimeOptions,
-  type SubagentType,
-  type ModelHint,
-} from './task-tools';
-
-export {
-  TaskV3Tool,
-  TaskV3TasksTool,
-  TaskV3GetTool,
-  TaskV3ListTool,
-  TaskV3UpdateTool,
-  TaskV3RunGetTool,
-  TaskV3RunWaitTool,
-  TaskV3RunCancelTool,
-  TaskV3RunEventsTool,
-  TaskV3ClearSessionTool,
-  TaskV3GcRunsTool,
-  TaskV3Runtime,
-  getDefaultTaskV3Runtime,
-  type TaskV3RuntimeOptions,
-  type TaskV3ToolOptions,
-} from './task-v3-tools';
-export {
   evaluateBashPolicy,
   getBashAllowedCommands,
   getBashDangerousCommands,

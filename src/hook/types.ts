@@ -70,7 +70,14 @@ export type ToolResultHook = (
  * Step Hook - 步骤完成通知
  */
 export type StepHook = (
-  step: { stepIndex: number; finishReason?: string; toolCallsCount: number },
+  step: {
+    stepIndex: number;
+    finishReason?: string;
+    toolCallsCount: number;
+    assistantMessageId?: string;
+    assistantContent?: string;
+    assistantReasoningContent?: string;
+  },
   ctx: HookContext
 ) => void | Promise<void>;
 

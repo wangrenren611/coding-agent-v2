@@ -83,74 +83,14 @@ If quick-map and runtime differ, runtime is source of truth.
 - TS/JS symbol navigation: lsp first.
 - Exact text search: grep.
 - File discovery: glob.
-- Open-ended discovery: task with profile="explore".
 
 ## Execution Protocol
 - Before edits, state target files and change scope briefly.
 - After major tool batches, give concise progress updates.
 - On completion, report: changes, verification, and remaining risks.
 
-## Complexity and Task Workflow
+## Complexity Handling
 Treat work as COMPLEX when it needs multi-source research, multiple deliverables, 5+ substantial steps, strict format/date constraints, or unclear scope.
-- Task V3 tools are the default task workflow.
-- When to use 'task' (single sub-agent):
-  1) one clear objective can be solved by one specialist profile;
-  2) you want context compression (delegate long exploration/analysis and return concise result);
-  3) parent agent should keep moving without loading full intermediate reasoning.
-- When to use 'tasks' (multi sub-agent orchestration):
-  1) there are 2+ independent or partially dependent subtasks;
-  2) you can describe dependency edges ('depends_on') explicitly;
-  3) parallel execution can reduce latency, or staged execution needs deterministic ordering.
-- When NOT to use task tools:
-  1) trivial single-step actions (one grep/read/edit) that parent can finish directly;
-  2) requests requiring tight interactive back-and-forth each step;
-  3) cases where overhead of task lifecycle is higher than direct execution.
-- Single delegated run (recommended):
-  1) call task with required fields: prompt + profile + title + description;
-  2) use wait=true for blocking completion, wait=false for async orchestration;
-  3) inspect progress with task_run_get/task_run_wait/task_run_events.
-- Multi-task dependency workflow:
-  1) call tasks with items[] (each item includes key/title/description/prompt/profile/depends_on);
-  2) set max_parallel for concurrency and wait=true for orchestration rounds;
-  3) inspect individual runs with task_run_get/task_run_wait/task_run_events when needed.
-- Decision rules for tool selection:
-  1) default to 'task' for one delegated unit of work;
-  2) use 'tasks' only when dependency graph or parallel fan-out is explicit;
-  3) avoid mixing parent-side manual scheduling with 'tasks' in the same round.
-- Required field quality:
-  1) 'title': short and outcome-oriented (what should be delivered);
-  2) 'description': scope/boundary/constraints;
-  3) 'prompt': executable instructions + expected output format;
-  4) 'profile': match task type ('explore', 'bug-analyzer', 'plan', 'general-purpose', etc.).
-- Current sub-agent profiles and intended usage:
-  1) 'general-purpose': default coding/analysis execution when no strong specialization is needed.
-  2) 'bash': shell-heavy command execution and environment inspection.
-  3) 'explore': codebase discovery, structure mapping, evidence collection before edits.
-  4) 'plan': architecture breakdown, implementation plan, risk/acceptance-criteria drafting.
-  5) 'ui-sketcher': UI layout/interaction design and frontend blueprint tasks.
-  6) 'bug-analyzer': debugging, root-cause isolation, minimal-risk fix strategy.
-  7) 'code-reviewer': review correctness, security, reliability, performance regressions.
-- Profile selection heuristics:
-  1) unknown/mixed task -> start with 'general-purpose';
-  2) first gather context -> 'explore', then hand off to target profile;
-  3) incident/debug path -> prefer 'bug-analyzer';
-  4) review request -> prefer 'code-reviewer';
-  5) planning first, coding later -> 'plan' then 'general-purpose'/'bug-analyzer' as needed.
-- Runtime control guidance:
-  1) 'wait=true' when parent needs result immediately for next decision;
-  2) 'wait=false' when parent can continue other planning/IO work;
-  3) use 'task_run_cancel' only for obsolete/risky runs, keep cancel idempotent.
-- Update/revision guidance:
-  1) use 'task_update' for metadata/status updates;
-  2) for changed execution intent, use 'task_update(restart=true, prompt=...)' to create a new run revision;
-  3) do not assume in-place mutation of a running run input.
-- Failure handling guidance:
-  1) if run failed/timeout, inspect events first ('task_run_events') before retrying;
-  2) retry only with a concrete change (prompt/profile/constraints), not blind repetition;
-  3) in batch mode, use 'fail_fast=true' when downstream work is invalid after upstream failure.
-- Task status model: pending -> ready -> running -> completed/failed/cancelled, with blocked <-> ready.
-- Run status model: queued -> running -> succeeded/failed/cancelled/timeout, cancel_requested as intermediate.
-- Avoid legacy task_output/task_stop semantics when Task V3 tools are available.
 
 ## Skill Usage
 Use skill when user names a skill or the request clearly matches a known skill workflow.

@@ -565,38 +565,32 @@ describe('BashTool', () => {
         expect(result.error).toContain('COMMAND_BLOCKED_BY_POLICY');
       });
 
-      it('should block eval command', async () => {
-        const result = await bashTool.execute({ command: 'eval "ls"' }, mockContext);
-
-        expect(result.success).toBe(false);
-        expect(result.error).toContain('COMMAND_BLOCKED_BY_POLICY');
+      it('should require confirmation for eval command', async () => {
+        const confirmation = await bashTool.shouldConfirm({ command: 'eval "ls"' });
+        expect(confirmation.required).toBe(true);
+        expect(confirmation.reason).toContain('eval command is blocked');
       });
 
-      it('should block exec command', async () => {
-        const result = await bashTool.execute({ command: 'exec ls' }, mockContext);
-
-        expect(result.success).toBe(false);
-        expect(result.error).toContain('COMMAND_BLOCKED_BY_POLICY');
+      it('should require confirmation for exec command', async () => {
+        const confirmation = await bashTool.shouldConfirm({ command: 'exec ls' });
+        expect(confirmation.required).toBe(true);
+        expect(confirmation.reason).toContain('exec command is blocked');
       });
 
-      it('should block inline Python execution', async () => {
-        const result = await bashTool.execute(
-          { command: 'python -c "import os; os.system("ls")"' },
-          mockContext
-        );
-
-        expect(result.success).toBe(false);
-        expect(result.error).toContain('COMMAND_BLOCKED_BY_POLICY');
+      it('should require confirmation for inline Python execution', async () => {
+        const confirmation = await bashTool.shouldConfirm({
+          command: 'python -c "import os; os.system("ls")"',
+        });
+        expect(confirmation.required).toBe(true);
+        expect(confirmation.reason).toContain('Inline Python execution is blocked');
       });
 
-      it('should block inline Node.js execution', async () => {
-        const result = await bashTool.execute(
-          { command: 'node -e "require("fs").readdirSync(".")"' },
-          mockContext
-        );
-
-        expect(result.success).toBe(false);
-        expect(result.error).toContain('COMMAND_BLOCKED_BY_POLICY');
+      it('should require confirmation for inline Node.js execution', async () => {
+        const confirmation = await bashTool.shouldConfirm({
+          command: 'node -e "require("fs").readdirSync(".")"',
+        });
+        expect(confirmation.required).toBe(true);
+        expect(confirmation.reason).toContain('Inline Node.js execution is blocked');
       });
 
       it('should block nested bash -c', async () => {

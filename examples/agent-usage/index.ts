@@ -19,18 +19,6 @@ import {
   GlobTool,
   GrepTool,
   SkillTool,
-  TaskV3ClearSessionTool,
-  TaskV3GcRunsTool,
-  TaskV3GetTool,
-  TaskV3ListTool,
-  TaskV3RunCancelTool,
-  TaskV3RunEventsTool,
-  TaskV3RunGetTool,
-  TaskV3RunWaitTool,
-  TaskV3Runtime,
-  TaskV3TasksTool,
-  TaskV3Tool,
-  TaskV3UpdateTool,
   ToolManager,
   type ToolConfirmDecision,
   type ToolConfirmRequest,
@@ -38,7 +26,7 @@ import {
 import { buildSystemPrompt } from '../../src/prompts/system.ts';
 
 const DEFAULT_MODEL: ModelId = 'glm-5';
-const DEFAULT_PROMPT = '请使用 task 执行一个 bug 分析任务，然后输出关键结论与后续行动建议。';
+const DEFAULT_PROMPT = '请分析当前仓库结构并给出 3 条可执行的改进建议。';
 const EXAMPLE_DEFAULT_LOG_DIR = './examples/agent-usage/logs';
 const EXAMPLE_DEFAULT_LOG_FILE = 'agent-example.log';
 const EXAMPLE_DEFAULT_MAX_STEPS = 10000;
@@ -68,8 +56,7 @@ Examples:
   pnpm example:agent glm-4.7 "帮我设计一个模块目录结构"
   pnpm example:agent glm-4.7 "初始化项目步骤" "请继续并给出风险清单"
 
-This example registers Task V3 tools:
-  task / tasks / task_get / task_list / task_update / task_run_*
+This example registers built-in file/shell tools:
   file_read / file_write / file_edit / file_stat
 
 Env:
@@ -111,21 +98,6 @@ function parsePositiveIntEnv(name: string, fallback: number): number {
     throw new Error(`Invalid ${name}="${raw}", expected a positive integer.`);
   }
   return value;
-}
-
-function createExampleSubagentToolManager(): ToolManager {
-  const manager = new ToolManager();
-  manager.register([
-    new BashTool(),
-    new FileReadTool(),
-    new FileWriteTool(),
-    new FileEditTool(),
-    new FileStatTool(),
-    new GlobTool(),
-    new GrepTool(),
-    new SkillTool(),
-  ]);
-  return manager;
 }
 
 function createConsoleStreamPlugin(): Plugin {
@@ -260,9 +232,6 @@ async function main(): Promise<void> {
       logger: logger.child('Provider'),
     });
     const toolManager = new ToolManager();
-    const taskRuntime = new TaskV3Runtime({
-      dbPath: './examples/agent-usage/data/task-v3/tasks.db',
-    });
     toolManager.register([
       new BashTool(),
       new FileReadTool(),
@@ -272,26 +241,6 @@ async function main(): Promise<void> {
       new GlobTool(),
       new GrepTool(),
       new SkillTool(),
-      new TaskV3Tool({
-        runtime: taskRuntime,
-        createSubagentToolManager: () => createExampleSubagentToolManager(),
-      }),
-      new TaskV3TasksTool({
-        runtime: taskRuntime,
-        createSubagentToolManager: () => createExampleSubagentToolManager(),
-      }),
-      new TaskV3UpdateTool({
-        runtime: taskRuntime,
-        createSubagentToolManager: () => createExampleSubagentToolManager(),
-      }),
-      new TaskV3GetTool({ runtime: taskRuntime }),
-      new TaskV3ListTool({ runtime: taskRuntime }),
-      new TaskV3RunGetTool({ runtime: taskRuntime }),
-      new TaskV3RunWaitTool({ runtime: taskRuntime }),
-      new TaskV3RunCancelTool({ runtime: taskRuntime }),
-      new TaskV3RunEventsTool({ runtime: taskRuntime }),
-      new TaskV3ClearSessionTool({ runtime: taskRuntime }),
-      new TaskV3GcRunsTool({ runtime: taskRuntime }),
     ]);
     const sessionId = process.env.AGENT_SESSION_ID ?? `example-agent-${Date.now()}`;
 
@@ -301,7 +250,6 @@ async function main(): Promise<void> {
     console.log(`storage.backend=${runtimeConfig.storage.backend}`);
     console.log(`storage.dir=${runtimeConfig.storage.dir}`);
     console.log(`storage.sqlitePath=${runtimeConfig.storage.sqlitePath}`);
-    console.log(`taskV3.dbPath=${taskRuntime.dbPath}`);
     console.log(`agent.maxSteps=${maxSteps}`);
     console.log(`log.fileEnabled=${String(runtimeConfig.log.fileEnabled)}`);
     console.log(`log.filePath=${runtimeConfig.log.filePath}`);

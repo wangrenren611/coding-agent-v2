@@ -196,7 +196,14 @@ export class HookManager {
    * 执行 step hooks（通知类型）
    */
   async executeStepHooks(
-    step: { stepIndex: number; finishReason?: string; toolCallsCount: number },
+    step: {
+      stepIndex: number;
+      finishReason?: string;
+      toolCallsCount: number;
+      assistantMessageId?: string;
+      assistantContent?: string;
+      assistantReasoningContent?: string;
+    },
     ctx: HookContext
   ): Promise<void> {
     await this.executeSeries('step', (plugin) => plugin.step, step, ctx);

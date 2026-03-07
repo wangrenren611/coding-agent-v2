@@ -514,6 +514,25 @@ describe('ToolManager error normalization', () => {
       tool: 'bash',
     });
   });
+
+  it('should require confirmation for inline node eval instead of policy hard block', async () => {
+    const manager = new ToolManager();
+    manager.register(new BashTool());
+
+    const [result] = await manager.executeTools(
+      [createToolCall('bash', '{"command":"node -e \\"console.log(1)\\""}')],
+      batchContext
+    );
+
+    expect(result.result.success).toBe(false);
+    expect(result.result.error).toContain('TOOL_CONFIRMATION_REQUIRED');
+    expect(result.result.error).not.toContain('COMMAND_BLOCKED_BY_POLICY');
+    expect(result.result.data).toMatchObject({
+      code: 'TOOL_CONFIRMATION_REQUIRED',
+      stage: 'confirmation',
+      tool: 'bash',
+    });
+  });
 });
 
 describe('ToolManager toToolsSchema', () => {

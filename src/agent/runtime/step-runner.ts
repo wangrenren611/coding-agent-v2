@@ -316,6 +316,10 @@ async function finalizeStep(
       stepIndex: deps.state.stepIndex,
       finishReason: finishReason ?? undefined,
       toolCallsCount: deps.state.currentToolCalls.length,
+      assistantMessageId: assistantMessage.messageId,
+      assistantContent:
+        typeof assistantMessage.content === 'string' ? assistantMessage.content : undefined,
+      assistantReasoningContent: assistantMessage.reasoning_content,
     },
     ctx
   );
