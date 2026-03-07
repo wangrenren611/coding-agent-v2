@@ -29,9 +29,9 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
-    "format": "prettier --write \"src/**/*.ts\" \"src/**/*.tsx\" \"examples/**/*.ts\" \"*.json\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"src/**/*.tsx\" \"examples/**/*.ts\" \"*.json\"",
-    "format:fix": "prettier --write \"src/**/*.ts\" \"src/**/*.tsx\" \"examples/**/*.ts\" --end-of-line lf",
+    "format": "prettier --write \"src/**/*.ts\" \"examples/**/*.ts\" \"*.json\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"examples/**/*.ts\" \"*.json\"",
+    "format:fix": "prettier --write \"src/**/*.ts\" \"examples/**/*.ts\" --end-of-line lf",
     "typecheck": "tsc --noEmit",
     "ci:check": "pnpm format:check && pnpm typecheck && pnpm lint && pnpm test:run",
     "prepare": "husky install"

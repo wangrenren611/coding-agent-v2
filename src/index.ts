@@ -19,6 +19,3 @@ export * from './logger';
 
 // Runtime config
 export * from './config';
-
-// CLI runtime API
-export { runCli } from './cli/index';
