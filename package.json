@@ -5,10 +5,6 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": {
-    "coding-agent-v2": "./bin/coding-agent-v2.cjs",
-    "cav2": "./bin/coding-agent-v2.cjs"
-  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -17,10 +13,8 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "dev:cli": "tsx src/cli.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "start:cli": "tsx src/cli.ts",
     "example:agent": "tsx examples/agent-usage/index.ts",
     "example:providers": "tsx examples/providers-usage/index.ts",
     "example:providers:manual": "tsx examples/providers-usage/manual-provider.ts",
@@ -46,7 +40,6 @@
   "devDependencies": {
     "@types/diff": "^8.0.0",
     "@types/node": "^20.10.0",
-    "@types/react": "^19.2.14",
     "@types/shell-quote": "^1.7.5",
     "@types/strip-ansi": "^5.2.1",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
@@ -76,10 +69,8 @@
   "dependencies": {
     "@vscode/ripgrep": "^1.17.0",
     "diff": "^8.0.3",
-    "ink": "^6.8.0",
     "js-tiktoken": "^1.0.21",
     "minimatch": "^10.2.4",
-    "react": "^19.2.4",
     "shell-quote": "^1.8.3",
     "strip-ansi": "^7.2.0",
     "zod": "^4.3.6"
