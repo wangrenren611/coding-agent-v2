@@ -4,6 +4,7 @@
  * 使用 LLM 生成摘要来压缩对话历史，减少 token 消耗
  */
 
+import { getEncoding } from 'js-tiktoken';
 import type { LLMProvider, LLMResponse, Tool } from '../providers';
 import type { Logger } from '../logger';
 import type { Message } from './types';
@@ -48,55 +49,108 @@ export interface CompactResult {
 // Token 估算工具函数
 // =============================================================================
 
+// 使用 cl100k_base 编码（GPT-3.5/GPT-4 使用的编码）
+const encoder = getEncoding('cl100k_base');
+
 /**
- * 估算文本 Token 数（改进版）
+ * 估算文本 Token 数（使用 js-tiktoken 精确计算）
  *
- * 算法说明：
- * - 中文字符（Unicode \u4e00-\u9fa5）：1 字符 ≈ 1.5 token
- * - 其他字符（英文，数字、符号等）：1 字符 ≈ 0.25 token
- *
- * 此估算基于常见 LLM（GPT、GLM 等）的 BPE 分词特点：
- * - 中文通常每个字为 1-2 个 token，平均约 1.5
- * - 英文单词平均为 0.5-1 个 token，按字符算是约 0.25
+ * 使用 OpenAI 的 cl100k_base 编码进行精确 Token 计算。
+ * 相比启发式算法，这能提供准确的 Token 计数，避免上下文溢出。
  *
  * @param text 要估算的文本
- * @returns 估算的 token 数
+ * @returns 实际 token 数
  */
 export function estimateTokens(text: string): number {
   if (!text) return 0;
-
-  let cnCount = 0;
-  let otherCount = 0;
-
-  for (const char of text) {
-    // 判断是否为中文字符（CJK 统一表意文字范围）
-    if (char >= '\u4e00' && char <= '\u9fa5') {
-      cnCount++;
-    } else {
-      otherCount++;
-    }
+  try {
+    return encoder.encode(text).length;
+  } catch (error) {
+    // 降级策略：如果编码失败，使用保守的启发式估算
+    // 汉字 x2，其他 x1.3
+    console.warn('[TokenEstimation] Failed to encode text, using heuristic fallback', error);
+    const chineseMatch = text.match(/[\u4e00-\u9fa5]/g);
+    const chineseCount = chineseMatch ? chineseMatch.length : 0;
+    const otherCount = text.length - chineseCount;
+    return Math.ceil(chineseCount * 2 + otherCount * 0.4);
   }
-
-  // 中文：1.5 token/字符，其他：0.25 token/字符
-  const totalTokens = cnCount * 1.5 + otherCount * 0.25;
-  return Math.ceil(totalTokens);
 }
 
 /**
  * 估算消息列表的 Token 数
  *
- * @param messages 消息列表
- * @param tools 可选的工具定义列表
- * @returns 估算的总 token 数
+ * 遵循 OpenAI 聊天格式的计费规则：
+ * - 每条消息有 3 tokens 的固定开销 (<|start|>{role}<|end|>)
+ * - name 字段额外 1 token
+ * - role 和 content 计入 token
+ * - 回复引导词 3 tokens
  */
 export function estimateMessagesTokens(messages: Message[], tools?: Tool[]): number {
-  const messagesTotal = messages.reduce((acc, m) => {
-    // 使用改进的 token 估算
-    const content = JSON.stringify(m);
-    return acc + estimateTokens(content) + 4; // 每条消息约 4 token 的 overhead
-  }, 0);
-  const toolsTotal = tools ? estimateTokens(JSON.stringify(tools)) : 0;
-  return messagesTotal + toolsTotal;
+  let total = 0;
+
+  for (const m of messages) {
+    total += 3; // 每条消息的固定开销
+
+    // role
+    if (m.role) {
+      total += estimateTokens(m.role);
+    }
+
+    // name
+    const name = m.name as string | undefined;
+    if (name) {
+      total += estimateTokens(name) + 1; // name 字段额外开销
+    }
+
+    // content
+    if (typeof m.content === 'string') {
+      total += estimateTokens(m.content);
+    } else if (Array.isArray(m.content)) {
+      for (const part of m.content) {
+        if (part.type === 'text' && part.text) {
+          total += estimateTokens(part.text);
+        }
+        // 对于 image_url，暂按固定开销估算
+        // 参考 OpenAI 计费标准：
+        // - Low detail: 85 tokens
+        // - High detail: 85 + 170 * N (512x512 tiles)
+        // 由于无法获取图片实际尺寸，对于 high/auto 模式，我们采用一个保守的预估值（例如假设平均需要 4 个 tiles => ~765 tokens）
+        if (part.type === 'image_url') {
+          const detail = part.image_url.detail || 'auto';
+          if (detail === 'low') {
+            total += 85;
+          } else {
+            // High/Auto 模式下，假设图片较大，使用较安全的估算值
+            total += 765;
+          }
+        }
+      }
+    }
+
+    // tool_calls
+    const toolCalls = m.tool_calls as unknown[];
+    if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+      // 简单估算 tool calls 的 JSON 结构
+      total += estimateTokens(JSON.stringify(toolCalls));
+    }
+
+    // tool_call_id
+    const toolCallId = m.tool_call_id as string | undefined;
+    if (toolCallId) {
+      total += estimateTokens(toolCallId);
+    }
+  }
+
+  // 工具定义开销
+  if (tools && tools.length > 0) {
+    // 工具定义通常比较庞大，直接对 JSON 估算比较合理
+    total += estimateTokens(JSON.stringify(tools));
+  }
+
+  // 回复引导词
+  total += 3;
+
+  return total;
 }
 
 // =============================================================================

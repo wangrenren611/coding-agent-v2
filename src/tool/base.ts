@@ -39,7 +39,8 @@ import type { ToolMeta, ToolParameterSchema } from './types';
  *
  *   async execute(args, context): Promise<ToolResult> {
  *     // args 已经是类型安全的，自动推断为 { expression: string }
- *     const result = eval(args.expression);
+ *     // 注意：实际生产中应使用安全的表达式解析库，而非 eval
+ *     const result = new Function('return ' + args.expression)();
  *     return this.success(result);
  *   }
  * }
