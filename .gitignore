@@ -38,7 +38,6 @@ dist
 .claude/backups
 .memory/*
 .agent-cache/*
-/doc/*
 /web/.next/
 /web/.next/*
 # data/*
