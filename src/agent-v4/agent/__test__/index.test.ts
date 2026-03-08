@@ -232,7 +232,15 @@ describe('StatelessAgent', () => {
     expect(events.map((event) => event.type)).toEqual(['error']);
     expect(events[0]).toMatchObject({
       type: 'error',
-      data: { name: 'AgentAbortedError', code: 1002, message: 'Operation aborted' },
+      data: {
+        name: 'AgentAbortedError',
+        code: 1002,
+        errorCode: 'AGENT_ABORTED',
+        category: 'abort',
+        retryable: false,
+        httpStatus: 499,
+        message: 'Operation aborted',
+      },
     });
     expect(provider.generateStream).not.toHaveBeenCalled();
   });
@@ -1127,6 +1135,10 @@ describe('StatelessAgent', () => {
       data: {
         name: 'UnknownError',
         code: 1005,
+        errorCode: 'AGENT_UNKNOWN_ERROR',
+        category: 'internal',
+        retryable: false,
+        httpStatus: 500,
         message: 'llm failed',
       },
     });

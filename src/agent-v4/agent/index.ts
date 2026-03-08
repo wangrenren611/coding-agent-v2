@@ -990,6 +990,10 @@ export class StatelessAgent extends EventEmitter {
       data: {
         name: error.name,
         code: error.code,
+        errorCode: error.errorCode,
+        category: error.category,
+        retryable: error.retryable,
+        httpStatus: error.httpStatus,
         message: error.message,
       },
     };
