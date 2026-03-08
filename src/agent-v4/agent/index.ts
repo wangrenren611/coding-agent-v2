@@ -84,8 +84,7 @@ interface WriteFileProtocolPayload {
     | 'OK'
     | 'WRITE_FILE_PARTIAL_BUFFERED'
     | 'WRITE_FILE_NEED_RESUME'
-    | 'WRITE_FILE_FINALIZE_OK'
-    | 'WRITE_FILE_CHECKSUM_MISMATCH';
+    | 'WRITE_FILE_FINALIZE_OK';
   nextAction: 'resume' | 'finalize' | 'none';
 }
 

@@ -1,7 +1,6 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WriteFileTool } from '../write-file';
 
@@ -102,7 +101,6 @@ describe('WriteFileTool', () => {
     });
     const target = path.join(allowedDir, 'resume.txt');
     const fullContent = 'abcdefghi12345678';
-    const expectedSha256 = createHash('sha256').update(fullContent).digest('hex');
 
     const direct = await tool.execute(
       {
@@ -142,7 +140,6 @@ describe('WriteFileTool', () => {
       path: target,
       mode: 'finalize',
       bufferId: directPayload.buffer.bufferId,
-      expectedSha256,
     });
     const finalizePayload = parseOutput<{ ok: boolean; code: string; nextAction: string }>(finalize.output);
     expect(finalizePayload).toMatchObject({
@@ -153,7 +150,7 @@ describe('WriteFileTool', () => {
     expect(await fs.readFile(target, 'utf8')).toBe(fullContent);
   });
 
-  it('returns checksum mismatch on finalize when expected checksum is wrong', async () => {
+  it('finalizes buffered content without checksum field', async () => {
     const allowedDir = await createTempDir();
     const bufferDir = await createTempDir();
     const tool = new WriteFileTool({
@@ -161,12 +158,13 @@ describe('WriteFileTool', () => {
       bufferBaseDir: bufferDir,
       maxChunkBytes: 8,
     });
-    const target = path.join(allowedDir, 'checksum.txt');
+    const target = path.join(allowedDir, 'finalize-no-checksum.txt');
+    const content = 'abcdefghijk';
 
     const direct = await tool.execute(
       {
         path: target,
-        content: 'abcdefghijk',
+        content,
         mode: 'direct',
       },
       {
@@ -181,12 +179,16 @@ describe('WriteFileTool', () => {
       path: target,
       mode: 'finalize',
       bufferId: directPayload.buffer.bufferId,
-      expectedSha256: createHash('sha256').update('wrong').digest('hex'),
     });
-    const finalizePayload = parseOutput<{ ok: boolean; code: string; nextAction: string }>(finalize.output);
-    expect(finalizePayload.ok).toBe(false);
-    expect(finalizePayload.code).toBe('WRITE_FILE_CHECKSUM_MISMATCH');
-    expect(finalizePayload.nextAction).toBe('resume');
+    const finalizePayload = parseOutput<{ ok: boolean; code: string; nextAction: string }>(
+      finalize.output
+    );
+    expect(finalizePayload).toMatchObject({
+      ok: true,
+      code: 'WRITE_FILE_FINALIZE_OK',
+      nextAction: 'none',
+    });
+    expect(await fs.readFile(target, 'utf8')).toBe(content.slice(0, 8));
   });
 
   it('returns NEED_RESUME with current buffer snapshot when resume chunk exceeds maxChunkBytes', async () => {

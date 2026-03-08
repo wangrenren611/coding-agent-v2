@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { StatelessAgent } from '../index';
 import type {
   CompactionInfo,
@@ -591,7 +590,6 @@ describe('StatelessAgent', () => {
     const bufferDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-index-write-buffer-'));
     const targetPath = path.join(allowedDir, 'streamed-write.txt');
     const fullContent = 'abcdefghijklmnop';
-    const expectedSha256 = createHash('sha256').update(fullContent).digest('hex');
 
     try {
       const manager = new DefaultToolManager();
@@ -674,7 +672,6 @@ describe('StatelessAgent', () => {
             path: targetPath,
             mode: 'finalize',
             bufferId: 'wf_direct_1',
-            expectedSha256,
           })
         )
         .mockReturnValueOnce(

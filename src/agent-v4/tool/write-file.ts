@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { BaseTool, type ToolResult } from './base-tool';
 import type { ToolExecutionContext } from './types';
@@ -20,11 +20,6 @@ const schema = z.object({
   content: z.string().optional().describe('Content chunk for this call'),
   mode: writeModeSchema.default('direct').describe('Write mode'),
   bufferId: z.string().optional().describe('Resume session id'),
-  expectedSha256: z
-    .string()
-    .regex(/^[a-fA-F0-9]{64}$/)
-    .optional()
-    .describe('Expected final sha256 checksum'),
 });
 
 type WriteFileArgs = z.infer<typeof schema>;
@@ -49,8 +44,7 @@ interface WriteFileResponse {
     | 'OK'
     | 'WRITE_FILE_PARTIAL_BUFFERED'
     | 'WRITE_FILE_NEED_RESUME'
-    | 'WRITE_FILE_FINALIZE_OK'
-    | 'WRITE_FILE_CHECKSUM_MISMATCH';
+    | 'WRITE_FILE_FINALIZE_OK';
   message: string;
   buffer?: WriteBufferInfo;
   nextAction: 'resume' | 'finalize' | 'none';
@@ -96,8 +90,7 @@ export class WriteFileTool extends BaseTool<typeof schema> {
       }
       return this.handleFinalize(
         targetPath,
-        args.bufferId,
-        args.expectedSha256
+        args.bufferId
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -212,8 +205,7 @@ export class WriteFileTool extends BaseTool<typeof schema> {
 
   private async handleFinalize(
     targetPath: string,
-    bufferId: string | undefined,
-    expectedSha256?: string
+    bufferId: string | undefined
   ): Promise<ToolResult> {
     if (!bufferId) {
       return this.successResponse({
@@ -249,26 +241,6 @@ export class WriteFileTool extends BaseTool<typeof schema> {
         nextAction: 'resume',
       });
     }
-    const content = await fs.promises.readFile(session.contentPath);
-
-    if (expectedSha256) {
-      const actualSha = createHash('sha256').update(content).digest('hex');
-      if (actualSha.toLowerCase() !== expectedSha256.toLowerCase()) {
-        return this.successResponse({
-          ok: false,
-          code: 'WRITE_FILE_CHECKSUM_MISMATCH',
-          message: 'SHA256 mismatch',
-          buffer: {
-            bufferId: session.bufferId,
-            path: targetPath,
-            bufferedBytes: content.length,
-            maxChunkBytes: this.maxChunkBytes,
-          },
-          nextAction: 'resume',
-        });
-      }
-    }
-
     await finalizeWriteBufferSession({
       contentPath: session.contentPath,
       metaPath: session.metaPath,
