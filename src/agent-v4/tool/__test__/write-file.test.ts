@@ -133,17 +133,15 @@ describe('WriteFileTool', () => {
       content: '8',
       mode: 'resume',
       bufferId: directPayload.buffer.bufferId,
-      expectedSize: Buffer.byteLength(fullContent, 'utf8'),
     });
     const resume2Payload = parseOutput<{ code: string; nextAction: string }>(resume2.output);
     expect(resume2Payload.code).toBe('WRITE_FILE_NEED_RESUME');
-    expect(resume2Payload.nextAction).toBe('finalize');
+    expect(resume2Payload.nextAction).toBe('resume');
 
     const finalize = await tool.execute({
       path: target,
       mode: 'finalize',
       bufferId: directPayload.buffer.bufferId,
-      expectedSize: Buffer.byteLength(fullContent, 'utf8'),
       expectedSha256,
     });
     const finalizePayload = parseOutput<{ ok: boolean; code: string; nextAction: string }>(finalize.output);

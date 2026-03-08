@@ -666,6 +666,12 @@ export class StatelessAgent extends EventEmitter {
           });
         });
       },
+      onPolicyCheck: callbacks?.onToolPolicy
+        ? async (info) => {
+            const decision = await callbacks.onToolPolicy?.(info);
+            return decision || { allowed: true };
+          }
+        : undefined,
       toolCallId: toolCall.id,
       loopIndex: stepIndex,
       agent: this,

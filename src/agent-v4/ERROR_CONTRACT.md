@@ -36,8 +36,14 @@ All surfaced errors should be serializable to the same envelope:
 | 2003 | `TOOL_NOT_FOUND` | `ToolNotFoundError` | `not_found` | false | 404 |
 | 2004 | `TOOL_VALIDATION_FAILED` | `ToolValidationError` | `validation` | false | 400 |
 | 2005 | `TOOL_DENIED` | `ToolDeniedError` | `permission` | false | 403 |
+| 2006 | `TOOL_POLICY_DENIED` | `ToolPolicyDeniedError` | `permission` | false | 403 |
 
 ## Compatibility
 - Existing `name/message/code` behavior remains unchanged.
 - New fields are additive: `errorCode/category/retryable/httpStatus/details`.
 - `runStream` `type=error` event now includes full envelope fields.
+
+## Policy Hook
+- `AgentCallbacks.onToolPolicy` can be provided by the outer layer.
+- `DefaultToolManager` calls `onPolicyCheck` before confirmation and tool execution.
+- When denied, manager returns `ToolPolicyDeniedError` with standardized reason code/message.

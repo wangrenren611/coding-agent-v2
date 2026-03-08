@@ -67,6 +67,9 @@ export interface AgentCallbacks {
   onCheckpoint: (checkpoint: ExecutionCheckpoint) => void | Promise<void>;
   onProgress?: (progress: ExecutionProgress) => void | Promise<void>;
   onCompaction?: (compaction: CompactionInfo) => void | Promise<void>;
+  onToolPolicy?: (
+    info: ToolPolicyCheckInfo
+  ) => ToolPolicyDecision | Promise<ToolPolicyDecision>;
   onError?: (error: Error) => ErrorDecision | void | Promise<ErrorDecision | void>;
 }
 
@@ -111,6 +114,19 @@ export interface ToolConfirmInfo {
 
 export interface ToolDecision {
   approved: boolean;
+  message?: string;
+}
+
+export interface ToolPolicyCheckInfo {
+  toolCallId: string;
+  toolName: string;
+  arguments: string;
+  parsedArguments: Record<string, unknown>;
+}
+
+export interface ToolPolicyDecision {
+  allowed: boolean;
+  code?: string;
   message?: string;
 }
 

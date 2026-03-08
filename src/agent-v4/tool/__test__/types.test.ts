@@ -6,6 +6,7 @@ import type {
   ToolConfirmInfo,
   ToolDecision,
   ToolExecutionContext,
+  ToolPolicyDecision,
   ToolStreamEventInput,
 } from '../types';
 
@@ -34,6 +35,7 @@ describe('tool/types runtime contract', () => {
     };
 
     const decision: ToolDecision = { approved: true };
+    const policyDecision: ToolPolicyDecision = { allowed: true };
     const chunk: ToolStreamEventInput = { type: 'stdout', content: 'ok' };
     const context: ToolExecutionContext = {
       toolCallId: call.id,
@@ -41,6 +43,7 @@ describe('tool/types runtime contract', () => {
       agent: {},
       onChunk: () => undefined,
       onConfirm: async () => decision,
+      onPolicyCheck: async () => policyDecision,
     };
 
     expect(tool.name).toBe('bash');

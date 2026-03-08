@@ -4,7 +4,13 @@ import * as path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { StatelessAgent } from '../index';
-import type { CompactionInfo, Message, StreamEvent } from '../../types';
+import type {
+  CompactionInfo,
+  Message,
+  StreamEvent,
+  ToolPolicyCheckInfo,
+  ToolPolicyDecision,
+} from '../../types';
 import type { ToolManager } from '../../tool/tool-manager';
 import { DefaultToolManager } from '../../tool/tool-manager';
 import { WriteFileTool } from '../../tool/write-file';
@@ -20,7 +26,12 @@ type AgentPrivate = {
   executeTool: (
     toolCall: ToolCall,
     stepIndex: number,
-    callbacks?: { onMessage?: (message: Message) => void | Promise<void> },
+    callbacks?: {
+      onMessage?: (message: Message) => void | Promise<void>;
+      onToolPolicy?: (
+        info: ToolPolicyCheckInfo
+      ) => ToolPolicyDecision | Promise<ToolPolicyDecision>;
+    },
     abortSignal?: AbortSignal
   ) => AsyncGenerator<StreamEvent>;
   processToolCalls: (
@@ -656,7 +667,6 @@ describe('StatelessAgent', () => {
             mode: 'resume',
             bufferId: 'wf_direct_1',
             content: 'ijklmnop',
-            expectedSize: Buffer.byteLength(fullContent, 'utf8'),
           })
         )
         .mockReturnValueOnce(
@@ -664,7 +674,6 @@ describe('StatelessAgent', () => {
             path: targetPath,
             mode: 'finalize',
             bufferId: 'wf_direct_1',
-            expectedSize: Buffer.byteLength(fullContent, 'utf8'),
             expectedSha256,
           })
         )
@@ -706,7 +715,7 @@ describe('StatelessAgent', () => {
         'WRITE_FILE_NEED_RESUME',
         'WRITE_FILE_FINALIZE_OK',
       ]);
-      expect(payloads.map((payload) => payload.nextAction)).toEqual(['resume', 'finalize', 'none']);
+      expect(payloads.map((payload) => payload.nextAction)).toEqual(['resume', 'resume', 'none']);
       expect(events.at(-1)).toMatchObject({
         type: 'done',
         data: { finishReason: 'stop' },
@@ -761,6 +770,62 @@ describe('StatelessAgent', () => {
     });
     expect(onMessage).toHaveBeenCalledOnce();
     expect(toolChunkSpy).toHaveBeenCalledOnce();
+  });
+
+  it('executeTool forwards onToolPolicy hook to tool executor context', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    manager.execute = vi.fn().mockImplementation(async (_toolCall, options) => {
+      const policyDecision = await options.onPolicyCheck?.({
+        toolCallId: 'call_policy',
+        toolName: 'bash',
+        arguments: '{"command":"rm -rf /"}',
+        parsedArguments: { command: 'rm -rf /' },
+      });
+      expect(policyDecision).toEqual({
+        allowed: false,
+        code: 'DANGEROUS_COMMAND',
+        message: 'rm blocked',
+      });
+      return {
+        success: false,
+        error: {
+          name: 'ToolPolicyDeniedError',
+          message: 'Tool bash blocked by policy [DANGEROUS_COMMAND]: rm blocked',
+        },
+      };
+    });
+
+    const agent = new StatelessAgent(provider, manager, { maxRetryCount: 3 });
+    const onToolPolicy = vi.fn().mockResolvedValue({
+      allowed: false,
+      code: 'DANGEROUS_COMMAND',
+      message: 'rm blocked',
+    });
+
+    const events = await collectEvents(
+      (agent as unknown as AgentPrivate).executeTool(
+        {
+          id: 'call_policy',
+          type: 'function',
+          index: 0,
+          function: { name: 'bash', arguments: '{"command":"rm -rf /"}' },
+        },
+        1,
+        { onMessage: vi.fn(), onToolPolicy }
+      )
+    );
+
+    expect(onToolPolicy).toHaveBeenCalledWith({
+      toolCallId: 'call_policy',
+      toolName: 'bash',
+      arguments: '{"command":"rm -rf /"}',
+      parsedArguments: { command: 'rm -rf /' },
+    });
+    expect(events[0]).toMatchObject({
+      type: 'tool_result',
+      data: { content: 'Tool bash blocked by policy [DANGEROUS_COMMAND]: rm blocked' },
+    });
   });
 
   it('executeTool resolves confirmation through tool_confirm event', async () => {

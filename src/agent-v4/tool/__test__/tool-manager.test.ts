@@ -8,6 +8,7 @@ import {
   ToolDeniedError,
   ToolExecutionError,
   ToolNotFoundError,
+  ToolPolicyDeniedError,
   ToolValidationError,
 } from '../error';
 import type { ToolExecutionContext } from '../types';
@@ -155,6 +156,75 @@ describe('DefaultToolManager', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBeInstanceOf(ToolValidationError);
     expect(result.output).toContain('expected string');
+  });
+
+  it('returns ToolPolicyDeniedError when policy check rejects execution', async () => {
+    const manager = new DefaultToolManager();
+    manager.registerTool(
+      {
+        name: 'echo',
+        description: 'echo',
+        parameters: {},
+      },
+      new EchoTool()
+    );
+
+    const onPolicyCheck = vi.fn().mockResolvedValue({
+      allowed: false,
+      code: 'PATH_NOT_ALLOWED',
+      message: 'outside workspace',
+    });
+    const result = await manager.execute(
+      {
+        id: 't4_policy',
+        type: 'function',
+        index: 0,
+        function: { name: 'echo', arguments: '{"input":"abc"}' },
+      },
+      createContext({ onPolicyCheck })
+    );
+
+    expect(onPolicyCheck).toHaveBeenCalledOnce();
+    expect(result.success).toBe(false);
+    expect(result.error).toBeInstanceOf(ToolPolicyDeniedError);
+    expect(result.output).toContain('[PATH_NOT_ALLOWED]');
+  });
+
+  it('executes when policy check allows and receives parsed arguments', async () => {
+    const manager = new DefaultToolManager();
+    const tool = new EchoTool();
+    const executeSpy = vi.spyOn(tool, 'execute');
+    manager.registerTool(
+      {
+        name: 'echo',
+        description: 'echo',
+        parameters: {},
+      },
+      tool
+    );
+
+    const onPolicyCheck = vi.fn().mockResolvedValue({
+      allowed: true,
+    });
+    const result = await manager.execute(
+      {
+        id: 't4_policy_allow',
+        type: 'function',
+        index: 0,
+        function: { name: 'echo', arguments: '{"input":"abc"}' },
+      },
+      createContext({ onPolicyCheck })
+    );
+
+    expect(onPolicyCheck).toHaveBeenCalledWith({
+      toolCallId: 't4_policy_allow',
+      toolName: 'echo',
+      arguments: '{"input":"abc"}',
+      parsedArguments: { input: 'abc' },
+    });
+    expect(executeSpy).toHaveBeenCalledOnce();
+    expect(result.success).toBe(true);
+    expect(result.output).toBe('abc');
   });
 
   it('returns ToolDeniedError when user rejects confirmation', async () => {

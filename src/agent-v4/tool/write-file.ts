@@ -20,7 +20,6 @@ const schema = z.object({
   content: z.string().optional().describe('Content chunk for this call'),
   mode: writeModeSchema.default('direct').describe('Write mode'),
   bufferId: z.string().optional().describe('Resume session id'),
-  expectedSize: z.number().int().min(0).optional().describe('Expected final size in bytes'),
   expectedSha256: z
     .string()
     .regex(/^[a-fA-F0-9]{64}$/)
@@ -93,12 +92,11 @@ export class WriteFileTool extends BaseTool<typeof schema> {
         return this.handleDirect(targetPath, content, context);
       }
       if (mode === 'resume') {
-        return this.handleResume(targetPath, content, args.bufferId, args.expectedSize, context);
+        return this.handleResume(targetPath, content, args.bufferId, context);
       }
       return this.handleFinalize(
         targetPath,
         args.bufferId,
-        args.expectedSize,
         args.expectedSha256
       );
     } catch (error) {
@@ -150,7 +148,6 @@ export class WriteFileTool extends BaseTool<typeof schema> {
     targetPath: string,
     content: string,
     bufferId: string | undefined,
-    expectedSize: number | undefined,
     context?: ToolExecutionContext
   ): Promise<ToolResult> {
     if (!bufferId) {
@@ -198,7 +195,6 @@ export class WriteFileTool extends BaseTool<typeof schema> {
     );
     await appendContent(session, content);
     const latest = await loadWriteBufferSession(session.metaPath);
-    const shouldFinalize = typeof expectedSize === 'number' && latest.contentBytes >= expectedSize;
 
     return this.successResponse({
       ok: false,
@@ -210,14 +206,13 @@ export class WriteFileTool extends BaseTool<typeof schema> {
         bufferedBytes: latest.contentBytes,
         maxChunkBytes: this.maxChunkBytes,
       },
-      nextAction: shouldFinalize ? 'finalize' : 'resume',
+      nextAction: 'resume',
     });
   }
 
   private async handleFinalize(
     targetPath: string,
     bufferId: string | undefined,
-    expectedSize?: number,
     expectedSha256?: string
   ): Promise<ToolResult> {
     if (!bufferId) {
@@ -255,21 +250,6 @@ export class WriteFileTool extends BaseTool<typeof schema> {
       });
     }
     const content = await fs.promises.readFile(session.contentPath);
-
-    if (typeof expectedSize === 'number' && content.length !== expectedSize) {
-      return this.successResponse({
-        ok: false,
-        code: 'WRITE_FILE_CHECKSUM_MISMATCH',
-        message: `Size mismatch: expected=${expectedSize} actual=${content.length}`,
-        buffer: {
-          bufferId: session.bufferId,
-          path: targetPath,
-          bufferedBytes: content.length,
-          maxChunkBytes: this.maxChunkBytes,
-        },
-        nextAction: 'resume',
-      });
-    }
 
     if (expectedSha256) {
       const actualSha = createHash('sha256').update(content).digest('hex');

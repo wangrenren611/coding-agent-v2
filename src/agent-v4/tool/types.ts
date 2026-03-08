@@ -39,6 +39,19 @@ export interface ToolDecision {
   message?: string;
 }
 
+export interface ToolPolicyCheckInfo {
+  toolCallId: string;
+  toolName: string;
+  arguments: string;
+  parsedArguments: Record<string, unknown>;
+}
+
+export interface ToolPolicyDecision {
+  allowed: boolean;
+  code?: string;
+  message?: string;
+}
+
 export type ToolConcurrencyMode = 'parallel-safe' | 'exclusive';
 
 export interface ToolConcurrencyPolicy {
@@ -93,6 +106,9 @@ export interface ToolExecutionContext {
   /** 工具流式事件发射器（可选） */
   onChunk?: (event: ToolStreamEventInput) => void | Promise<void>;
   onConfirm?: (info: ToolConfirmInfo) => Promise<ToolDecision>;
+  onPolicyCheck?: (
+    info: ToolPolicyCheckInfo
+  ) => ToolPolicyDecision | Promise<ToolPolicyDecision>;
   /** 工具执行中断信号（超时/取消时触发） */
   toolAbortSignal?: AbortSignal;
 }

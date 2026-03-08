@@ -19,7 +19,8 @@ import {
   ToolNotFoundError,
   ToolValidationError,
   ToolDeniedError,
-  ToolExecutionError
+  ToolExecutionError,
+  ToolPolicyDeniedError,
 } from './error';
 
 
@@ -82,8 +83,25 @@ export class DefaultToolManager implements ToolManager {
         output: err.message
       };
     }
+
+    if (options?.onPolicyCheck) {
+      const policyDecision = await options.onPolicyCheck({
+        toolCallId: toolCall.id,
+        toolName,
+        arguments: toolCall.function.arguments,
+        parsedArguments: validationResult.data as Record<string, unknown>,
+      });
+      if (!policyDecision.allowed) {
+        const err = new ToolPolicyDeniedError(toolName, policyDecision.code, policyDecision.message);
+        return {
+          success: false,
+          error: err,
+          output: err.message,
+        };
+      }
+    }
     
-    const needsConfirm = handler.shouldConfirm(args);
+    const needsConfirm = handler.shouldConfirm(validationResult.data);
     
     if (needsConfirm && options?.onConfirm) {
       const confirmInfo: ToolConfirmInfo = {
@@ -105,7 +123,7 @@ export class DefaultToolManager implements ToolManager {
     }
     
     try {
-      const result = await handler.execute(args, options);
+      const result = await handler.execute(validationResult.data, options);
       return result;
     } catch (error) {
       const err = new ToolExecutionError((error as Error).message);

@@ -5,6 +5,7 @@ import {
   ToolDeniedError,
   ToolExecutionError,
   ToolNotFoundError,
+  ToolPolicyDeniedError,
   ToolValidationError,
 } from '../error';
 
@@ -86,5 +87,22 @@ describe('tool/error', () => {
 
     expect(customErr.reason).toBe('policy denied');
     expect(customErr.message).toBe('Tool danger denied: policy denied');
+  });
+
+  it('builds ToolPolicyDeniedError with standard reason code envelope', () => {
+    const err = new ToolPolicyDeniedError('write_file', 'PATH_NOT_ALLOWED', 'outside workspace');
+
+    expect(err.name).toBe('ToolPolicyDeniedError');
+    expect(err.code).toBe(2006);
+    expect(err.errorCode).toBe('TOOL_POLICY_DENIED');
+    expect(err.category).toBe('permission');
+    expect(err.retryable).toBe(false);
+    expect(err.httpStatus).toBe(403);
+    expect(err.toolName).toBe('write_file');
+    expect(err.reasonCode).toBe('PATH_NOT_ALLOWED');
+    expect(err.reason).toBe('outside workspace');
+    expect(err.message).toBe(
+      'Tool write_file blocked by policy [PATH_NOT_ALLOWED]: outside workspace'
+    );
   });
 });

@@ -98,3 +98,26 @@ export class ToolDeniedError extends ToolExecutionError {
     };
   }
 }
+
+export class ToolPolicyDeniedError extends ToolExecutionError {
+  public toolName: string;
+  public reasonCode: string;
+  public reason?: string;
+
+  constructor(toolName: string, reasonCode = 'POLICY_DENIED', reason?: string) {
+    super(`Tool ${toolName} blocked by policy [${reasonCode}]: ${reason || 'Policy denied'}`, 2006);
+    this.name = 'ToolPolicyDeniedError';
+    this.errorCode = 'TOOL_POLICY_DENIED';
+    this.category = 'permission';
+    this.retryable = false;
+    this.httpStatus = 403;
+    this.toolName = toolName;
+    this.reasonCode = reasonCode;
+    this.reason = reason;
+    this.details = {
+      toolName,
+      reasonCode,
+      reason,
+    };
+  }
+}
