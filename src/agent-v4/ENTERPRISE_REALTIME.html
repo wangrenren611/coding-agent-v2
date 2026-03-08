@@ -1,0 +1,1345 @@
+<!DOCTYPE html><html><head>
+      <title>ENTERPRISE_REALTIME</title>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      
+      <link rel="stylesheet" href="file:///c:\Users\Administrator\.trae-cn\extensions\shd101wyy.markdown-preview-enhanced-0.8.20-universal\crossnote\dependencies\katex\katex.min.css">
+      
+      
+      
+      
+      
+      <style>
+      code[class*=language-],pre[class*=language-]{color:#333;background:0 0;font-family:Consolas,"Liberation Mono",Menlo,Courier,monospace;text-align:left;white-space:pre;word-spacing:normal;word-break:normal;word-wrap:normal;line-height:1.4;-moz-tab-size:8;-o-tab-size:8;tab-size:8;-webkit-hyphens:none;-moz-hyphens:none;-ms-hyphens:none;hyphens:none}pre[class*=language-]{padding:.8em;overflow:auto;border-radius:3px;background:#f5f5f5}:not(pre)>code[class*=language-]{padding:.1em;border-radius:.3em;white-space:normal;background:#f5f5f5}.token.blockquote,.token.comment{color:#969896}.token.cdata{color:#183691}.token.doctype,.token.macro.property,.token.punctuation,.token.variable{color:#333}.token.builtin,.token.important,.token.keyword,.token.operator,.token.rule{color:#a71d5d}.token.attr-value,.token.regex,.token.string,.token.url{color:#183691}.token.atrule,.token.boolean,.token.code,.token.command,.token.constant,.token.entity,.token.number,.token.property,.token.symbol{color:#0086b3}.token.prolog,.token.selector,.token.tag{color:#63a35c}.token.attr-name,.token.class,.token.class-name,.token.function,.token.id,.token.namespace,.token.pseudo-class,.token.pseudo-element,.token.url-reference .token.variable{color:#795da3}.token.entity{cursor:help}.token.title,.token.title .token.punctuation{font-weight:700;color:#1d3e81}.token.list{color:#ed6a43}.token.inserted{background-color:#eaffea;color:#55a532}.token.deleted{background-color:#ffecec;color:#bd2c00}.token.bold{font-weight:700}.token.italic{font-style:italic}.language-json .token.property{color:#183691}.language-markup .token.tag .token.punctuation{color:#333}.language-css .token.function,code.language-css{color:#0086b3}.language-yaml .token.atrule{color:#63a35c}code.language-yaml{color:#183691}.language-ruby .token.function{color:#333}.language-markdown .token.url{color:#795da3}.language-makefile .token.symbol{color:#795da3}.language-makefile .token.variable{color:#183691}.language-makefile .token.builtin{color:#0086b3}.language-bash .token.keyword{color:#0086b3}pre[data-line]{position:relative;padding:1em 0 1em 3em}pre[data-line] .line-highlight-wrapper{position:absolute;top:0;left:0;background-color:transparent;display:block;width:100%}pre[data-line] .line-highlight{position:absolute;left:0;right:0;padding:inherit 0;margin-top:1em;background:hsla(24,20%,50%,.08);background:linear-gradient(to right,hsla(24,20%,50%,.1) 70%,hsla(24,20%,50%,0));pointer-events:none;line-height:inherit;white-space:pre}pre[data-line] .line-highlight:before,pre[data-line] .line-highlight[data-end]:after{content:attr(data-start);position:absolute;top:.4em;left:.6em;min-width:1em;padding:0 .5em;background-color:hsla(24,20%,50%,.4);color:#f4f1ef;font:bold 65%/1.5 sans-serif;text-align:center;vertical-align:.3em;border-radius:999px;text-shadow:none;box-shadow:0 1px #fff}pre[data-line] .line-highlight[data-end]:after{content:attr(data-end);top:auto;bottom:.4em}html body{font-family:'Helvetica Neue',Helvetica,'Segoe UI',Arial,freesans,sans-serif;font-size:16px;line-height:1.6;color:#333;background-color:#fff;overflow:initial;box-sizing:border-box;word-wrap:break-word}html body>:first-child{margin-top:0}html body h1,html body h2,html body h3,html body h4,html body h5,html body h6{line-height:1.2;margin-top:1em;margin-bottom:16px;color:#000}html body h1{font-size:2.25em;font-weight:300;padding-bottom:.3em}html body h2{font-size:1.75em;font-weight:400;padding-bottom:.3em}html body h3{font-size:1.5em;font-weight:500}html body h4{font-size:1.25em;font-weight:600}html body h5{font-size:1.1em;font-weight:600}html body h6{font-size:1em;font-weight:600}html body h1,html body h2,html body h3,html body h4,html body h5{font-weight:600}html body h5{font-size:1em}html body h6{color:#5c5c5c}html body strong{color:#000}html body del{color:#5c5c5c}html body a:not([href]){color:inherit;text-decoration:none}html body a{color:#08c;text-decoration:none}html body a:hover{color:#00a3f5;text-decoration:none}html body img{max-width:100%}html body>p{margin-top:0;margin-bottom:16px;word-wrap:break-word}html body>ol,html body>ul{margin-bottom:16px}html body ol,html body ul{padding-left:2em}html body ol.no-list,html body ul.no-list{padding:0;list-style-type:none}html body ol ol,html body ol ul,html body ul ol,html body ul ul{margin-top:0;margin-bottom:0}html body li{margin-bottom:0}html body li.task-list-item{list-style:none}html body li>p{margin-top:0;margin-bottom:0}html body .task-list-item-checkbox{margin:0 .2em .25em -1.8em;vertical-align:middle}html body .task-list-item-checkbox:hover{cursor:pointer}html body blockquote{margin:16px 0;font-size:inherit;padding:0 15px;color:#5c5c5c;background-color:#f0f0f0;border-left:4px solid #d6d6d6}html body blockquote>:first-child{margin-top:0}html body blockquote>:last-child{margin-bottom:0}html body hr{height:4px;margin:32px 0;background-color:#d6d6d6;border:0 none}html body table{margin:10px 0 15px 0;border-collapse:collapse;border-spacing:0;display:block;width:100%;overflow:auto;word-break:normal;word-break:keep-all}html body table th{font-weight:700;color:#000}html body table td,html body table th{border:1px solid #d6d6d6;padding:6px 13px}html body dl{padding:0}html body dl dt{padding:0;margin-top:16px;font-size:1em;font-style:italic;font-weight:700}html body dl dd{padding:0 16px;margin-bottom:16px}html body code{font-family:Menlo,Monaco,Consolas,'Courier New',monospace;font-size:.85em;color:#000;background-color:#f0f0f0;border-radius:3px;padding:.2em 0}html body code::after,html body code::before{letter-spacing:-.2em;content:'\00a0'}html body pre>code{padding:0;margin:0;word-break:normal;white-space:pre;background:0 0;border:0}html body .highlight{margin-bottom:16px}html body .highlight pre,html body pre{padding:1em;overflow:auto;line-height:1.45;border:#d6d6d6;border-radius:3px}html body .highlight pre{margin-bottom:0;word-break:normal}html body pre code,html body pre tt{display:inline;max-width:initial;padding:0;margin:0;overflow:initial;line-height:inherit;word-wrap:normal;background-color:transparent;border:0}html body pre code:after,html body pre code:before,html body pre tt:after,html body pre tt:before{content:normal}html body blockquote,html body dl,html body ol,html body p,html body pre,html body ul{margin-top:0;margin-bottom:16px}html body kbd{color:#000;border:1px solid #d6d6d6;border-bottom:2px solid #c7c7c7;padding:2px 4px;background-color:#f0f0f0;border-radius:3px}@media print{html body{background-color:#fff}html body h1,html body h2,html body h3,html body h4,html body h5,html body h6{color:#000;page-break-after:avoid}html body blockquote{color:#5c5c5c}html body pre{page-break-inside:avoid}html body table{display:table}html body img{display:block;max-width:100%;max-height:100%}html body code,html body pre{word-wrap:break-word;white-space:pre}}.markdown-preview{width:100%;height:100%;box-sizing:border-box}.markdown-preview ul{list-style:disc}.markdown-preview ul ul{list-style:circle}.markdown-preview ul ul ul{list-style:square}.markdown-preview ol{list-style:decimal}.markdown-preview ol ol,.markdown-preview ul ol{list-style-type:lower-roman}.markdown-preview ol ol ol,.markdown-preview ol ul ol,.markdown-preview ul ol ol,.markdown-preview ul ul ol{list-style-type:lower-alpha}.markdown-preview .newpage,.markdown-preview .pagebreak{page-break-before:always}.markdown-preview pre.line-numbers{position:relative;padding-left:3.8em;counter-reset:linenumber}.markdown-preview pre.line-numbers>code{position:relative}.markdown-preview pre.line-numbers .line-numbers-rows{position:absolute;pointer-events:none;top:1em;font-size:100%;left:0;width:3em;letter-spacing:-1px;border-right:1px solid #999;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none}.markdown-preview pre.line-numbers .line-numbers-rows>span{pointer-events:none;display:block;counter-increment:linenumber}.markdown-preview pre.line-numbers .line-numbers-rows>span:before{content:counter(linenumber);color:#999;display:block;padding-right:.8em;text-align:right}.markdown-preview .mathjax-exps .MathJax_Display{text-align:center!important}.markdown-preview:not([data-for=preview]) .code-chunk .code-chunk-btn-group{display:none}.markdown-preview:not([data-for=preview]) .code-chunk .status{display:none}.markdown-preview:not([data-for=preview]) .code-chunk .output-div{margin-bottom:16px}.markdown-preview .md-toc{padding:0}.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link{display:inline;padding:.25rem 0}.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link div,.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link p{display:inline}.markdown-preview .md-toc .md-toc-link-wrapper.highlighted .md-toc-link{font-weight:800}.scrollbar-style::-webkit-scrollbar{width:8px}.scrollbar-style::-webkit-scrollbar-track{border-radius:10px;background-color:transparent}.scrollbar-style::-webkit-scrollbar-thumb{border-radius:5px;background-color:rgba(150,150,150,.66);border:4px solid rgba(150,150,150,.66);background-clip:content-box}html body[for=html-export]:not([data-presentation-mode]){position:relative;width:100%;height:100%;top:0;left:0;margin:0;padding:0;overflow:auto}html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{position:relative;top:0;min-height:100vh}@media screen and (min-width:914px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{padding:2em calc(50% - 457px + 2em)}}@media screen and (max-width:914px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{padding:2em}}@media screen and (max-width:450px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{font-size:14px!important;padding:1em}}@media print{html body[for=html-export]:not([data-presentation-mode]) #sidebar-toc-btn{display:none}}html body[for=html-export]:not([data-presentation-mode]) #sidebar-toc-btn{position:fixed;bottom:8px;left:8px;font-size:28px;cursor:pointer;color:inherit;z-index:99;width:32px;text-align:center;opacity:.4}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] #sidebar-toc-btn{opacity:1}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc{position:fixed;top:0;left:0;width:300px;height:100%;padding:32px 0 48px 0;font-size:14px;box-shadow:0 0 4px rgba(150,150,150,.33);box-sizing:border-box;overflow:auto;background-color:inherit}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar{width:8px}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar-track{border-radius:10px;background-color:transparent}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar-thumb{border-radius:5px;background-color:rgba(150,150,150,.66);border:4px solid rgba(150,150,150,.66);background-clip:content-box}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc a{text-decoration:none}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc{padding:0 16px}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link{display:inline;padding:.25rem 0}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link div,html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link p{display:inline}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper.highlighted .md-toc-link{font-weight:800}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{left:300px;width:calc(100% - 300px);padding:2em calc(50% - 457px - 300px / 2);margin:0;box-sizing:border-box}@media screen and (max-width:1274px){html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{padding:2em}}@media screen and (max-width:450px){html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{width:100%}}html body[for=html-export]:not([data-presentation-mode]):not([html-show-sidebar-toc]) .markdown-preview{left:50%;transform:translateX(-50%)}html body[for=html-export]:not([data-presentation-mode]):not([html-show-sidebar-toc]) .md-sidebar-toc{display:none}
+/* Please visit the URL below for more information: */
+/*   https://shd101wyy.github.io/markdown-preview-enhanced/#/customize-css */
+
+      </style>
+      <!-- The content below will be included at the end of the <head> element. --><script type="text/javascript">
+  document.addEventListener("DOMContentLoaded", function () {
+    // your code here
+  });
+</script></head><body for="html-export">
+    
+    
+      <div class="crossnote markdown-preview  ">
+      
+<h1 id="企业级无状态-agent-实时存储方案">企业级无状态 Agent 实时存储方案 </h1>
+<h2 id="一-问题分析">一、问题分析 </h2>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>当前设计的问题：
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  Agent 执行 (可能 10 分钟+)                                   │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐          │
+│  │ Step 1  │→ │ Step 2  │→ │ Step 3  │→ │ Step N  │          │
+│  │         │  │         │  │         │  │         │          │
+│  │ 消息在   │  │ 消息在  │  │ 消息在  │  │ 消息在  │          │
+│  │ 内存     │  │ 内存    │  │ 内存    │  │ 内存    │          │
+│  └─────────┘  └─────────┘  └─────────┘  └─────────┘          │
+│                               │                                │
+│                               ▼                                │
+│                    ❌ 只有完成时才存储                         │
+│                                                                 │
+│  问题:                                                           │
+│  - Agent 崩溃 = 所有消息丢失                                     │
+│  - 页面关闭 = 请求中断                                           │
+│  - 无法实时查看执行进度                                          │
+│  - 无法从中间步骤恢复                                            │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre><hr>
+<h2 id="二-解决方案概述">二、解决方案概述 </h2>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>核心思路: 实时存储 + 后台执行 + 检查点恢复
+
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  1. 实时存储                                                    │
+│     - 每条消息产生时立即存储                                     │
+│     - 每个 Step 完成时保存检查点                                  │
+│                                                                 │
+│  2. 后台执行 (Fire and Forget)                                  │
+│     - API 立即返回 executionId                                   │
+│     - Worker 后台执行                                            │
+│     - 页面关闭不受影响                                           │
+│                                                                 │
+│  3. 故障恢复                                                    │
+│     - 检查点记录执行位置                                         │
+│     - 从 lastMessageId 恢复                                     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre><hr>
+<h2 id="三-核心概念">三、核心概念 </h2>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>sessionId</strong></td>
+<td>整个对话（用户和 AI 之间的会话）</td>
+</tr>
+<tr>
+<td><strong>executionId</strong></td>
+<td>一次 agent.run()（用户的一次请求）</td>
+</tr>
+<tr>
+<td><strong>stepIndex</strong></td>
+<td>每次循环（内部步骤）</td>
+</tr>
+</tbody>
+</table>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>Session: sess_001 (用户整个对话)
+    │
+    └── Execution: exec_001 (用户第一次请求)
+            │
+            ├── Step 1 (stepIndex=1)
+            ├── Step 2 (stepIndex=2)
+            └── Step 3 (stepIndex=3)
+                    │
+                    └── 返回结果
+</code></pre><hr>
+<h2 id="四-实时存储架构">四、实时存储架构 </h2>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>┌─────────────────────────────────────────────────────────────────┐
+│                      实时存储架构                               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────────┐   │
+│  │                    回调驱动                               │   │
+│  │                                                           │   │
+│  │   onMessage: 每条消息产生时触发                          │   │
+│  │   - Redis 实时写入 (&lt; 1ms)                              │   │
+│  │   - Kafka 异步持久化                                     │   │
+│  │   - SSE 推送客户端                                        │   │
+│  │                                                           │   │
+│  │   onCheckpoint: 每个 Step 完成时触发                     │   │
+│  │   - 保存执行位置 (stepIndex + lastMessageId)             │   │
+│  │   - 用于故障恢复                                          │   │
+│  │                                                           │   │
+│  └───────────────────────────────────────────────────────────┘   │
+│                            │                                    │
+│                            ▼                                    │
+│  ┌───────────────────────────────────────────────────────────┐   │
+│  │                      存储层                               │   │
+│  │                                                           │   │
+│  │   ┌─────────────┐    ┌─────────────┐                   │   │
+│  │   │   Redis     │    │   Kafka     │                   │   │
+│  │   │  (缓存/检查点)│    │  (持久化)  │                   │   │
+│  │   └─────────────┘    └─────────────┘                   │   │
+│  │                                                           │   │
+│  └───────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre><hr>
+<h2 id="五-agent-回调机制设计">五、Agent 回调机制设计 </h2>
+<pre data-role="codeBlock" data-info="typescript" class="language-typescript typescript"><code><span class="token comment">// ============================================================</span>
+<span class="token comment">// 消息类型定义</span>
+<span class="token comment">// ============================================================</span>
+
+<span class="token keyword keyword-interface">interface</span> <span class="token class-name">Message</span> <span class="token punctuation">{</span>
+  messageId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+  role<span class="token operator">:</span> <span class="token string">'system'</span> <span class="token operator">|</span> <span class="token string">'user'</span> <span class="token operator">|</span> <span class="token string">'assistant'</span> <span class="token operator">|</span> <span class="token string">'tool'</span><span class="token punctuation">;</span>
+  content<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+  tool_call_id<span class="token operator">?</span><span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+  tool_calls<span class="token operator">?</span><span class="token operator">:</span> ToolCall<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+  timestamp<span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>
+  metadata<span class="token operator">?</span><span class="token operator">:</span> Record<span class="token operator">&lt;</span><span class="token builtin">string</span><span class="token punctuation">,</span> <span class="token builtin">any</span><span class="token operator">&gt;</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword keyword-interface">interface</span> <span class="token class-name">ToolCall</span> <span class="token punctuation">{</span>
+  id<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+  type<span class="token operator">:</span> <span class="token string">'function'</span><span class="token punctuation">;</span>
+  name<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+  arguments<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword keyword-interface">interface</span> <span class="token class-name">Tool</span> <span class="token punctuation">{</span>
+  name<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+  description<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+  parameters<span class="token operator">:</span> <span class="token builtin">any</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">// ============================================================</span>
+<span class="token comment">// Agent 输入输出接口</span>
+<span class="token comment">// ============================================================</span>
+
+<span class="token keyword keyword-interface">interface</span> <span class="token class-name">AgentInput</span> <span class="token punctuation">{</span>
+  executionId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>           <span class="token comment">// 任务 ID</span>
+  conversationId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>        <span class="token comment">// 会话 ID</span>
+  messages<span class="token operator">:</span> Message<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">;</span>           <span class="token comment">// Context 消息列表</span>
+  systemPrompt<span class="token operator">?</span><span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>         <span class="token comment">// 系统提示</span>
+  tools<span class="token operator">?</span><span class="token operator">:</span> Tool<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">;</span>                <span class="token comment">// 可用工具</span>
+  config<span class="token operator">?</span><span class="token operator">:</span> LLMConfig<span class="token punctuation">;</span>           <span class="token comment">// LLM 配置</span>
+  maxSteps<span class="token operator">?</span><span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>            <span class="token comment">// 最大步数</span>
+  startStep<span class="token operator">?</span><span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>           <span class="token comment">// 起始步骤 (用于恢复)</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword keyword-interface">interface</span> <span class="token class-name">AgentOutput</span> <span class="token punctuation">{</span>
+  messages<span class="token operator">:</span> Message<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">;</span>           <span class="token comment">// 包含新增消息</span>
+  finishReason<span class="token operator">:</span> <span class="token string">'stop'</span> <span class="token operator">|</span> <span class="token string">'max_steps'</span> <span class="token operator">|</span> <span class="token string">'error'</span><span class="token punctuation">;</span>
+  steps<span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>                <span class="token comment">// 执行的步数</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword keyword-interface">interface</span> <span class="token class-name">LLMConfig</span> <span class="token punctuation">{</span>
+  model<span class="token operator">?</span><span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+  temperature<span class="token operator">?</span><span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>
+  maxTokens<span class="token operator">?</span><span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>
+  topP<span class="token operator">?</span><span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword keyword-interface">interface</span> <span class="token class-name">LLMResponse</span> <span class="token punctuation">{</span>
+  message<span class="token operator">:</span> Message<span class="token punctuation">;</span>
+  toolCalls<span class="token operator">?</span><span class="token operator">:</span> ToolCall<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+  usage<span class="token operator">?</span><span class="token operator">:</span> <span class="token punctuation">{</span>
+    prompt_tokens<span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>
+    completion_tokens<span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>
+    total_tokens<span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span><span class="token punctuation">;</span>
+  finishReason<span class="token operator">?</span><span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">// ============================================================</span>
+<span class="token comment">// 回调接口</span>
+<span class="token comment">// ============================================================</span>
+
+<span class="token keyword keyword-interface">interface</span> <span class="token class-name">AgentCallbacks</span> <span class="token punctuation">{</span>
+  <span class="token comment">// 每产生一条新消息时回调 (实时存储)</span>
+  <span class="token function-variable function">onMessage</span><span class="token operator">:</span> <span class="token punctuation">(</span>message<span class="token operator">:</span> Message<span class="token punctuation">)</span> <span class="token operator">=&gt;</span> <span class="token keyword keyword-void">void</span> <span class="token operator">|</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span><span class="token punctuation">;</span>
+  
+  <span class="token comment">// 每个 Step 完成时回调 (检查点)</span>
+  <span class="token function-variable function">onCheckpoint</span><span class="token operator">:</span> <span class="token punctuation">(</span>checkpoint<span class="token operator">:</span> ExecutionCheckpoint<span class="token punctuation">)</span> <span class="token operator">=&gt;</span> <span class="token keyword keyword-void">void</span> <span class="token operator">|</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span><span class="token punctuation">;</span>
+  
+  <span class="token comment">// 进度更新回调</span>
+  onProgress<span class="token operator">?</span><span class="token operator">:</span> <span class="token punctuation">(</span>progress<span class="token operator">:</span> ExecutionProgress<span class="token punctuation">)</span> <span class="token operator">=&gt;</span> <span class="token keyword keyword-void">void</span> <span class="token operator">|</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span><span class="token punctuation">;</span>
+  
+  <span class="token comment">// 错误回调</span>
+  onError<span class="token operator">?</span><span class="token operator">:</span> <span class="token punctuation">(</span>error<span class="token operator">:</span> Error<span class="token punctuation">)</span> <span class="token operator">=&gt;</span> <span class="token keyword keyword-void">void</span> <span class="token operator">|</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword keyword-interface">interface</span> <span class="token class-name">ExecutionCheckpoint</span> <span class="token punctuation">{</span>
+  executionId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+  stepIndex<span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>           <span class="token comment">// 当前步骤</span>
+  lastMessageId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>       <span class="token comment">// 最后一条消息 ID (用于恢复)</span>
+  lastMessageTime<span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>     <span class="token comment">// 时间戳</span>
+  canResume<span class="token operator">:</span> <span class="token builtin">boolean</span><span class="token punctuation">;</span>          <span class="token comment">// 是否可恢复</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword keyword-interface">interface</span> <span class="token class-name">ExecutionProgress</span> <span class="token punctuation">{</span>
+  executionId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+  stepIndex<span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>
+  currentAction<span class="token operator">:</span> <span class="token string">'llm'</span> <span class="token operator">|</span> <span class="token string">'tool'</span> <span class="token operator">|</span> <span class="token string">'waiting'</span><span class="token punctuation">;</span>
+  messageCount<span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">// ============================================================</span>
+<span class="token comment">// LLM Provider 接口</span>
+<span class="token comment">// ============================================================</span>
+
+<span class="token keyword keyword-interface">interface</span> <span class="token class-name">LLMProvider</span> <span class="token punctuation">{</span>
+  <span class="token comment">// 生成响应 (非流式)</span>
+  <span class="token function">generate</span><span class="token punctuation">(</span>messages<span class="token operator">:</span> Message<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">,</span> config<span class="token operator">?</span><span class="token operator">:</span> LLMConfig<span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span>LLMResponse<span class="token operator">&gt;</span><span class="token punctuation">;</span>
+  
+  <span class="token comment">// 生成响应 (流式)</span>
+  <span class="token function">generateStream</span><span class="token punctuation">(</span>
+    messages<span class="token operator">:</span> Message<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">,</span> 
+    config<span class="token operator">?</span><span class="token operator">:</span> LLMConfig
+  <span class="token punctuation">)</span><span class="token operator">:</span> AsyncGenerator<span class="token operator">&lt;</span>Chunk<span class="token operator">&gt;</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword keyword-interface">interface</span> <span class="token class-name">Chunk</span> <span class="token punctuation">{</span>
+  id<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+  choices<span class="token operator">:</span> <span class="token builtin">Array</span><span class="token operator">&lt;</span><span class="token punctuation">{</span>
+    index<span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">;</span>
+    delta<span class="token operator">:</span> <span class="token punctuation">{</span>
+      content<span class="token operator">?</span><span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+      tool_calls<span class="token operator">?</span><span class="token operator">:</span> ToolCall<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span><span class="token punctuation">;</span>
+    finish_reason<span class="token operator">?</span><span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span><span class="token operator">&gt;</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">// ============================================================</span>
+<span class="token comment">// Tool Executor 接口</span>
+<span class="token comment">// ============================================================</span>
+
+<span class="token keyword keyword-interface">interface</span> <span class="token class-name">ToolExecutor</span> <span class="token punctuation">{</span>
+  <span class="token function">execute</span><span class="token punctuation">(</span>toolCall<span class="token operator">:</span> ToolCall<span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span>Message<span class="token operator">&gt;</span><span class="token punctuation">;</span>
+  <span class="token function">registerTool</span><span class="token punctuation">(</span>tool<span class="token operator">:</span> Tool<span class="token punctuation">,</span> handler<span class="token operator">:</span> <span class="token builtin">Function</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token keyword keyword-void">void</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">// ============================================================</span>
+<span class="token comment">// 无状态 Agent 完整实现</span>
+<span class="token comment">// ============================================================</span>
+
+<span class="token keyword keyword-class">class</span> <span class="token class-name">StatelessAgent</span> <span class="token punctuation">{</span>
+  <span class="token keyword keyword-private">private</span> llmProvider<span class="token operator">:</span> LLMProvider<span class="token punctuation">;</span>
+  <span class="token keyword keyword-private">private</span> toolExecutor<span class="token operator">:</span> ToolExecutor<span class="token punctuation">;</span>
+  
+  <span class="token function">constructor</span><span class="token punctuation">(</span>llmProvider<span class="token operator">:</span> LLMProvider<span class="token punctuation">,</span> toolExecutor<span class="token operator">:</span> ToolExecutor<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>llmProvider <span class="token operator">=</span> llmProvider<span class="token punctuation">;</span>
+    <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>toolExecutor <span class="token operator">=</span> toolExecutor<span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token keyword keyword-async">async</span> <span class="token function">run</span><span class="token punctuation">(</span>input<span class="token operator">:</span> AgentInput<span class="token punctuation">,</span> callbacks<span class="token operator">?</span><span class="token operator">:</span> AgentCallbacks<span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span>AgentOutput<span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-let">let</span> <span class="token punctuation">{</span> 
+      messages<span class="token punctuation">,</span> 
+      maxSteps <span class="token operator">=</span> <span class="token number">100</span><span class="token punctuation">,</span> 
+      startStep <span class="token operator">=</span> <span class="token number">1</span> 
+    <span class="token punctuation">}</span> <span class="token operator">=</span> input<span class="token punctuation">;</span>
+    
+    <span class="token keyword keyword-let">let</span> stepIndex <span class="token operator">=</span> startStep <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-let">let</span> finishReason<span class="token operator">:</span> <span class="token string">'stop'</span> <span class="token operator">|</span> <span class="token string">'max_steps'</span> <span class="token operator">|</span> <span class="token string">'error'</span> <span class="token operator">=</span> <span class="token string">'stop'</span><span class="token punctuation">;</span>
+    
+    <span class="token comment">// 主循环</span>
+    <span class="token keyword keyword-while">while</span> <span class="token punctuation">(</span>stepIndex <span class="token operator">&lt;</span> maxSteps<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+      stepIndex<span class="token operator">++</span><span class="token punctuation">;</span>
+      
+      <span class="token keyword keyword-try">try</span> <span class="token punctuation">{</span>
+        <span class="token comment">// 回调: 进度</span>
+        callbacks<span class="token operator">?.</span>onProgress<span class="token operator">?.</span><span class="token punctuation">(</span><span class="token punctuation">{</span>
+          executionId<span class="token operator">:</span> input<span class="token punctuation">.</span>executionId<span class="token punctuation">,</span>
+          stepIndex<span class="token punctuation">,</span>
+          currentAction<span class="token operator">:</span> <span class="token string">'llm'</span><span class="token punctuation">,</span>
+          messageCount<span class="token operator">:</span> messages<span class="token punctuation">.</span>length
+        <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 1. 调用 LLM</span>
+        <span class="token keyword keyword-const">const</span> response <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>llmProvider<span class="token punctuation">.</span><span class="token function">generate</span><span class="token punctuation">(</span>messages<span class="token punctuation">,</span> input<span class="token punctuation">.</span>config<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 2. 添加助手消息</span>
+        <span class="token keyword keyword-const">const</span> assistantMessage <span class="token operator">=</span> response<span class="token punctuation">.</span>message<span class="token punctuation">;</span>
+        messages<span class="token punctuation">.</span><span class="token function">push</span><span class="token punctuation">(</span>assistantMessage<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 回调: 新消息 (实时存储)</span>
+        <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span><span class="token function">safeCallback</span><span class="token punctuation">(</span>callbacks<span class="token operator">?.</span>onMessage<span class="token punctuation">,</span> assistantMessage<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 3. 检查工具调用</span>
+        <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span>response<span class="token punctuation">.</span>toolCalls <span class="token operator">&amp;&amp;</span> response<span class="token punctuation">.</span>toolCalls<span class="token punctuation">.</span>length <span class="token operator">&gt;</span> <span class="token number">0</span><span class="token punctuation">)</span> <span class="token punctuation">{</span>
+          <span class="token comment">// 回调: 进度</span>
+          callbacks<span class="token operator">?.</span>onProgress<span class="token operator">?.</span><span class="token punctuation">(</span><span class="token punctuation">{</span>
+            executionId<span class="token operator">:</span> input<span class="token punctuation">.</span>executionId<span class="token punctuation">,</span>
+            stepIndex<span class="token punctuation">,</span>
+            currentAction<span class="token operator">:</span> <span class="token string">'tool'</span><span class="token punctuation">,</span>
+            messageCount<span class="token operator">:</span> messages<span class="token punctuation">.</span>length
+          <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+          
+          <span class="token comment">// 4. 执行工具调用</span>
+          <span class="token keyword keyword-for">for</span> <span class="token punctuation">(</span><span class="token keyword keyword-const">const</span> toolCall <span class="token keyword keyword-of">of</span> response<span class="token punctuation">.</span>toolCalls<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+            <span class="token keyword keyword-const">const</span> toolResult <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>toolExecutor<span class="token punctuation">.</span><span class="token function">execute</span><span class="token punctuation">(</span>toolCall<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            messages<span class="token punctuation">.</span><span class="token function">push</span><span class="token punctuation">(</span>toolResult<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            
+            <span class="token comment">// 回调: 工具结果 (实时存储)</span>
+            <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span><span class="token function">safeCallback</span><span class="token punctuation">(</span>callbacks<span class="token operator">?.</span>onMessage<span class="token punctuation">,</span> toolResult<span class="token punctuation">)</span><span class="token punctuation">;</span>
+          <span class="token punctuation">}</span>
+          
+          <span class="token comment">// 回调: 检查点 (每个 Step 完成)</span>
+          <span class="token keyword keyword-const">const</span> lastMessage <span class="token operator">=</span> messages<span class="token punctuation">[</span>messages<span class="token punctuation">.</span>length <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+          <span class="token keyword keyword-const">const</span> checkpoint<span class="token operator">:</span> ExecutionCheckpoint <span class="token operator">=</span> <span class="token punctuation">{</span>
+            executionId<span class="token operator">:</span> input<span class="token punctuation">.</span>executionId<span class="token punctuation">,</span>
+            stepIndex<span class="token punctuation">,</span>
+            lastMessageId<span class="token operator">:</span> lastMessage<span class="token operator">?.</span>messageId <span class="token operator">||</span> <span class="token string">''</span><span class="token punctuation">,</span>
+            lastMessageTime<span class="token operator">:</span> Date<span class="token punctuation">.</span><span class="token function">now</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            canResume<span class="token operator">:</span> <span class="token boolean">true</span>
+          <span class="token punctuation">}</span><span class="token punctuation">;</span>
+          <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span><span class="token function">safeCallback</span><span class="token punctuation">(</span>callbacks<span class="token operator">?.</span>onCheckpoint<span class="token punctuation">,</span> checkpoint<span class="token punctuation">)</span><span class="token punctuation">;</span>
+          
+          <span class="token comment">// 继续下一轮</span>
+          <span class="token keyword keyword-continue">continue</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        
+        <span class="token comment">// 5. 无工具调用，完成</span>
+        finishReason <span class="token operator">=</span> <span class="token string">'stop'</span><span class="token punctuation">;</span>
+        <span class="token keyword keyword-break">break</span><span class="token punctuation">;</span>
+        
+      <span class="token punctuation">}</span> <span class="token keyword keyword-catch">catch</span> <span class="token punctuation">(</span>error<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+        <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">error</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">[Agent] Step </span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>stepIndex<span class="token interpolation-punctuation punctuation">}</span></span><span class="token string"> error:</span><span class="token template-punctuation string">`</span></span><span class="token punctuation">,</span> error<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 回调: 错误</span>
+        <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span><span class="token function">safeCallback</span><span class="token punctuation">(</span>callbacks<span class="token operator">?.</span>onError<span class="token punctuation">,</span> error <span class="token keyword keyword-as">as</span> Error<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 检查是否是可恢复错误</span>
+        <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span><span class="token keyword keyword-this">this</span><span class="token punctuation">.</span><span class="token function">isRetryableError</span><span class="token punctuation">(</span>error<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token punctuation">{</span>
+          <span class="token comment">// 可以重试，继续循环</span>
+          <span class="token keyword keyword-continue">continue</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        
+        finishReason <span class="token operator">=</span> <span class="token string">'error'</span><span class="token punctuation">;</span>
+        <span class="token keyword keyword-break">break</span><span class="token punctuation">;</span>
+      <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+    
+    <span class="token comment">// 检查是否是达到最大步数</span>
+    <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span>stepIndex <span class="token operator">&gt;=</span> maxSteps<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+      finishReason <span class="token operator">=</span> <span class="token string">'max_steps'</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    
+    <span class="token keyword keyword-return">return</span> <span class="token punctuation">{</span>
+      messages<span class="token punctuation">,</span>
+      finishReason<span class="token punctuation">,</span>
+      steps<span class="token operator">:</span> stepIndex <span class="token operator">-</span> startStep <span class="token operator">+</span> <span class="token number">1</span>
+    <span class="token punctuation">}</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// 安全执行回调 (防止回调抛出异常)</span>
+  <span class="token keyword keyword-private">private</span> <span class="token keyword keyword-async">async</span> <span class="token generic-function"><span class="token function">safeCallback</span><span class="token generic class-name"><span class="token operator">&lt;</span><span class="token constant">T</span><span class="token operator">&gt;</span></span></span><span class="token punctuation">(</span>
+    callback<span class="token operator">:</span> <span class="token punctuation">(</span><span class="token punctuation">(</span>arg<span class="token operator">:</span> <span class="token constant">T</span><span class="token punctuation">)</span> <span class="token operator">=&gt;</span> <span class="token keyword keyword-void">void</span> <span class="token operator">|</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span><span class="token punctuation">)</span> <span class="token operator">|</span> <span class="token keyword keyword-undefined">undefined</span><span class="token punctuation">,</span> 
+    arg<span class="token operator">:</span> <span class="token constant">T</span>
+  <span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>callback<span class="token punctuation">)</span> <span class="token keyword keyword-return">return</span><span class="token punctuation">;</span>
+    
+    <span class="token keyword keyword-try">try</span> <span class="token punctuation">{</span>
+      <span class="token keyword keyword-await">await</span> <span class="token function">callback</span><span class="token punctuation">(</span>arg<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span> <span class="token keyword keyword-catch">catch</span> <span class="token punctuation">(</span>error<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+      <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">error</span><span class="token punctuation">(</span><span class="token string">'[Agent] Callback error:'</span><span class="token punctuation">,</span> error<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// 判断是否可重试</span>
+  <span class="token keyword keyword-private">private</span> <span class="token function">isRetryableError</span><span class="token punctuation">(</span>error<span class="token operator">:</span> <span class="token builtin">any</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">boolean</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-const">const</span> retryableCodes <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token string">'RATE_LIMIT'</span><span class="token punctuation">,</span> <span class="token string">'TIMEOUT'</span><span class="token punctuation">,</span> <span class="token string">'NETWORK_ERROR'</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-return">return</span> error<span class="token operator">?.</span>code <span class="token operator">&amp;&amp;</span> retryableCodes<span class="token punctuation">.</span><span class="token function">includes</span><span class="token punctuation">(</span>error<span class="token punctuation">.</span>code<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// ============================================================</span>
+  <span class="token comment">// 流式版本: runStream</span>
+  <span class="token comment">// 适用于需要实时显示每个 chunk 的场景</span>
+  <span class="token comment">// ============================================================</span>
+  
+  async <span class="token operator">*</span><span class="token function">runStream</span><span class="token punctuation">(</span>
+    input<span class="token operator">:</span> AgentInput<span class="token punctuation">,</span> 
+    callbacks<span class="token operator">?</span><span class="token operator">:</span> AgentCallbacks
+  <span class="token punctuation">)</span><span class="token operator">:</span> AsyncGenerator<span class="token operator">&lt;</span>StreamEvent<span class="token punctuation">,</span> <span class="token builtin">any</span><span class="token punctuation">,</span> <span class="token builtin">unknown</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-let">let</span> <span class="token punctuation">{</span> 
+      messages<span class="token punctuation">,</span> 
+      maxSteps <span class="token operator">=</span> <span class="token number">100</span><span class="token punctuation">,</span> 
+      startStep <span class="token operator">=</span> <span class="token number">1</span> 
+    <span class="token punctuation">}</span> <span class="token operator">=</span> input<span class="token punctuation">;</span>
+    
+    <span class="token keyword keyword-let">let</span> stepIndex <span class="token operator">=</span> startStep <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">;</span>
+    
+    <span class="token keyword keyword-while">while</span> <span class="token punctuation">(</span>stepIndex <span class="token operator">&lt;</span> maxSteps<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+      stepIndex<span class="token operator">++</span><span class="token punctuation">;</span>
+      
+      <span class="token keyword keyword-try">try</span> <span class="token punctuation">{</span>
+        <span class="token comment">// 回调: 进度</span>
+        <span class="token keyword keyword-yield">yield</span> <span class="token punctuation">{</span>
+          type<span class="token operator">:</span> <span class="token string">'progress'</span><span class="token punctuation">,</span>
+          data<span class="token operator">:</span> <span class="token punctuation">{</span>
+            executionId<span class="token operator">:</span> input<span class="token punctuation">.</span>executionId<span class="token punctuation">,</span>
+            stepIndex<span class="token punctuation">,</span>
+            currentAction<span class="token operator">:</span> <span class="token string">'llm'</span><span class="token punctuation">,</span>
+            messageCount<span class="token operator">:</span> messages<span class="token punctuation">.</span>length
+          <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 1. 流式调用 LLM</span>
+        <span class="token keyword keyword-const">const</span> stream <span class="token operator">=</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>llmProvider<span class="token punctuation">.</span><span class="token function">generateStream</span><span class="token punctuation">(</span>messages<span class="token punctuation">,</span> input<span class="token punctuation">.</span>config<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 构建助手消息</span>
+        <span class="token keyword keyword-const">const</span> assistantMessage<span class="token operator">:</span> Message <span class="token operator">=</span> <span class="token punctuation">{</span>
+          messageId<span class="token operator">:</span> <span class="token function">generateId</span><span class="token punctuation">(</span><span class="token string">'msg_'</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+          role<span class="token operator">:</span> <span class="token string">'assistant'</span><span class="token punctuation">,</span>
+          content<span class="token operator">:</span> <span class="token string">''</span><span class="token punctuation">,</span>
+          timestamp<span class="token operator">:</span> Date<span class="token punctuation">.</span><span class="token function">now</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token punctuation">}</span><span class="token punctuation">;</span>
+        
+        <span class="token keyword keyword-let">let</span> toolCalls<span class="token operator">:</span> ToolCall<span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 2. 处理流式响应</span>
+        <span class="token keyword keyword-for">for</span> <span class="token keyword keyword-await">await</span> <span class="token punctuation">(</span><span class="token keyword keyword-const">const</span> chunk <span class="token keyword keyword-of">of</span> stream<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+          <span class="token keyword keyword-const">const</span> delta <span class="token operator">=</span> chunk<span class="token punctuation">.</span>choices<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token operator">?.</span>delta<span class="token punctuation">;</span>
+          
+          <span class="token comment">// 更新 content</span>
+          <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span>delta<span class="token operator">?.</span>content<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+            assistantMessage<span class="token punctuation">.</span>content <span class="token operator">+=</span> delta<span class="token punctuation">.</span>content<span class="token punctuation">;</span>
+            
+            <span class="token comment">// 回调: 内容更新</span>
+            <span class="token keyword keyword-yield">yield</span> <span class="token punctuation">{</span>
+              type<span class="token operator">:</span> <span class="token string">'chunk'</span><span class="token punctuation">,</span>
+              data<span class="token operator">:</span> <span class="token punctuation">{</span>
+                messageId<span class="token operator">:</span> assistantMessage<span class="token punctuation">.</span>messageId<span class="token punctuation">,</span>
+                content<span class="token operator">:</span> delta<span class="token punctuation">.</span>content<span class="token punctuation">,</span>
+                delta<span class="token operator">:</span> <span class="token boolean">true</span>
+              <span class="token punctuation">}</span>
+            <span class="token punctuation">}</span><span class="token punctuation">;</span>
+          <span class="token punctuation">}</span>
+          
+          <span class="token comment">// 更新 tool_calls</span>
+          <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span>delta<span class="token operator">?.</span>tool_calls<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+            toolCalls <span class="token operator">=</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span><span class="token function">mergeToolCalls</span><span class="token punctuation">(</span>toolCalls<span class="token punctuation">,</span> delta<span class="token punctuation">.</span>tool_calls<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            
+            <span class="token comment">// 回调: 工具调用</span>
+            <span class="token keyword keyword-yield">yield</span> <span class="token punctuation">{</span>
+              type<span class="token operator">:</span> <span class="token string">'tool_call'</span><span class="token punctuation">,</span>
+              data<span class="token operator">:</span> <span class="token punctuation">{</span>
+                messageId<span class="token operator">:</span> assistantMessage<span class="token punctuation">.</span>messageId<span class="token punctuation">,</span>
+                toolCalls
+              <span class="token punctuation">}</span>
+            <span class="token punctuation">}</span><span class="token punctuation">;</span>
+          <span class="token punctuation">}</span>
+          
+          <span class="token comment">// 检查完成</span>
+          <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span>chunk<span class="token punctuation">.</span>choices<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token operator">?.</span>finish_reason<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+            <span class="token keyword keyword-break">break</span><span class="token punctuation">;</span>
+          <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+        
+        <span class="token comment">// 3. 完成消息构建</span>
+        assistantMessage<span class="token punctuation">.</span>tool_calls <span class="token operator">=</span> toolCalls<span class="token punctuation">.</span>length <span class="token operator">&gt;</span> <span class="token number">0</span> <span class="token operator">?</span> toolCalls <span class="token operator">:</span> <span class="token keyword keyword-undefined">undefined</span><span class="token punctuation">;</span>
+        messages<span class="token punctuation">.</span><span class="token function">push</span><span class="token punctuation">(</span>assistantMessage<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 回调: 新消息</span>
+        <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span><span class="token function">safeCallback</span><span class="token punctuation">(</span>callbacks<span class="token operator">?.</span>onMessage<span class="token punctuation">,</span> assistantMessage<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 4. 处理工具调用</span>
+        <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span>toolCalls<span class="token punctuation">.</span>length <span class="token operator">&gt;</span> <span class="token number">0</span><span class="token punctuation">)</span> <span class="token punctuation">{</span>
+          <span class="token keyword keyword-for">for</span> <span class="token punctuation">(</span><span class="token keyword keyword-const">const</span> toolCall <span class="token keyword keyword-of">of</span> toolCalls<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+            <span class="token keyword keyword-yield">yield</span> <span class="token punctuation">{</span>
+              type<span class="token operator">:</span> <span class="token string">'progress'</span><span class="token punctuation">,</span>
+              data<span class="token operator">:</span> <span class="token punctuation">{</span>
+                stepIndex<span class="token punctuation">,</span>
+                currentAction<span class="token operator">:</span> <span class="token string">'tool'</span><span class="token punctuation">,</span>
+                messageCount<span class="token operator">:</span> messages<span class="token punctuation">.</span>length
+              <span class="token punctuation">}</span>
+            <span class="token punctuation">}</span><span class="token punctuation">;</span>
+            
+            <span class="token comment">// 执行工具</span>
+            <span class="token keyword keyword-const">const</span> toolResult <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>toolExecutor<span class="token punctuation">.</span><span class="token function">execute</span><span class="token punctuation">(</span>toolCall<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            messages<span class="token punctuation">.</span><span class="token function">push</span><span class="token punctuation">(</span>toolResult<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            
+            <span class="token comment">// 回调: 工具结果</span>
+            <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span><span class="token function">safeCallback</span><span class="token punctuation">(</span>callbacks<span class="token operator">?.</span>onMessage<span class="token punctuation">,</span> toolResult<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            
+            <span class="token comment">// 推送工具结果</span>
+            <span class="token keyword keyword-yield">yield</span> <span class="token punctuation">{</span>
+              type<span class="token operator">:</span> <span class="token string">'tool_result'</span><span class="token punctuation">,</span>
+              data<span class="token operator">:</span> toolResult
+            <span class="token punctuation">}</span><span class="token punctuation">;</span>
+          <span class="token punctuation">}</span>
+          
+          <span class="token comment">// 回调: 检查点</span>
+          <span class="token keyword keyword-const">const</span> lastMessage <span class="token operator">=</span> messages<span class="token punctuation">[</span>messages<span class="token punctuation">.</span>length <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+          <span class="token keyword keyword-const">const</span> checkpoint<span class="token operator">:</span> ExecutionCheckpoint <span class="token operator">=</span> <span class="token punctuation">{</span>
+            executionId<span class="token operator">:</span> input<span class="token punctuation">.</span>executionId<span class="token punctuation">,</span>
+            stepIndex<span class="token punctuation">,</span>
+            lastMessageId<span class="token operator">:</span> lastMessage<span class="token operator">?.</span>messageId <span class="token operator">||</span> <span class="token string">''</span><span class="token punctuation">,</span>
+            lastMessageTime<span class="token operator">:</span> Date<span class="token punctuation">.</span><span class="token function">now</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+            canResume<span class="token operator">:</span> <span class="token boolean">true</span>
+          <span class="token punctuation">}</span><span class="token punctuation">;</span>
+          <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span><span class="token function">safeCallback</span><span class="token punctuation">(</span>callbacks<span class="token operator">?.</span>onCheckpoint<span class="token punctuation">,</span> checkpoint<span class="token punctuation">)</span><span class="token punctuation">;</span>
+          
+          <span class="token comment">// 推送检查点</span>
+          <span class="token keyword keyword-yield">yield</span> <span class="token punctuation">{</span>
+            type<span class="token operator">:</span> <span class="token string">'checkpoint'</span><span class="token punctuation">,</span>
+            data<span class="token operator">:</span> checkpoint
+          <span class="token punctuation">}</span><span class="token punctuation">;</span>
+          
+          <span class="token keyword keyword-continue">continue</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+        
+        <span class="token comment">// 5. 无工具调用，完成</span>
+        <span class="token keyword keyword-yield">yield</span> <span class="token punctuation">{</span>
+          type<span class="token operator">:</span> <span class="token string">'done'</span><span class="token punctuation">,</span>
+          data<span class="token operator">:</span> <span class="token punctuation">{</span>
+            finishReason<span class="token operator">:</span> <span class="token string">'stop'</span><span class="token punctuation">,</span>
+            steps<span class="token operator">:</span> stepIndex <span class="token operator">-</span> startStep <span class="token operator">+</span> <span class="token number">1</span>
+          <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span><span class="token punctuation">;</span>
+        
+        <span class="token keyword keyword-break">break</span><span class="token punctuation">;</span>
+        
+      <span class="token punctuation">}</span> <span class="token keyword keyword-catch">catch</span> <span class="token punctuation">(</span>error<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+        <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">error</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">[Agent] Step </span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>stepIndex<span class="token interpolation-punctuation punctuation">}</span></span><span class="token string"> error:</span><span class="token template-punctuation string">`</span></span><span class="token punctuation">,</span> error<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span><span class="token function">safeCallback</span><span class="token punctuation">(</span>callbacks<span class="token operator">?.</span>onError<span class="token punctuation">,</span> error <span class="token keyword keyword-as">as</span> Error<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token keyword keyword-yield">yield</span> <span class="token punctuation">{</span>
+          type<span class="token operator">:</span> <span class="token string">'error'</span><span class="token punctuation">,</span>
+          data<span class="token operator">:</span> <span class="token punctuation">{</span> message<span class="token operator">:</span> <span class="token punctuation">(</span>error <span class="token keyword keyword-as">as</span> Error<span class="token punctuation">)</span><span class="token punctuation">.</span>message <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span><span class="token punctuation">;</span>
+        
+        <span class="token keyword keyword-break">break</span><span class="token punctuation">;</span>
+      <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// 合并工具调用</span>
+  <span class="token keyword keyword-private">private</span> <span class="token function">mergeToolCalls</span><span class="token punctuation">(</span>
+    existing<span class="token operator">:</span> ToolCall<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">,</span> 
+    newCalls<span class="token operator">:</span> ToolCall<span class="token punctuation">[</span><span class="token punctuation">]</span>
+  <span class="token punctuation">)</span><span class="token operator">:</span> ToolCall<span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-for">for</span> <span class="token punctuation">(</span><span class="token keyword keyword-const">const</span> newCall <span class="token keyword keyword-of">of</span> newCalls<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+      <span class="token keyword keyword-const">const</span> existingCall <span class="token operator">=</span> existing<span class="token punctuation">.</span><span class="token function">find</span><span class="token punctuation">(</span>c <span class="token operator">=&gt;</span> c<span class="token punctuation">.</span>id <span class="token operator">===</span> newCall<span class="token punctuation">.</span>id<span class="token punctuation">)</span><span class="token punctuation">;</span>
+      
+      <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span>existingCall<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+        existingCall<span class="token punctuation">.</span>arguments <span class="token operator">+=</span> newCall<span class="token punctuation">.</span>arguments<span class="token punctuation">;</span>
+      <span class="token punctuation">}</span> <span class="token keyword keyword-else">else</span> <span class="token punctuation">{</span>
+        existing<span class="token punctuation">.</span><span class="token function">push</span><span class="token punctuation">(</span><span class="token punctuation">{</span> <span class="token operator">...</span>newCall <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+      <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword keyword-return">return</span> existing<span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword keyword-interface">interface</span> <span class="token class-name">StreamEvent</span> <span class="token punctuation">{</span>
+  type<span class="token operator">:</span> <span class="token string">'chunk'</span> <span class="token operator">|</span> <span class="token string">'tool_call'</span> <span class="token operator">|</span> <span class="token string">'tool_result'</span> <span class="token operator">|</span> <span class="token string">'progress'</span> <span class="token operator">|</span> <span class="token string">'checkpoint'</span> <span class="token operator">|</span> <span class="token string">'done'</span> <span class="token operator">|</span> <span class="token string">'error'</span><span class="token punctuation">;</span>
+  data<span class="token operator">:</span> <span class="token builtin">any</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre><h2 id="六-实时存储实现">六、实时存储实现 </h2>
+<pre data-role="codeBlock" data-info="typescript" class="language-typescript typescript"><code><span class="token keyword keyword-class">class</span> <span class="token class-name">RealTimeStorage</span> <span class="token punctuation">{</span>
+  <span class="token comment">// 保存消息到 Redis (毫秒级延迟)</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">saveMessage</span><span class="token punctuation">(</span>conversationId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">,</span> message<span class="token operator">:</span> Message<span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-const">const</span> key <span class="token operator">=</span> <span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">conversation:</span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>conversationId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token string">:messages</span><span class="token template-punctuation string">`</span></span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">rpush</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> <span class="token constant">JSON</span><span class="token punctuation">.</span><span class="token function">stringify</span><span class="token punctuation">(</span>message<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">expire</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> <span class="token number">1800</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">// 30 分钟过期</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// 保存检查点 (只存位置，不重复存储消息)</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">saveCheckpoint</span><span class="token punctuation">(</span>checkpoint<span class="token operator">:</span> ExecutionCheckpoint<span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-const">const</span> key <span class="token operator">=</span> <span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">execution:</span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>checkpoint<span class="token punctuation">.</span>executionId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token string">:checkpoint</span><span class="token template-punctuation string">`</span></span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">hset</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> <span class="token punctuation">{</span>
+      stepIndex<span class="token operator">:</span> checkpoint<span class="token punctuation">.</span>stepIndex<span class="token punctuation">.</span><span class="token function">toString</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+      lastMessageId<span class="token operator">:</span> checkpoint<span class="token punctuation">.</span>lastMessageId<span class="token punctuation">,</span>
+      lastMessageTime<span class="token operator">:</span> checkpoint<span class="token punctuation">.</span>lastMessageTime<span class="token punctuation">.</span><span class="token function">toString</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+      canResume<span class="token operator">:</span> checkpoint<span class="token punctuation">.</span>canResume <span class="token operator">?</span> <span class="token string">'1'</span> <span class="token operator">:</span> <span class="token string">'0'</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span> <span class="token punctuation">{</span> <span class="token constant">EX</span><span class="token operator">:</span> <span class="token number">86400</span> <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// 获取检查点</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">getLatestCheckpoint</span><span class="token punctuation">(</span>executionId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span>ExecutionCheckpoint <span class="token operator">|</span> <span class="token keyword keyword-null">null</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-const">const</span> key <span class="token operator">=</span> <span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">execution:</span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>executionId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token string">:checkpoint</span><span class="token template-punctuation string">`</span></span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-const">const</span> data <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">hgetall</span><span class="token punctuation">(</span>key<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>data<span class="token punctuation">)</span> <span class="token keyword keyword-return">return</span> <span class="token keyword keyword-null">null</span><span class="token punctuation">;</span>
+    
+    <span class="token keyword keyword-return">return</span> <span class="token punctuation">{</span>
+      executionId<span class="token punctuation">,</span>
+      stepIndex<span class="token operator">:</span> <span class="token function">parseInt</span><span class="token punctuation">(</span>data<span class="token punctuation">.</span>stepIndex<span class="token punctuation">)</span><span class="token punctuation">,</span>
+      lastMessageId<span class="token operator">:</span> data<span class="token punctuation">.</span>lastMessageId<span class="token punctuation">,</span>
+      lastMessageTime<span class="token operator">:</span> <span class="token function">parseInt</span><span class="token punctuation">(</span>data<span class="token punctuation">.</span>lastMessageTime<span class="token punctuation">)</span><span class="token punctuation">,</span>
+      canResume<span class="token operator">:</span> data<span class="token punctuation">.</span>canResume <span class="token operator">===</span> <span class="token string">'1'</span>
+    <span class="token punctuation">}</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// 获取检查点后的消息 (用于恢复)</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">getMessagesAfterCheckpoint</span><span class="token punctuation">(</span>
+    conversationId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">,</span> 
+    lastMessageId<span class="token operator">:</span> <span class="token builtin">string</span>
+  <span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span>Message<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-const">const</span> allMessages <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">lrange</span><span class="token punctuation">(</span>
+      <span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">conversation:</span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>conversationId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token string">:messages</span><span class="token template-punctuation string">`</span></span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token operator">-</span><span class="token number">1</span>
+    <span class="token punctuation">)</span><span class="token punctuation">;</span>
+    
+    <span class="token keyword keyword-const">const</span> messages<span class="token operator">:</span> Message<span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-let">let</span> found <span class="token operator">=</span> <span class="token boolean">false</span><span class="token punctuation">;</span>
+    
+    <span class="token keyword keyword-for">for</span> <span class="token punctuation">(</span><span class="token keyword keyword-const">const</span> msgStr <span class="token keyword keyword-of">of</span> allMessages<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+      <span class="token keyword keyword-const">const</span> msg <span class="token operator">=</span> <span class="token constant">JSON</span><span class="token punctuation">.</span><span class="token function">parse</span><span class="token punctuation">(</span>msgStr<span class="token punctuation">)</span><span class="token punctuation">;</span>
+      <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span>msg<span class="token punctuation">.</span>messageId <span class="token operator">===</span> lastMessageId<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+        found <span class="token operator">=</span> <span class="token boolean">true</span><span class="token punctuation">;</span>
+        <span class="token keyword keyword-continue">continue</span><span class="token punctuation">;</span>
+      <span class="token punctuation">}</span>
+      <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span>found<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+        messages<span class="token punctuation">.</span><span class="token function">push</span><span class="token punctuation">(</span>msg<span class="token punctuation">)</span><span class="token punctuation">;</span>
+      <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+    
+    <span class="token keyword keyword-return">return</span> messages<span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre><hr>
+<h2 id="七-后台执行机制">七、后台执行机制 </h2>
+<h3 id="问题">问题 </h3>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>传统模式 (阻塞):
+用户 ──▶ API ──▶ Agent 执行 ──▶ 等待完成 ──▶ 返回结果
+                         │
+                         └─ 页面关闭 = 请求中断 ❌
+
+后台模式 (非阻塞):
+用户 ──▶ API ──▶ 创建 Task ──▶ 返回 Task ID ──▶ 立即返回 ✓
+                      │
+                      ▼
+                ┌─────────┐
+                │  Task   │ 后台执行
+                │  Queue  │◀── 页面关闭不受影响
+                └─────────┘
+                      │
+                      ▼
+                存储结果 ── 用户可查询
+</code></pre><h3 id="执行流程">执行流程 </h3>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>1. 用户发起请求
+   POST /api/v1/executions
+   { conversationId, message: "帮我写排序算法" }
+   
+   Response: { executionId: "exec_001", status: "CREATED" } ← 立即返回!
+
+2. 创建任务并放入队列
+   TaskQueue.push({ executionId, message, createdAt })
+   更新状态: CREATED → QUEUED
+
+3. Worker 消费任务
+   - 更新状态: QUEUED → RUNNING
+   - 执行 Agent
+   - onMessage: 实时存储 + SSE 推送
+   - onCheckpoint: 保存检查点
+
+4. 执行完成
+   更新状态: RUNNING → COMPLETED
+   保存最终结果
+
+5. 用户查询结果
+   GET /api/v1/executions/exec_001
+   { status: "COMPLETED", messages: [...] }
+</code></pre><h3 id="api-设计">API 设计 </h3>
+<pre data-role="codeBlock" data-info="typescript" class="language-typescript typescript"><code><span class="token comment">// 创建执行 (立即返回)</span>
+<span class="token constant">POST</span> <span class="token operator">/</span>api<span class="token operator">/</span>v1<span class="token operator">/</span>executions
+Body<span class="token operator">:</span> <span class="token punctuation">{</span> conversationId<span class="token punctuation">,</span> message <span class="token punctuation">}</span>
+Response<span class="token operator">:</span> <span class="token punctuation">{</span> executionId<span class="token punctuation">,</span> status<span class="token operator">:</span> <span class="token string">'CREATED'</span> <span class="token punctuation">}</span>
+
+<span class="token comment">// 查询执行状态和结果</span>
+<span class="token constant">GET</span> <span class="token operator">/</span>api<span class="token operator">/</span>v1<span class="token operator">/</span>executions<span class="token operator">/</span><span class="token punctuation">{</span>executionId<span class="token punctuation">}</span>
+Response<span class="token operator">:</span> <span class="token punctuation">{</span>
+  executionId<span class="token punctuation">,</span> conversationId<span class="token punctuation">,</span>
+  status<span class="token operator">:</span> <span class="token string">'CREATED'</span> <span class="token operator">|</span> <span class="token string">'QUEUED'</span> <span class="token operator">|</span> <span class="token string">'RUNNING'</span> <span class="token operator">|</span> <span class="token string">'COMPLETED'</span> <span class="token operator">|</span> <span class="token string">'FAILED'</span><span class="token punctuation">,</span>
+  stepIndex<span class="token operator">?</span><span class="token punctuation">,</span> result<span class="token operator">?</span><span class="token punctuation">,</span> messages<span class="token operator">?</span><span class="token punctuation">,</span> error<span class="token operator">?</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">// 实时消息流 (SSE)</span>
+<span class="token constant">GET</span> <span class="token operator">/</span>api<span class="token operator">/</span>v1<span class="token operator">/</span>executions<span class="token operator">/</span><span class="token punctuation">{</span>executionId<span class="token punctuation">}</span><span class="token operator">/</span>stream
+
+<span class="token comment">// 恢复执行 (崩溃后)</span>
+<span class="token constant">POST</span> <span class="token operator">/</span>api<span class="token operator">/</span>v1<span class="token operator">/</span>executions<span class="token operator">/</span><span class="token punctuation">{</span>executionId<span class="token punctuation">}</span><span class="token operator">/</span>resume
+</code></pre><h3 id="worker-实现">Worker 实现 </h3>
+<pre data-role="codeBlock" data-info="typescript" class="language-typescript typescript"><code><span class="token comment">// ============================================================</span>
+<span class="token comment">// 1. 依赖注入配置</span>
+<span class="token comment">// ============================================================</span>
+
+<span class="token comment">// 创建依赖容器</span>
+<span class="token keyword keyword-class">class</span> <span class="token class-name">DIContainer</span> <span class="token punctuation">{</span>
+ <span class="token operator">:</span> <span class="token keyword keyword-private">private</span> services Map<span class="token operator">&lt;</span><span class="token builtin">string</span><span class="token punctuation">,</span> <span class="token builtin">any</span><span class="token operator">&gt;</span> <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">Map</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  
+  <span class="token comment">// 注册服务</span>
+  <span class="token generic-function"><span class="token function">register</span><span class="token generic class-name"><span class="token operator">&lt;</span><span class="token constant">T</span><span class="token operator">&gt;</span></span></span><span class="token punctuation">(</span>name<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">,</span> instance<span class="token operator">:</span> <span class="token constant">T</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token keyword keyword-void">void</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>services<span class="token punctuation">.</span><span class="token function">set</span><span class="token punctuation">(</span>name<span class="token punctuation">,</span> instance<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// 获取服务</span>
+  <span class="token generic-function"><span class="token function">get</span><span class="token generic class-name"><span class="token operator">&lt;</span><span class="token constant">T</span><span class="token operator">&gt;</span></span></span><span class="token punctuation">(</span>name<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token constant">T</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-return">return</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>services<span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span>name<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">// 初始化容器</span>
+<span class="token keyword keyword-const">const</span> container <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">DIContainer</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 注册 Redis 客户端</span>
+<span class="token keyword keyword-const">const</span> redis <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">Redis</span><span class="token punctuation">(</span><span class="token punctuation">{</span> host<span class="token operator">:</span> <span class="token string">'localhost'</span><span class="token punctuation">,</span> port<span class="token operator">:</span> <span class="token number">6379</span> <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+container<span class="token punctuation">.</span><span class="token function">register</span><span class="token punctuation">(</span><span class="token string">'redis'</span><span class="token punctuation">,</span> redis<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 注册消息队列</span>
+<span class="token keyword keyword-const">const</span> taskQueue <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">TaskQueue</span><span class="token punctuation">(</span>redis<span class="token punctuation">)</span><span class="token punctuation">;</span>
+container<span class="token punctuation">.</span><span class="token function">register</span><span class="token punctuation">(</span><span class="token string">'taskQueue'</span><span class="token punctuation">,</span> taskQueue<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 注册存储服务</span>
+<span class="token keyword keyword-const">const</span> messageStorage <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">MessageStorage</span><span class="token punctuation">(</span>redis<span class="token punctuation">,</span> kafka<span class="token punctuation">)</span><span class="token punctuation">;</span>
+container<span class="token punctuation">.</span><span class="token function">register</span><span class="token punctuation">(</span><span class="token string">'messageStorage'</span><span class="token punctuation">,</span> messageStorage<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token keyword keyword-const">const</span> checkpointService <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">CheckpointService</span><span class="token punctuation">(</span>redis<span class="token punctuation">)</span><span class="token punctuation">;</span>
+container<span class="token punctuation">.</span><span class="token function">register</span><span class="token punctuation">(</span><span class="token string">'checkpointService'</span><span class="token punctuation">,</span> checkpointService<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token keyword keyword-const">const</span> executionService <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">ExecutionService</span><span class="token punctuation">(</span>redis<span class="token punctuation">)</span><span class="token punctuation">;</span>
+container<span class="token punctuation">.</span><span class="token function">register</span><span class="token punctuation">(</span><span class="token string">'executionService'</span><span class="token punctuation">,</span> executionService<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 注册 Context 服务</span>
+<span class="token keyword keyword-const">const</span> contextService <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">ContextService</span><span class="token punctuation">(</span>redis<span class="token punctuation">,</span> clickhouse<span class="token punctuation">)</span><span class="token punctuation">;</span>
+container<span class="token punctuation">.</span><span class="token function">register</span><span class="token punctuation">(</span><span class="token string">'contextService'</span><span class="token punctuation">,</span> contextService<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 注册 SSE 发布器</span>
+<span class="token keyword keyword-const">const</span> ssePublisher <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">SSEPublisher</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+container<span class="token punctuation">.</span><span class="token function">register</span><span class="token punctuation">(</span><span class="token string">'ssePublisher'</span><span class="token punctuation">,</span> ssePublisher<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 注册 LLM 提供商</span>
+<span class="token keyword keyword-const">const</span> llmProvider <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">OpenAIProvider</span><span class="token punctuation">(</span><span class="token punctuation">{</span> apiKey<span class="token operator">:</span> process<span class="token punctuation">.</span>env<span class="token punctuation">.</span><span class="token constant">OPENAI_KEY</span> <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+container<span class="token punctuation">.</span><span class="token function">register</span><span class="token punctuation">(</span><span class="token string">'llmProvider'</span><span class="token punctuation">,</span> llmProvider<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 注册工具执行器</span>
+<span class="token keyword keyword-const">const</span> toolExecutor <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">ToolExecutor</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+container<span class="token punctuation">.</span><span class="token function">register</span><span class="token punctuation">(</span><span class="token string">'toolExecutor'</span><span class="token punctuation">,</span> toolExecutor<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// 创建无状态 Agent</span>
+<span class="token keyword keyword-const">const</span> agent <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">StatelessAgent</span><span class="token punctuation">(</span>llmProvider<span class="token punctuation">,</span> toolExecutor<span class="token punctuation">)</span><span class="token punctuation">;</span>
+container<span class="token punctuation">.</span><span class="token function">register</span><span class="token punctuation">(</span><span class="token string">'agent'</span><span class="token punctuation">,</span> agent<span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// ============================================================</span>
+<span class="token comment">// 2. ExecutionWorker 完整实现</span>
+<span class="token comment">// ============================================================</span>
+
+<span class="token keyword keyword-class">class</span> <span class="token class-name">ExecutionWorker</span> <span class="token punctuation">{</span>
+  <span class="token keyword keyword-private">private</span> queue<span class="token operator">:</span> TaskQueue<span class="token punctuation">;</span>
+  <span class="token keyword keyword-private">private</span> agent<span class="token operator">:</span> StatelessAgent<span class="token punctuation">;</span>
+  <span class="token keyword keyword-private">private</span> executionService<span class="token operator">:</span> ExecutionService<span class="token punctuation">;</span>
+  <span class="token keyword keyword-private">private</span> messageStorage<span class="token operator">:</span> MessageStorage<span class="token punctuation">;</span>
+  <span class="token keyword keyword-private">private</span> checkpointService<span class="token operator">:</span> CheckpointService<span class="token punctuation">;</span>
+  <span class="token keyword keyword-private">private</span> contextService<span class="token operator">:</span> ContextService<span class="token punctuation">;</span>
+  <span class="token keyword keyword-private">private</span> ssePublisher<span class="token operator">:</span> SSEPublisher<span class="token punctuation">;</span>
+  
+  <span class="token comment">// 构造函数注入依赖</span>
+  <span class="token function">constructor</span><span class="token punctuation">(</span>
+    queue<span class="token operator">:</span> TaskQueue<span class="token punctuation">,</span>
+    agent<span class="token operator">:</span> StatelessAgent<span class="token punctuation">,</span>
+    executionService<span class="token operator">:</span> ExecutionService<span class="token punctuation">,</span>
+    messageStorage<span class="token operator">:</span> MessageStorage<span class="token punctuation">,</span>
+    checkpointService<span class="token operator">:</span> CheckpointService<span class="token punctuation">,</span>
+    contextService<span class="token operator">:</span> ContextService<span class="token punctuation">,</span>
+    ssePublisher<span class="token operator">:</span> SSEPublisher
+  <span class="token punctuation">)</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>queue <span class="token operator">=</span> queue<span class="token punctuation">;</span>
+    <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>agent <span class="token operator">=</span> agent<span class="token punctuation">;</span>
+    <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>executionService <span class="token operator">=</span> executionService<span class="token punctuation">;</span>
+    <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>messageStorage <span class="token operator">=</span> messageStorage<span class="token punctuation">;</span>
+    <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>checkpointService <span class="token operator">=</span> checkpointService<span class="token punctuation">;</span>
+    <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>contextService <span class="token operator">=</span> contextService<span class="token punctuation">;</span>
+    <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>ssePublisher <span class="token operator">=</span> ssePublisher<span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// 启动 Worker</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">start</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">log</span><span class="token punctuation">(</span><span class="token string">'[Worker] Starting...'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    
+    <span class="token keyword keyword-while">while</span> <span class="token punctuation">(</span><span class="token boolean">true</span><span class="token punctuation">)</span> <span class="token punctuation">{</span>
+      <span class="token keyword keyword-try">try</span> <span class="token punctuation">{</span>
+        <span class="token comment">// 从队列获取任务 (阻塞等待)</span>
+        <span class="token comment">// key: 队列名称, timeout: 超时时间(0=无限等待)</span>
+        <span class="token keyword keyword-const">const</span> task <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>queue<span class="token punctuation">.</span><span class="token function">brpop</span><span class="token punctuation">(</span><span class="token string">'task_queue'</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span>task<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+          <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">log</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">[Worker] Received task: </span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>task<span class="token punctuation">.</span>executionId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token template-punctuation string">`</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+          <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span><span class="token function">processTask</span><span class="token punctuation">(</span>task<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token punctuation">}</span>
+      <span class="token punctuation">}</span> <span class="token keyword keyword-catch">catch</span> <span class="token punctuation">(</span>error<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+        <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">error</span><span class="token punctuation">(</span><span class="token string">'[Worker] Error:'</span><span class="token punctuation">,</span> error<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        <span class="token comment">// 短暂等待后继续</span>
+        <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span><span class="token function">sleep</span><span class="token punctuation">(</span><span class="token number">1000</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+      <span class="token punctuation">}</span>
+    <span class="token punctuation">}</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// 处理单个任务</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">processTask</span><span class="token punctuation">(</span>task<span class="token operator">:</span> Task<span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-const">const</span> <span class="token punctuation">{</span> executionId<span class="token punctuation">,</span> conversationId<span class="token punctuation">,</span> message <span class="token punctuation">}</span> <span class="token operator">=</span> task<span class="token punctuation">;</span>
+    
+    <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">log</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">[Worker] Processing task: </span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>executionId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token template-punctuation string">`</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    
+    <span class="token comment">// 1. 尝试获取锁 (防止重复执行)</span>
+    <span class="token keyword keyword-const">const</span> lockAcquired <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>executionService<span class="token punctuation">.</span><span class="token function">acquireLock</span><span class="token punctuation">(</span>executionId<span class="token punctuation">,</span> <span class="token string">'worker-1'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>lockAcquired<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+      <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">log</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">[Worker] Task </span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>executionId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token string"> is being processed by another worker</span><span class="token template-punctuation string">`</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+      <span class="token keyword keyword-return">return</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    
+    <span class="token keyword keyword-try">try</span> <span class="token punctuation">{</span>
+      <span class="token comment">// 2. 更新状态为 RUNNING</span>
+      <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>executionService<span class="token punctuation">.</span><span class="token function">updateStatus</span><span class="token punctuation">(</span>executionId<span class="token punctuation">,</span> <span class="token string">'RUNNING'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+      
+      <span class="token comment">// 3. 检查是否有未完成的检查点</span>
+      <span class="token keyword keyword-const">const</span> checkpoint <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>checkpointService<span class="token punctuation">.</span><span class="token function">getLatestCheckpoint</span><span class="token punctuation">(</span>executionId<span class="token punctuation">)</span><span class="token punctuation">;</span>
+      
+      <span class="token keyword keyword-let">let</span> messages<span class="token operator">:</span> Message<span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+      <span class="token keyword keyword-let">let</span> startStep <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+      
+      <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span>checkpoint <span class="token operator">&amp;&amp;</span> checkpoint<span class="token punctuation">.</span>canResume<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+        <span class="token comment">// 4a. 恢复执行</span>
+        <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">log</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">[Worker] Resuming from checkpoint: step </span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>checkpoint<span class="token punctuation">.</span>stepIndex<span class="token interpolation-punctuation punctuation">}</span></span><span class="token template-punctuation string">`</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 加载上下文</span>
+        <span class="token keyword keyword-const">const</span> context <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>contextService<span class="token punctuation">.</span><span class="token function">load</span><span class="token punctuation">(</span>conversationId<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 获取检查点后的消息</span>
+        <span class="token keyword keyword-const">const</span> newMessages <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>messageStorage<span class="token punctuation">.</span><span class="token function">getMessagesAfterCheckpoint</span><span class="token punctuation">(</span>
+          conversationId<span class="token punctuation">,</span>
+          checkpoint<span class="token punctuation">.</span>lastMessageId
+        <span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        messages <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token operator">...</span>context<span class="token punctuation">.</span>messages<span class="token punctuation">,</span> <span class="token operator">...</span>newMessages<span class="token punctuation">]</span><span class="token punctuation">;</span>
+        startStep <span class="token operator">=</span> checkpoint<span class="token punctuation">.</span>stepIndex <span class="token operator">+</span> <span class="token number">1</span><span class="token punctuation">;</span>
+        
+      <span class="token punctuation">}</span> <span class="token keyword keyword-else">else</span> <span class="token punctuation">{</span>
+        <span class="token comment">// 4b. 全新执行</span>
+        <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">log</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">[Worker] Starting new execution</span><span class="token template-punctuation string">`</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 加载上下文</span>
+        <span class="token keyword keyword-const">const</span> context <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>contextService<span class="token punctuation">.</span><span class="token function">load</span><span class="token punctuation">(</span>conversationId<span class="token punctuation">)</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 添加用户消息</span>
+        <span class="token keyword keyword-const">const</span> userMessage<span class="token operator">:</span> Message <span class="token operator">=</span> <span class="token punctuation">{</span>
+          messageId<span class="token operator">:</span> <span class="token function">generateId</span><span class="token punctuation">(</span><span class="token string">'msg_'</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+          role<span class="token operator">:</span> <span class="token string">'user'</span><span class="token punctuation">,</span>
+          content<span class="token operator">:</span> message<span class="token punctuation">.</span>content<span class="token punctuation">,</span>
+          timestamp<span class="token operator">:</span> Date<span class="token punctuation">.</span><span class="token function">now</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token punctuation">}</span><span class="token punctuation">;</span>
+        
+        messages <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token operator">...</span>context<span class="token punctuation">.</span>messages<span class="token punctuation">,</span> userMessage<span class="token punctuation">]</span><span class="token punctuation">;</span>
+        
+        <span class="token comment">// 实时存储用户消息</span>
+        <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>messageStorage<span class="token punctuation">.</span><span class="token function">save</span><span class="token punctuation">(</span>conversationId<span class="token punctuation">,</span> userMessage<span class="token punctuation">)</span><span class="token punctuation">;</span>
+      <span class="token punctuation">}</span>
+      
+      <span class="token comment">// 5. 获取系统提示和工具配置</span>
+      <span class="token keyword keyword-const">const</span> context <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>contextService<span class="token punctuation">.</span><span class="token function">load</span><span class="token punctuation">(</span>conversationId<span class="token punctuation">)</span><span class="token punctuation">;</span>
+      
+      <span class="token comment">// 6. 构造 Agent 输入</span>
+      <span class="token keyword keyword-const">const</span> input<span class="token operator">:</span> AgentInput <span class="token operator">=</span> <span class="token punctuation">{</span>
+        executionId<span class="token punctuation">,</span>
+        conversationId<span class="token punctuation">,</span>
+        messages<span class="token punctuation">,</span>
+        systemPrompt<span class="token operator">:</span> context<span class="token punctuation">.</span>systemPrompt<span class="token punctuation">,</span>
+        tools<span class="token operator">:</span> context<span class="token punctuation">.</span>tools<span class="token punctuation">,</span>
+        startStep<span class="token punctuation">,</span>  <span class="token comment">// 从指定步骤开始</span>
+        callbacks<span class="token operator">:</span> <span class="token punctuation">{</span>
+          <span class="token comment">// 实时消息回调</span>
+          <span class="token function-variable function">onMessage</span><span class="token operator">:</span> <span class="token keyword keyword-async">async</span> <span class="token punctuation">(</span>msg<span class="token operator">:</span> Message<span class="token punctuation">)</span> <span class="token operator">=&gt;</span> <span class="token punctuation">{</span>
+            <span class="token comment">// 存储消息到 Redis + Kafka</span>
+            <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>messageStorage<span class="token punctuation">.</span><span class="token function">save</span><span class="token punctuation">(</span>conversationId<span class="token punctuation">,</span> msg<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            
+            <span class="token comment">// SSE 推送给在线用户</span>
+            <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>ssePublisher<span class="token punctuation">.</span><span class="token function">publish</span><span class="token punctuation">(</span>executionId<span class="token punctuation">,</span> <span class="token punctuation">{</span>
+              type<span class="token operator">:</span> <span class="token string">'message'</span><span class="token punctuation">,</span>
+              data<span class="token operator">:</span> msg
+            <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            
+            <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">log</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">[Worker] Message saved: </span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>msg<span class="token punctuation">.</span>messageId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token template-punctuation string">`</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+          <span class="token punctuation">}</span><span class="token punctuation">,</span>
+          
+          <span class="token comment">// 检查点回调</span>
+          <span class="token function-variable function">onCheckpoint</span><span class="token operator">:</span> <span class="token keyword keyword-async">async</span> <span class="token punctuation">(</span>checkpoint<span class="token operator">:</span> ExecutionCheckpoint<span class="token punctuation">)</span> <span class="token operator">=&gt;</span> <span class="token punctuation">{</span>
+            <span class="token comment">// 保存检查点</span>
+            <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>checkpointService<span class="token punctuation">.</span><span class="token function">saveCheckpoint</span><span class="token punctuation">(</span>checkpoint<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            
+            <span class="token comment">// 更新执行进度</span>
+            <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>executionService<span class="token punctuation">.</span><span class="token function">updateProgress</span><span class="token punctuation">(</span>executionId<span class="token punctuation">,</span> <span class="token punctuation">{</span>
+              stepIndex<span class="token operator">:</span> checkpoint<span class="token punctuation">.</span>stepIndex<span class="token punctuation">,</span>
+              lastMessageId<span class="token operator">:</span> checkpoint<span class="token punctuation">.</span>lastMessageId
+            <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            
+            <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">log</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">[Worker] Checkpoint saved: step </span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>checkpoint<span class="token punctuation">.</span>stepIndex<span class="token interpolation-punctuation punctuation">}</span></span><span class="token template-punctuation string">`</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+          <span class="token punctuation">}</span><span class="token punctuation">,</span>
+          
+          <span class="token comment">// 进度回调</span>
+          <span class="token function-variable function">onProgress</span><span class="token operator">:</span> <span class="token keyword keyword-async">async</span> <span class="token punctuation">(</span>progress<span class="token operator">:</span> ExecutionProgress<span class="token punctuation">)</span> <span class="token operator">=&gt;</span> <span class="token punctuation">{</span>
+            <span class="token comment">// 更新进度</span>
+            <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>executionService<span class="token punctuation">.</span><span class="token function">updateProgress</span><span class="token punctuation">(</span>executionId<span class="token punctuation">,</span> <span class="token punctuation">{</span>
+              currentAction<span class="token operator">:</span> progress<span class="token punctuation">.</span>currentAction<span class="token punctuation">,</span>
+              stepIndex<span class="token operator">:</span> progress<span class="token punctuation">.</span>stepIndex<span class="token punctuation">,</span>
+              messageCount<span class="token operator">:</span> progress<span class="token punctuation">.</span>messageCount
+            <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            
+            <span class="token comment">// SSE 推送进度</span>
+            <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>ssePublisher<span class="token punctuation">.</span><span class="token function">publish</span><span class="token punctuation">(</span>executionId<span class="token punctuation">,</span> <span class="token punctuation">{</span>
+              type<span class="token operator">:</span> <span class="token string">'progress'</span><span class="token punctuation">,</span>
+              data<span class="token operator">:</span> progress
+            <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+          <span class="token punctuation">}</span><span class="token punctuation">,</span>
+          
+          <span class="token comment">// 错误回调</span>
+          <span class="token function-variable function">onError</span><span class="token operator">:</span> <span class="token keyword keyword-async">async</span> <span class="token punctuation">(</span>error<span class="token operator">:</span> Error<span class="token punctuation">)</span> <span class="token operator">=&gt;</span> <span class="token punctuation">{</span>
+            <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">error</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">[Worker] Error:</span><span class="token template-punctuation string">`</span></span><span class="token punctuation">,</span> error<span class="token punctuation">)</span><span class="token punctuation">;</span>
+            
+            <span class="token comment">// 保存错误检查点</span>
+            <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>checkpointService<span class="token punctuation">.</span><span class="token function">saveCheckpoint</span><span class="token punctuation">(</span><span class="token punctuation">{</span>
+              executionId<span class="token punctuation">,</span>
+              stepIndex<span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">,</span>
+              lastMessageId<span class="token operator">:</span> <span class="token string">''</span><span class="token punctuation">,</span>
+              lastMessageTime<span class="token operator">:</span> Date<span class="token punctuation">.</span><span class="token function">now</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+              canResume<span class="token operator">:</span> <span class="token boolean">false</span>
+            <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            
+            <span class="token comment">// 更新状态为失败</span>
+            <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>executionService<span class="token punctuation">.</span><span class="token function">updateStatus</span><span class="token punctuation">(</span>executionId<span class="token punctuation">,</span> <span class="token string">'FAILED'</span><span class="token punctuation">,</span> <span class="token punctuation">{</span>
+              error<span class="token operator">:</span> error<span class="token punctuation">.</span>message
+            <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+            
+            <span class="token comment">// SSE 推送错误</span>
+            <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>ssePublisher<span class="token punctuation">.</span><span class="token function">publish</span><span class="token punctuation">(</span>executionId<span class="token punctuation">,</span> <span class="token punctuation">{</span>
+              type<span class="token operator">:</span> <span class="token string">'error'</span><span class="token punctuation">,</span>
+              data<span class="token operator">:</span> <span class="token punctuation">{</span> message<span class="token operator">:</span> error<span class="token punctuation">.</span>message <span class="token punctuation">}</span>
+            <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+          <span class="token punctuation">}</span>
+        <span class="token punctuation">}</span>
+      <span class="token punctuation">}</span><span class="token punctuation">;</span>
+      
+      <span class="token comment">// 7. 执行 Agent</span>
+      <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">log</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">[Worker] Starting agent execution from step </span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>startStep<span class="token interpolation-punctuation punctuation">}</span></span><span class="token template-punctuation string">`</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+      <span class="token keyword keyword-const">const</span> result <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>agent<span class="token punctuation">.</span><span class="token function">run</span><span class="token punctuation">(</span>input<span class="token punctuation">)</span><span class="token punctuation">;</span>
+      
+      <span class="token comment">// 8. 执行完成</span>
+      <span class="token keyword keyword-const">const</span> finalMessage <span class="token operator">=</span> result<span class="token punctuation">.</span>messages<span class="token punctuation">[</span>result<span class="token punctuation">.</span>messages<span class="token punctuation">.</span>length <span class="token operator">-</span> <span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+      
+      <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>executionService<span class="token punctuation">.</span><span class="token function">updateStatus</span><span class="token punctuation">(</span>executionId<span class="token punctuation">,</span> <span class="token string">'COMPLETED'</span><span class="token punctuation">,</span> <span class="token punctuation">{</span>
+        result<span class="token operator">:</span> finalMessage<span class="token operator">?.</span>content<span class="token punctuation">,</span>
+        steps<span class="token operator">:</span> result<span class="token punctuation">.</span>steps<span class="token punctuation">,</span>
+        finishReason<span class="token operator">:</span> result<span class="token punctuation">.</span>finishReason
+      <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+      
+      <span class="token comment">// SSE 推送完成</span>
+      <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>ssePublisher<span class="token punctuation">.</span><span class="token function">publish</span><span class="token punctuation">(</span>executionId<span class="token punctuation">,</span> <span class="token punctuation">{</span>
+        type<span class="token operator">:</span> <span class="token string">'done'</span><span class="token punctuation">,</span>
+        data<span class="token operator">:</span> <span class="token punctuation">{</span>
+          result<span class="token operator">:</span> finalMessage<span class="token operator">?.</span>content<span class="token punctuation">,</span>
+          steps<span class="token operator">:</span> result<span class="token punctuation">.</span>steps
+        <span class="token punctuation">}</span>
+      <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+      
+      <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">log</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">[Worker] Task completed: </span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>executionId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token template-punctuation string">`</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+      
+    <span class="token punctuation">}</span> <span class="token keyword keyword-catch">catch</span> <span class="token punctuation">(</span>error<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+      <span class="token comment">// 执行失败</span>
+      <span class="token builtin">console</span><span class="token punctuation">.</span><span class="token function">error</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">[Worker] Task failed: </span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>executionId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token template-punctuation string">`</span></span><span class="token punctuation">,</span> error<span class="token punctuation">)</span><span class="token punctuation">;</span>
+      
+      <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>executionService<span class="token punctuation">.</span><span class="token function">updateStatus</span><span class="token punctuation">(</span>executionId<span class="token punctuation">,</span> <span class="token string">'FAILED'</span><span class="token punctuation">,</span> <span class="token punctuation">{</span>
+        error<span class="token operator">:</span> <span class="token punctuation">(</span>error <span class="token keyword keyword-as">as</span> Error<span class="token punctuation">)</span><span class="token punctuation">.</span>message
+      <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+      
+    <span class="token punctuation">}</span> <span class="token keyword keyword-finally">finally</span> <span class="token punctuation">{</span>
+      <span class="token comment">// 释放锁</span>
+      <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>executionService<span class="token punctuation">.</span><span class="token function">releaseLock</span><span class="token punctuation">(</span>executionId<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// 辅助方法: 睡眠</span>
+  <span class="token keyword keyword-private">private</span> <span class="token function">sleep</span><span class="token punctuation">(</span>ms<span class="token operator">:</span> <span class="token builtin">number</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-return">return</span> <span class="token keyword keyword-new">new</span> <span class="token class-name"><span class="token builtin">Promise</span></span><span class="token punctuation">(</span>resolve <span class="token operator">=&gt;</span> <span class="token function">setTimeout</span><span class="token punctuation">(</span>resolve<span class="token punctuation">,</span> ms<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">// ============================================================</span>
+<span class="token comment">// 3. 启动 Worker</span>
+<span class="token comment">// ============================================================</span>
+
+<span class="token keyword keyword-async">async</span> <span class="token keyword keyword-function">function</span> <span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token punctuation">{</span>
+  <span class="token comment">// 从容器获取依赖</span>
+  <span class="token keyword keyword-const">const</span> queue <span class="token operator">=</span> container<span class="token punctuation">.</span><span class="token generic-function"><span class="token function">get</span><span class="token generic class-name"><span class="token operator">&lt;</span>TaskQueue<span class="token operator">&gt;</span></span></span><span class="token punctuation">(</span><span class="token string">'taskQueue'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token keyword keyword-const">const</span> agent <span class="token operator">=</span> container<span class="token punctuation">.</span><span class="token generic-function"><span class="token function">get</span><span class="token generic class-name"><span class="token operator">&lt;</span>StatelessAgent<span class="token operator">&gt;</span></span></span><span class="token punctuation">(</span><span class="token string">'agent'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token keyword keyword-const">const</span> executionService <span class="token operator">=</span> container<span class="token punctuation">.</span><span class="token generic-function"><span class="token function">get</span><span class="token generic class-name"><span class="token operator">&lt;</span>ExecutionService<span class="token operator">&gt;</span></span></span><span class="token punctuation">(</span><span class="token string">'executionService'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token keyword keyword-const">const</span> messageStorage <span class="token operator">=</span> container<span class="token punctuation">.</span><span class="token generic-function"><span class="token function">get</span><span class="token generic class-name"><span class="token operator">&lt;</span>MessageStorage<span class="token operator">&gt;</span></span></span><span class="token punctuation">(</span><span class="token string">'messageStorage'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token keyword keyword-const">const</span> checkpointService <span class="token operator">=</span> container<span class="token punctuation">.</span><span class="token generic-function"><span class="token function">get</span><span class="token generic class-name"><span class="token operator">&lt;</span>CheckpointService<span class="token operator">&gt;</span></span></span><span class="token punctuation">(</span><span class="token string">'checkpointService'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token keyword keyword-const">const</span> contextService <span class="token operator">=</span> container<span class="token punctuation">.</span><span class="token generic-function"><span class="token function">get</span><span class="token generic class-name"><span class="token operator">&lt;</span>ContextService<span class="token operator">&gt;</span></span></span><span class="token punctuation">(</span><span class="token string">'contextService'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token keyword keyword-const">const</span> ssePublisher <span class="token operator">=</span> container<span class="token punctuation">.</span><span class="token generic-function"><span class="token function">get</span><span class="token generic class-name"><span class="token operator">&lt;</span>SSEPublisher<span class="token operator">&gt;</span></span></span><span class="token punctuation">(</span><span class="token string">'ssePublisher'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  
+  <span class="token comment">// 创建 Worker 实例</span>
+  <span class="token keyword keyword-const">const</span> worker <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">ExecutionWorker</span><span class="token punctuation">(</span>
+    queue<span class="token punctuation">,</span>
+    agent<span class="token punctuation">,</span>
+    executionService<span class="token punctuation">,</span>
+    messageStorage<span class="token punctuation">,</span>
+    checkpointService<span class="token punctuation">,</span>
+    contextService<span class="token punctuation">,</span>
+    ssePublisher
+  <span class="token punctuation">)</span><span class="token punctuation">;</span>
+  
+  <span class="token comment">// 启动</span>
+  <span class="token keyword keyword-await">await</span> worker<span class="token punctuation">.</span><span class="token function">start</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">// 运行</span>
+<span class="token function">main</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">.</span><span class="token function">catch</span><span class="token punctuation">(</span><span class="token builtin">console</span><span class="token punctuation">.</span>error<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre><hr>
+<h3 id="依赖服务详细说明">依赖服务详细说明 </h3>
+<h4 id="1-taskqueue-任务队列">1. TaskQueue (任务队列) </h4>
+<pre data-role="codeBlock" data-info="typescript" class="language-typescript typescript"><code><span class="token keyword keyword-class">class</span> <span class="token class-name">TaskQueue</span> <span class="token punctuation">{</span>
+  <span class="token function">constructor</span><span class="token punctuation">(</span><span class="token keyword keyword-private">private</span> redis<span class="token operator">:</span> Redis<span class="token punctuation">)</span> <span class="token punctuation">{</span><span class="token punctuation">}</span>
+  
+  <span class="token comment">// 放入任务 (LPUSH)</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">push</span><span class="token punctuation">(</span>task<span class="token operator">:</span> Task<span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">lpush</span><span class="token punctuation">(</span><span class="token string">'task_queue'</span><span class="token punctuation">,</span> <span class="token constant">JSON</span><span class="token punctuation">.</span><span class="token function">stringify</span><span class="token punctuation">(</span>task<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// 阻塞取出任务 (BRPOP)</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">brpop</span><span class="token punctuation">(</span>timeout<span class="token operator">:</span> <span class="token builtin">number</span> <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span>Task <span class="token operator">|</span> <span class="token keyword keyword-null">null</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-const">const</span> result <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">brpop</span><span class="token punctuation">(</span><span class="token string">'task_queue'</span><span class="token punctuation">,</span> timeout<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span>result<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+      <span class="token keyword keyword-return">return</span> <span class="token constant">JSON</span><span class="token punctuation">.</span><span class="token function">parse</span><span class="token punctuation">(</span>result<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    <span class="token keyword keyword-return">return</span> <span class="token keyword keyword-null">null</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre><h4 id="2-executionservice-执行状态管理">2. ExecutionService (执行状态管理) </h4>
+<pre data-role="codeBlock" data-info="typescript" class="language-typescript typescript"><code><span class="token keyword keyword-class">class</span> <span class="token class-name">ExecutionService</span> <span class="token punctuation">{</span>
+  <span class="token function">constructor</span><span class="token punctuation">(</span><span class="token keyword keyword-private">private</span> redis<span class="token operator">:</span> Redis<span class="token punctuation">)</span> <span class="token punctuation">{</span><span class="token punctuation">}</span>
+  
+  <span class="token comment">// 更新状态</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">updateStatus</span><span class="token punctuation">(</span>executionId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">,</span> status<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">,</span> extra<span class="token operator">?</span><span class="token operator">:</span> <span class="token builtin">any</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-const">const</span> key <span class="token operator">=</span> <span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">execution:</span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>executionId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token template-punctuation string">`</span></span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-const">const</span> update<span class="token operator">:</span> <span class="token builtin">any</span> <span class="token operator">=</span> <span class="token punctuation">{</span> status<span class="token punctuation">,</span> updatedAt<span class="token operator">:</span> Date<span class="token punctuation">.</span><span class="token function">now</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token operator">...</span>extra <span class="token punctuation">}</span><span class="token punctuation">;</span>
+    
+    <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span>status <span class="token operator">===</span> <span class="token string">'COMPLETED'</span> <span class="token operator">||</span> status <span class="token operator">===</span> <span class="token string">'FAILED'</span><span class="token punctuation">)</span> <span class="token punctuation">{</span>
+      update<span class="token punctuation">.</span>completedAt <span class="token operator">=</span> Date<span class="token punctuation">.</span><span class="token function">now</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    
+    <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">hset</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> update<span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// 获取锁 (防止重复执行)</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">acquireLock</span><span class="token punctuation">(</span>executionId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">,</span> workerId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token builtin">boolean</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-const">const</span> key <span class="token operator">=</span> <span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">lock:execution:</span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>executionId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token template-punctuation string">`</span></span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-const">const</span> result <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">set</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> workerId<span class="token punctuation">,</span> <span class="token punctuation">{</span>
+      <span class="token constant">NX</span><span class="token operator">:</span> <span class="token boolean">true</span><span class="token punctuation">,</span>  <span class="token comment">// 只有不存在时设置</span>
+      <span class="token constant">EX</span><span class="token operator">:</span> <span class="token number">300</span>     <span class="token comment">// 5分钟超时</span>
+    <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-return">return</span> result <span class="token operator">===</span> <span class="token string">'OK'</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// 释放锁</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">releaseLock</span><span class="token punctuation">(</span>executionId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">del</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">lock:execution:</span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>executionId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token template-punctuation string">`</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre><h4 id="3-messagestorage-消息存储">3. MessageStorage (消息存储) </h4>
+<pre data-role="codeBlock" data-info="typescript" class="language-typescript typescript"><code><span class="token keyword keyword-class">class</span> <span class="token class-name">MessageStorage</span> <span class="token punctuation">{</span>
+  <span class="token function">constructor</span><span class="token punctuation">(</span>
+    <span class="token keyword keyword-private">private</span> redis<span class="token operator">:</span> Redis<span class="token punctuation">,</span>
+    <span class="token keyword keyword-private">private</span> kafka<span class="token operator">:</span> Kafka
+  <span class="token punctuation">)</span> <span class="token punctuation">{</span><span class="token punctuation">}</span>
+  
+  <span class="token comment">// 保存消息</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">save</span><span class="token punctuation">(</span>conversationId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">,</span> message<span class="token operator">:</span> Message<span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-const">const</span> key <span class="token operator">=</span> <span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">conversation:</span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>conversationId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token string">:messages</span><span class="token template-punctuation string">`</span></span><span class="token punctuation">;</span>
+    
+    <span class="token comment">// 1. 实时写入 Redis</span>
+    <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">rpush</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> <span class="token constant">JSON</span><span class="token punctuation">.</span><span class="token function">stringify</span><span class="token punctuation">(</span>message<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">expire</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> <span class="token number">1800</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">// 30分钟过期</span>
+    
+    <span class="token comment">// 2. 发送到 Kafka (异步)</span>
+    <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>kafka<span class="token punctuation">.</span><span class="token function">send</span><span class="token punctuation">(</span><span class="token punctuation">{</span>
+      topic<span class="token operator">:</span> <span class="token string">'messages'</span><span class="token punctuation">,</span>
+      messages<span class="token operator">:</span> <span class="token punctuation">[</span><span class="token punctuation">{</span>
+        key<span class="token operator">:</span> conversationId<span class="token punctuation">,</span>
+        value<span class="token operator">:</span> <span class="token punctuation">{</span> event<span class="token operator">:</span> <span class="token string">'message_created'</span><span class="token punctuation">,</span> conversationId<span class="token punctuation">,</span> message <span class="token punctuation">}</span>
+      <span class="token punctuation">}</span><span class="token punctuation">]</span>
+    <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre><h4 id="4-checkpointservice-检查点服务">4. CheckpointService (检查点服务) </h4>
+<pre data-role="codeBlock" data-info="typescript" class="language-typescript typescript"><code><span class="token keyword keyword-class">class</span> <span class="token class-name">CheckpointService</span> <span class="token punctuation">{</span>
+  <span class="token function">constructor</span><span class="token punctuation">(</span><span class="token keyword keyword-private">private</span> redis<span class="token operator">:</span> Redis<span class="token punctuation">)</span> <span class="token punctuation">{</span><span class="token punctuation">}</span>
+  
+  <span class="token comment">// 保存检查点</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">saveCheckpoint</span><span class="token punctuation">(</span>checkpoint<span class="token operator">:</span> ExecutionCheckpoint<span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span><span class="token keyword keyword-void">void</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-const">const</span> key <span class="token operator">=</span> <span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">execution:</span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>checkpoint<span class="token punctuation">.</span>executionId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token string">:checkpoint</span><span class="token template-punctuation string">`</span></span><span class="token punctuation">;</span>
+    
+    <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">hset</span><span class="token punctuation">(</span>key<span class="token punctuation">,</span> <span class="token punctuation">{</span>
+      stepIndex<span class="token operator">:</span> checkpoint<span class="token punctuation">.</span>stepIndex<span class="token punctuation">.</span><span class="token function">toString</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+      lastMessageId<span class="token operator">:</span> checkpoint<span class="token punctuation">.</span>lastMessageId<span class="token punctuation">,</span>
+      lastMessageTime<span class="token operator">:</span> checkpoint<span class="token punctuation">.</span>lastMessageTime<span class="token punctuation">.</span><span class="token function">toString</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span>
+      canResume<span class="token operator">:</span> checkpoint<span class="token punctuation">.</span>canResume <span class="token operator">?</span> <span class="token string">'1'</span> <span class="token operator">:</span> <span class="token string">'0'</span>
+    <span class="token punctuation">}</span><span class="token punctuation">,</span> <span class="token punctuation">{</span> <span class="token constant">EX</span><span class="token operator">:</span> <span class="token number">86400</span> <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  
+  <span class="token comment">// 获取检查点</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">getLatestCheckpoint</span><span class="token punctuation">(</span>executionId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span>ExecutionCheckpoint <span class="token operator">|</span> <span class="token keyword keyword-null">null</span><span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-const">const</span> key <span class="token operator">=</span> <span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">execution:</span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>executionId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token string">:checkpoint</span><span class="token template-punctuation string">`</span></span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-const">const</span> data <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">hgetall</span><span class="token punctuation">(</span>key<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    
+    <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>data <span class="token operator">||</span> Object<span class="token punctuation">.</span><span class="token function">keys</span><span class="token punctuation">(</span>data<span class="token punctuation">)</span><span class="token punctuation">.</span>length <span class="token operator">===</span> <span class="token number">0</span><span class="token punctuation">)</span> <span class="token punctuation">{</span>
+      <span class="token keyword keyword-return">return</span> <span class="token keyword keyword-null">null</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    
+    <span class="token keyword keyword-return">return</span> <span class="token punctuation">{</span>
+      executionId<span class="token punctuation">,</span>
+      stepIndex<span class="token operator">:</span> <span class="token function">parseInt</span><span class="token punctuation">(</span>data<span class="token punctuation">.</span>stepIndex<span class="token punctuation">)</span><span class="token punctuation">,</span>
+      lastMessageId<span class="token operator">:</span> data<span class="token punctuation">.</span>lastMessageId<span class="token punctuation">,</span>
+      lastMessageTime<span class="token operator">:</span> <span class="token function">parseInt</span><span class="token punctuation">(</span>data<span class="token punctuation">.</span>lastMessageTime<span class="token punctuation">)</span><span class="token punctuation">,</span>
+      canResume<span class="token operator">:</span> data<span class="token punctuation">.</span>canResume <span class="token operator">===</span> <span class="token string">'1'</span>
+    <span class="token punctuation">}</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre><h4 id="5-contextservice-上下文服务">5. ContextService (上下文服务) </h4>
+<pre data-role="codeBlock" data-info="typescript" class="language-typescript typescript"><code><span class="token keyword keyword-class">class</span> <span class="token class-name">ContextService</span> <span class="token punctuation">{</span>
+  <span class="token function">constructor</span><span class="token punctuation">(</span>
+    <span class="token keyword keyword-private">private</span> redis<span class="token operator">:</span> Redis<span class="token punctuation">,</span>
+    <span class="token keyword keyword-private">private</span> clickhouse<span class="token operator">:</span> ClickHouse
+  <span class="token punctuation">)</span> <span class="token punctuation">{</span><span class="token punctuation">}</span>
+  
+  <span class="token comment">// 加载上下文</span>
+  <span class="token keyword keyword-async">async</span> <span class="token function">load</span><span class="token punctuation">(</span>conversationId<span class="token operator">:</span> <span class="token builtin">string</span><span class="token punctuation">)</span><span class="token operator">:</span> <span class="token builtin">Promise</span><span class="token operator">&lt;</span>ConversationContext<span class="token operator">&gt;</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-const">const</span> cacheKey <span class="token operator">=</span> <span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">conversation:</span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>conversationId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token string">:context</span><span class="token template-punctuation string">`</span></span><span class="token punctuation">;</span>
+    
+    <span class="token comment">// 1. 先从 Redis 缓存获取</span>
+    <span class="token keyword keyword-const">const</span> cached <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">get</span><span class="token punctuation">(</span>cacheKey<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-if">if</span> <span class="token punctuation">(</span>cached<span class="token punctuation">)</span> <span class="token punctuation">{</span>
+      <span class="token keyword keyword-return">return</span> <span class="token constant">JSON</span><span class="token punctuation">.</span><span class="token function">parse</span><span class="token punctuation">(</span>cached<span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    
+    <span class="token comment">// 2. 缓存不存在，从 ClickHouse 加载</span>
+    <span class="token keyword keyword-const">const</span> messages <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>clickhouse<span class="token punctuation">.</span><span class="token function">query</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">
+      SELECT * FROM messages 
+      WHERE conversation_id = '</span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>conversationId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token string">'
+      ORDER BY timestamp ASC
+      LIMIT 1000
+    </span><span class="token template-punctuation string">`</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    
+    <span class="token comment">// 3. 加载系统提示和工具配置</span>
+    <span class="token keyword keyword-const">const</span> conversation <span class="token operator">=</span> <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>clickhouse<span class="token punctuation">.</span><span class="token function">query</span><span class="token punctuation">(</span><span class="token template-string"><span class="token template-punctuation string">`</span><span class="token string">
+      SELECT * FROM conversations 
+      WHERE id = '</span><span class="token interpolation"><span class="token interpolation-punctuation punctuation">${</span>conversationId<span class="token interpolation-punctuation punctuation">}</span></span><span class="token string">'
+    </span><span class="token template-punctuation string">`</span></span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    
+    <span class="token keyword keyword-const">const</span> context<span class="token operator">:</span> ConversationContext <span class="token operator">=</span> <span class="token punctuation">{</span>
+      messages<span class="token punctuation">,</span>
+      systemPrompt<span class="token operator">:</span> conversation<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token operator">?.</span>system_prompt<span class="token punctuation">,</span>
+      tools<span class="token operator">:</span> conversation<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token operator">?.</span>tools
+    <span class="token punctuation">}</span><span class="token punctuation">;</span>
+    
+    <span class="token comment">// 4. 写入缓存</span>
+    <span class="token keyword keyword-await">await</span> <span class="token keyword keyword-this">this</span><span class="token punctuation">.</span>redis<span class="token punctuation">.</span><span class="token function">set</span><span class="token punctuation">(</span>cacheKey<span class="token punctuation">,</span> <span class="token constant">JSON</span><span class="token punctuation">.</span><span class="token function">stringify</span><span class="token punctuation">(</span>context<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token punctuation">{</span> <span class="token constant">EX</span><span class="token operator">:</span> <span class="token number">300</span> <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    
+    <span class="token keyword keyword-return">return</span> context<span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre><hr>
+<h2 id="八-故障恢复机制">八、故障恢复机制 </h2>
+<h3 id="场景-1-agent-进程崩溃">场景 1: Agent 进程崩溃 </h3>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>发生时间: Step 3 ~ Step 4 之间
+
+已存储:
+✅ Step 1 消息 (Redis + Kafka)
+✅ Step 2 消息 (Redis + Kafka)
+✅ Step 3 消息 (Redis + Kafka)
+✅ Step 4 消息 (部分)
+✅ 检查点: stepIndex=3, lastMessageId=msg_3
+
+丢失: Step 4 未完成的工具调用结果
+
+恢复:
+1. 从检查点获取 lastMessageId=msg_3
+2. 查询 msg_3 之后的消息
+3. 从 Step 4 继续执行
+</code></pre><h3 id="场景-2-redis-崩溃">场景 2: Redis 崩溃 </h3>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>已存储:
+✅ Kafka 保留所有消息 (7 天)
+
+恢复:
+1. 从 Kafka 重放消息
+2. 重建 Redis 缓存
+</code></pre><h3 id="场景-3-整个节点崩溃">场景 3: 整个节点崩溃 </h3>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>恢复:
+1. Task Manager 检测到超时
+2. 从检查点恢复
+3. 调度到新节点继续执行
+</code></pre><hr>
+<h2 id="九-完整数据流">九、完整数据流 </h2>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>┌─────────────────────────────────────────────────────────────────┐
+│                        完整数据流                                │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  用户请求                                                        │
+│      │                                                          │
+│      ▼                                                          │
+│  API Gateway (鉴权/限流)                                        │
+│      │                                                          │
+│      ▼                                                          │
+│  Controller (创建 Task)                                         │
+│      │                                                          │
+│      │ 立即返回 executionId                                     │
+│      ▼                                                          │
+│  Task Queue (Redis)                                            │
+│      │                                                          │
+│      ▼                                                          │
+│  Worker (执行 Agent) ──────────────────────────────────────    │
+│      │                                                          │
+│      ├─ onMessage ──▶ Redis + Kafka + SSE                     │
+│      │                                                          │
+│      ├─ onCheckpoint ──▶ Redis                                │
+│      │                                                          │
+│      ▼                                                          │
+│  执行完成                                                        │
+│      │                                                          │
+│      ▼                                                          │
+│  用户查询结果 (REST API / SSE)                                  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre><hr>
+<h2 id="十-技术选型">十、技术选型 </h2>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>组件</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API</td>
+<td>Express/Spring Boot</td>
+<td>REST API + SSE</td>
+</tr>
+<tr>
+<td>任务队列</td>
+<td>Redis List</td>
+<td>任务缓冲</td>
+</tr>
+<tr>
+<td>缓存</td>
+<td>Redis</td>
+<td>消息 + 检查点</td>
+</tr>
+<tr>
+<td>消息队列</td>
+<td>Kafka</td>
+<td>异步持久化</td>
+</tr>
+<tr>
+<td>主存储</td>
+<td>ClickHouse</td>
+<td>消息历史</td>
+</tr>
+<tr>
+<td>搜索</td>
+<td>Elasticsearch</td>
+<td>全文搜索</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="十一-总结">十一、总结 </h2>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>┌─────────────────────────────────────────────────────────────────┐
+│                         方案总结                                │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. 无状态 Agent                                                │
+│     - 输入: sessionId + messages + callbacks                  │
+│     - 输出: new_messages + finishReason                         │
+│     - 内部通过回调实时存储                                      │
+│                                                                 │
+│  2. 实时存储                                                   │
+│     - onMessage: 每条消息实时存储 (Redis + Kafka)             │
+│     - onCheckpoint: 记录位置 (stepIndex + lastMessageId)      │
+│                                                                 │
+│  3. 后台执行                                                   │
+│     - API 立即返回 executionId                                 │
+│     - Task Queue 缓冲任务                                      │
+│     - Worker 后台消费                                          │
+│                                                                 │
+│  4. 用户交互                                                   │
+│     - SSE 实时推送 (在线用户)                                  │
+│     - REST API 查询 (离线用户)                                 │
+│     - 支持页面关闭后继续执行                                    │
+│                                                                 │
+│  5. 故障恢复                                                   │
+│     - 检查点恢复: 从 lastMessageId 继续                        │
+│     - Worker 挂了: Task Queue 重试                             │
+│     - Redis 挂了: Kafka 重放                                   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+      </div>
+      
+      
+    
+    
+    
+    
+    
+    
+  
+    </body></html>

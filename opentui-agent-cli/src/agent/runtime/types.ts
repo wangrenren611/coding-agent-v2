@@ -1,0 +1,67 @@
+﻿export type AgentTextDeltaEvent = {
+  text: string;
+  isReasoning?: boolean;
+};
+
+export type AgentToolStreamEvent = {
+  toolCallId: string;
+  toolName: string;
+  type: string;
+  sequence: number;
+  timestamp: number;
+  content?: string;
+  data?: unknown;
+};
+
+export type AgentToolConfirmEvent = {
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  rawArgs: Record<string, unknown>;
+  reason?: string;
+};
+
+export type AgentStepEvent = {
+  stepIndex: number;
+  finishReason?: string;
+  toolCallsCount: number;
+};
+
+export type AgentToolUseEvent = {
+  [key: string]: unknown;
+};
+
+export type AgentToolResultEvent = {
+  toolCall: unknown;
+  result: unknown;
+};
+
+export type AgentLoopEvent = {
+  loopIndex: number;
+  steps: number;
+};
+
+export type AgentStopEvent = {
+  reason: string;
+  message?: string;
+};
+
+export type AgentEventHandlers = {
+  onTextDelta?: (event: AgentTextDeltaEvent) => void;
+  onTextComplete?: (text: string) => void;
+  onToolStream?: (event: AgentToolStreamEvent) => void;
+  onToolConfirm?: (event: AgentToolConfirmEvent) => void;
+  onToolUse?: (event: AgentToolUseEvent) => void;
+  onToolResult?: (event: AgentToolResultEvent) => void;
+  onStep?: (event: AgentStepEvent) => void;
+  onLoop?: (event: AgentLoopEvent) => void;
+  onStop?: (event: AgentStopEvent) => void;
+};
+
+export type AgentRunResult = {
+  text: string;
+  completionReason: string;
+  completionMessage?: string;
+  durationSeconds: number;
+  modelLabel: string;
+};

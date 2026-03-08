@@ -15,9 +15,9 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "example:agent": "tsx examples/agent-usage/index.ts",
+    "agent": "tsx examples/agent.ts",
     "example:agent:ui": "tsx examples/agent-ui/index.ts",
-    "example:providers": "tsx examples/providers-usage/index.ts",
+    "example:providers": "tsx src/agent-v2/agent.ts",
     "example:providers:manual": "tsx examples/providers-usage/manual-provider.ts",
     "test": "vitest",
     "test:run": "vitest run",
@@ -77,6 +77,7 @@
     "minimatch": "^10.2.4",
     "shell-quote": "^1.8.3",
     "strip-ansi": "^7.2.0",
+    "uuid": "^13.0.0",
     "zod": "^4.3.6"
   }
 }
