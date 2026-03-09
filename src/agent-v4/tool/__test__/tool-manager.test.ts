@@ -68,6 +68,23 @@ class ParallelNoLockTool extends EchoTool {
   }
 }
 
+const bashSchema = z.object({
+  command: z.string().min(1),
+});
+
+class SafeBashTool extends BaseTool<typeof bashSchema> {
+  name = 'bash';
+  description = 'bash command';
+  parameters = bashSchema;
+
+  async execute(args: z.infer<typeof bashSchema>): Promise<ToolResult> {
+    return {
+      success: true,
+      output: args.command,
+    };
+  }
+}
+
 function createContext(partial?: Partial<ToolExecutionContext>): ToolExecutionContext {
   return {
     toolCallId: 'call_1',
@@ -188,6 +205,41 @@ describe('DefaultToolManager', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBeInstanceOf(ToolPolicyDeniedError);
     expect(result.output).toContain('[PATH_NOT_ALLOWED]');
+  });
+
+  it('blocks dangerous bash command with built-in policy and includes audit details', async () => {
+    const manager = new DefaultToolManager();
+    manager.registerTool(
+      {
+        name: 'bash',
+        description: 'bash',
+        parameters: {},
+      },
+      new SafeBashTool()
+    );
+
+    const result = await manager.execute(
+      {
+        id: 't4_builtin_policy',
+        type: 'function',
+        index: 0,
+        function: { name: 'bash', arguments: '{"command":"rm -rf /"}' },
+      },
+      createContext()
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBeInstanceOf(ToolPolicyDeniedError);
+    expect(result.output).toContain('[DANGEROUS_COMMAND]');
+    expect((result.error as ToolPolicyDeniedError).details).toMatchObject({
+      toolName: 'bash',
+      reasonCode: 'DANGEROUS_COMMAND',
+      audit: {
+        toolCallId: 't4_builtin_policy',
+        toolName: 'bash',
+        source: 'builtin',
+      },
+    });
   });
 
   it('executes when policy check allows and receives parsed arguments', async () => {

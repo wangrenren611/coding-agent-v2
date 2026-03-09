@@ -9,6 +9,8 @@ import {
   ToolCall,
   ToolConcurrencyPolicy,
   ToolConfirmInfo,
+  ToolPolicyCheckInfo,
+  ToolPolicyDecision,
   ToolExecutionContext,
 } from './types';
 import { BaseTool } from './base-tool';
@@ -22,6 +24,39 @@ import {
   ToolExecutionError,
   ToolPolicyDeniedError,
 } from './error';
+import * as path from 'node:path';
+
+interface BashRule {
+  id: string;
+  pattern: RegExp;
+  message: string;
+}
+
+export interface ToolManagerConfig {
+  enableBuiltInPolicy?: boolean;
+  dangerousBashRules?: BashRule[];
+  restrictedWritePathPrefixes?: string[];
+}
+
+const DEFAULT_DANGEROUS_BASH_RULES: BashRule[] = [
+  {
+    id: 'rm_root',
+    pattern: /(^|[;&|]\s*)rm\s+-rf\s+\/(\s|$)/i,
+    message: 'Dangerous destructive root deletion command is blocked',
+  },
+  {
+    id: 'disk_format',
+    pattern: /\bmkfs(\.[a-z0-9]+)?\b/i,
+    message: 'Disk formatting command is blocked',
+  },
+  {
+    id: 'fork_bomb',
+    pattern: /:\(\)\s*\{\s*:\|:\s*&\s*\};:/,
+    message: 'Fork bomb pattern is blocked',
+  },
+];
+
+const DEFAULT_RESTRICTED_WRITE_PREFIXES = ['/etc', '/bin', '/sbin', '/usr', '/System', '/private/etc'];
 
 
 export interface ToolManager {
@@ -37,6 +72,17 @@ export interface ToolManager {
 export class DefaultToolManager implements ToolManager {
   private tools: Map<string, Tool> = new Map();
   private handlers: Map<string, BaseTool> = new Map();
+  private readonly enableBuiltInPolicy: boolean;
+  private readonly dangerousBashRules: BashRule[];
+  private readonly restrictedWritePathPrefixes: string[];
+
+  constructor(config: ToolManagerConfig = {}) {
+    this.enableBuiltInPolicy = config.enableBuiltInPolicy ?? true;
+    this.dangerousBashRules = config.dangerousBashRules ?? DEFAULT_DANGEROUS_BASH_RULES;
+    this.restrictedWritePathPrefixes = (
+      config.restrictedWritePathPrefixes ?? DEFAULT_RESTRICTED_WRITE_PREFIXES
+    ).map((prefix) => path.resolve(prefix));
+  }
   
   async execute(toolCall: ToolCall, options: ToolExecutionContext): Promise<ToolResult> {
     const toolName = toolCall.function.name;
@@ -75,7 +121,7 @@ export class DefaultToolManager implements ToolManager {
 
     const validationResult = handler.safeValidateArgs(args);
 
-    if (!validationResult.success) {
+    if ('error' in validationResult) {
       const err = new ToolValidationError(toolName, validationResult.error.issues);
       return {
         success: false,
@@ -84,21 +130,23 @@ export class DefaultToolManager implements ToolManager {
       };
     }
 
+    const policyCheckInfo: ToolPolicyCheckInfo = {
+      toolCallId: toolCall.id,
+      toolName,
+      arguments: toolCall.function.arguments,
+      parsedArguments: validationResult.data as Record<string, unknown>,
+    };
+
     if (options?.onPolicyCheck) {
-      const policyDecision = await options.onPolicyCheck({
-        toolCallId: toolCall.id,
-        toolName,
-        arguments: toolCall.function.arguments,
-        parsedArguments: validationResult.data as Record<string, unknown>,
-      });
+      const policyDecision = await options.onPolicyCheck(policyCheckInfo);
       if (!policyDecision.allowed) {
-        const err = new ToolPolicyDeniedError(toolName, policyDecision.code, policyDecision.message);
-        return {
-          success: false,
-          error: err,
-          output: err.message,
-        };
+        return this.buildPolicyDeniedResult(toolName, toolCall.id, policyDecision, 'callback');
       }
+    }
+
+    const builtInDecision = this.evaluateBuiltInPolicy(policyCheckInfo);
+    if (!builtInDecision.allowed) {
+      return this.buildPolicyDeniedResult(toolName, toolCall.id, builtInDecision, 'builtin');
     }
     
     const needsConfirm = handler.shouldConfirm(validationResult.data);
@@ -174,5 +222,81 @@ export class DefaultToolManager implements ToolManager {
     const mode = handler.getConcurrencyMode(validated.data);
     const lockKey = handler.getConcurrencyLockKey(validated.data);
     return lockKey ? { mode, lockKey } : { mode };
+  }
+
+  private buildPolicyDeniedResult(
+    toolName: string,
+    toolCallId: string,
+    decision: ToolPolicyDecision,
+    source: 'callback' | 'builtin'
+  ): ToolResult {
+    const audit = {
+      toolCallId,
+      toolName,
+      source,
+      timestamp: Date.now(),
+      ...(decision.audit || {}),
+    };
+    const err = new ToolPolicyDeniedError(
+      toolName,
+      decision.code || 'POLICY_DENIED',
+      decision.message,
+      audit
+    );
+    return {
+      success: false,
+      error: err,
+      output: err.message,
+    };
+  }
+
+  private evaluateBuiltInPolicy(info: ToolPolicyCheckInfo): ToolPolicyDecision {
+    if (!this.enableBuiltInPolicy) {
+      return { allowed: true };
+    }
+
+    if (info.toolName === 'bash') {
+      const command = info.parsedArguments.command;
+      if (typeof command === 'string') {
+        for (const rule of this.dangerousBashRules) {
+          if (rule.pattern.test(command)) {
+            return {
+              allowed: false,
+              code: 'DANGEROUS_COMMAND',
+              message: rule.message,
+              audit: {
+                ruleId: rule.id,
+                matchedValue: command.slice(0, 200),
+              },
+            };
+          }
+        }
+      }
+    }
+
+    if (info.toolName === 'write_file') {
+      const targetPath = info.parsedArguments.path;
+      if (typeof targetPath === 'string') {
+        const resolvedPath = path.resolve(targetPath);
+        for (const restrictedPrefix of this.restrictedWritePathPrefixes) {
+          if (
+            resolvedPath === restrictedPrefix ||
+            resolvedPath.startsWith(`${restrictedPrefix}${path.sep}`)
+          ) {
+            return {
+              allowed: false,
+              code: 'PATH_NOT_ALLOWED',
+              message: `Path targets restricted location: ${targetPath}`,
+              audit: {
+                ruleId: 'restricted_write_path',
+                matchedValue: resolvedPath,
+              },
+            };
+          }
+        }
+      }
+    }
+
+    return { allowed: true };
   }
 }

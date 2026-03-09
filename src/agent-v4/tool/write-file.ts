@@ -318,14 +318,16 @@ export class WriteFileTool extends BaseTool<typeof schema> {
     const resolved = path.isAbsolute(inputPath)
       ? path.resolve(inputPath)
       : path.resolve(process.cwd(), inputPath);
+    const normalizedResolved = this.normalizePathWithExistingAncestor(resolved);
     const allowed = this.allowedDirectories.some((allowedDir) => {
-      const normalizedAllowed = this.normalizeAllowedDirectory(allowedDir);
-      return resolved === normalizedAllowed || resolved.startsWith(`${normalizedAllowed}${path.sep}`);
+      return (
+        normalizedResolved === allowedDir || normalizedResolved.startsWith(`${allowedDir}${path.sep}`)
+      );
     });
     if (!allowed) {
       throw new Error(`Path is outside allowed directories: ${inputPath}`);
     }
-    return resolved;
+    return normalizedResolved;
   }
 
   private normalizeAllowedDirectory(dir: string): string {
@@ -334,6 +336,35 @@ export class WriteFileTool extends BaseTool<typeof schema> {
       return fs.realpathSync(resolved);
     } catch {
       return resolved;
+    }
+  }
+
+  private normalizePathWithExistingAncestor(inputPath: string): string {
+    const absolute = path.resolve(inputPath);
+    let current = absolute;
+    const tailSegments: string[] = [];
+
+    for (;;) {
+      try {
+        const realCurrent = fs.realpathSync(current);
+        if (tailSegments.length === 0) {
+          return realCurrent;
+        }
+        return path.join(realCurrent, ...tailSegments.reverse());
+      } catch (error) {
+        const nodeError = error as NodeJS.ErrnoException;
+        if (nodeError.code !== 'ENOENT' && nodeError.code !== 'ENOTDIR') {
+          return absolute;
+        }
+
+        const parent = path.dirname(current);
+        if (parent === current) {
+          return absolute;
+        }
+
+        tailSegments.push(path.basename(current));
+        current = parent;
+      }
     }
   }
 

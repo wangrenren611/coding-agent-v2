@@ -5,6 +5,7 @@ import {
   AgentQueryError,
   ConfirmationTimeoutError,
   MaxRetriesError,
+  TimeoutBudgetExceededError,
   UnknownError,
 } from '../error';
 
@@ -86,5 +87,18 @@ describe('agent/error', () => {
     expect(err.category).toBe('internal');
     expect(err.retryable).toBe(false);
     expect(err.httpStatus).toBe(500);
+  });
+
+  it('builds TimeoutBudgetExceededError', () => {
+    const err = new TimeoutBudgetExceededError();
+
+    expect(err).toBeInstanceOf(AgentError);
+    expect(err.name).toBe('TimeoutBudgetExceededError');
+    expect(err.code).toBe(1006);
+    expect(err.message).toBe('Timeout budget exceeded');
+    expect(err.errorCode).toBe('AGENT_TIMEOUT_BUDGET_EXCEEDED');
+    expect(err.category).toBe('timeout');
+    expect(err.retryable).toBe(false);
+    expect(err.httpStatus).toBe(504);
   });
 });

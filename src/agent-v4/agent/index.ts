@@ -3,17 +3,13 @@ import {
   AgentInput,
   AgentCallbacks,
   CompactionInfo,
-  ExecutionCheckpoint,
   StreamEvent,
   ErrorDecision,
   ToolDecision,
 } from '../types';
 import { ToolManager } from '../tool/tool-manager';
 import {
-  calculateBackoff,
   LLMProvider,
-  LLMRequestMessage,
-  LLMRetryableError,
   Tool,
   ToolCall,
 } from '../../providers';
@@ -23,6 +19,7 @@ import {
   AgentError,
   ConfirmationTimeoutError,
   MaxRetriesError,
+  TimeoutBudgetExceededError,
   UnknownError,
 } from './error';
 import type { AgentLogger } from './logger';
@@ -30,13 +27,71 @@ import { compact, estimateMessagesTokens } from './compaction';
 import { LLMTool, ToolConcurrencyPolicy } from '../tool/types';
 import type { BackoffConfig } from '../../providers';
 import {
-  appendContent,
-  appendRawArgs,
-  cleanupWriteBufferSessionFiles,
-  createWriteBufferSession,
-  loadWriteBufferSession,
-  type WriteBufferSessionMeta,
-} from './write-buffer';
+  convertMessageToLLMMessage as toLLMMessage,
+  mergeLLMConfig as mergeLLMRequestConfig,
+} from './message-utils';
+import {
+  createCheckpoint,
+  createDoneEvent,
+  createErrorEvent,
+  createProgressEvent,
+} from './stream-events';
+import {
+  buildExecutionWaves as buildToolExecutionWaves,
+  runWithConcurrencyAndLock as runTasksWithConcurrencyAndLock,
+} from './concurrency';
+import {
+  calculateRetryDelay as calculateRetryDelayWithBackoff,
+  isAbortError as isAbortErrorByMessage,
+  normalizeError as normalizeAgentError,
+} from './error-normalizer';
+import {
+  createExecutionAbortScope as createExecutionBudgetScope,
+  createStageAbortScope as createStageBudgetScope,
+  createTimeoutBudgetState as createBudgetState,
+  type AbortScope,
+  type TimeoutBudgetState,
+  type TimeoutStage,
+} from './timeout-budget';
+import {
+  bufferWriteFileToolCallChunk as bufferWriteFileChunk,
+  cleanupWriteFileBufferIfNeeded as cleanupWriteFileBufferSession,
+  enrichWriteFileToolError as buildWriteFileToolErrorPayload,
+  isWriteFileProtocolOutput as isWriteFileProtocolResponse,
+  isWriteFileToolCall as isWriteFileTool,
+  shouldEnrichWriteFileFailure as needEnrichWriteFileFailure,
+  type WriteBufferRuntime,
+} from './write-file-session';
+import {
+  createToolResultMessage as buildToolResultMessage,
+  getLedgerRecord as readToolLedgerRecord,
+  InMemoryToolExecutionLedger,
+  recordLedgerResult as writeToolLedgerRecord,
+  type ToolExecutionLedger,
+  type ToolExecutionLedgerRecord,
+} from './tool-execution-ledger';
+import {
+  emitMetric as pushMetric,
+  emitTrace as pushTrace,
+  endSpan as finishSpan,
+  extractErrorCode as parseErrorCode,
+  logError as writeErrorLog,
+  logInfo as writeInfoLog,
+  logWarn as writeWarnLog,
+  startSpan as beginSpan,
+  type SpanRuntime,
+} from './telemetry';
+import {
+  safeCallback as invokeSafeCallback,
+  safeErrorCallback as invokeSafeErrorCallback,
+} from './callback-safety';
+import { mergeToolCalls as mergeToolCallsWithBuffer } from './tool-call-merge';
+import {
+  normalizeTimeoutBudgetError as normalizeAbortTimeoutBudgetError,
+  sleepWithAbort,
+  throwIfAborted as assertNotAborted,
+  timeoutBudgetErrorFromSignal as timeoutErrorFromAbortSignal,
+} from './abort-runtime';
 
 function generateId(prefix: string): string {
   return `${prefix}${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -51,6 +106,9 @@ export interface AgentConfig {
   maxConcurrentToolCalls?: number;
   toolConcurrencyPolicyResolver?: (toolCall: ToolCall) => ToolConcurrencyPolicy;
   logger?: AgentLogger;
+  toolExecutionLedger?: ToolExecutionLedger;
+  timeoutBudgetMs?: number;
+  llmTimeoutRatio?: number;
 }
 
 export type { AgentLogger } from './logger';
@@ -64,29 +122,18 @@ interface InternalAgentConfig {
   maxConcurrentToolCalls: number;
   toolConcurrencyPolicyResolver?: (toolCall: ToolCall) => ToolConcurrencyPolicy;
   logger: AgentLogger;
+  timeoutBudgetMs?: number;
+  llmTimeoutRatio: number;
 }
 
 const DEFAULT_MAX_RETRY_COUNT = 20;
 const DEFAULT_COMPACTION_TRIGGER_RATIO = 0.8;
 const DEFAULT_COMPACTION_KEEP_MESSAGES = 20;
 const DEFAULT_MAX_CONCURRENT_TOOL_CALLS = 1;
+const DEFAULT_LLM_TIMEOUT_RATIO = 0.7;
 const ABORTED_MESSAGE = 'Operation aborted';
-const WRITE_FILE_TOOL_NAME = 'write_file';
 
-interface WriteBufferRuntime {
-  session: WriteBufferSessionMeta;
-  bufferedContentChars: number;
-}
-
-interface WriteFileProtocolPayload {
-  ok: boolean;
-  code:
-    | 'OK'
-    | 'WRITE_FILE_PARTIAL_BUFFERED'
-    | 'WRITE_FILE_NEED_RESUME'
-    | 'WRITE_FILE_FINALIZE_OK';
-  nextAction: 'resume' | 'finalize' | 'none';
-}
+export type { ToolExecutionLedger, ToolExecutionLedgerRecord } from './tool-execution-ledger';
 
 export class StatelessAgent extends EventEmitter {
   private llmProvider: LLMProvider;
@@ -94,11 +141,17 @@ export class StatelessAgent extends EventEmitter {
   private config: InternalAgentConfig;
   private logger: AgentLogger;
   private writeBufferSessions = new Map<string, WriteBufferRuntime>();
+  private toolExecutionLedger: ToolExecutionLedger;
   constructor(llmProvider: LLMProvider, toolExecutor: ToolManager, config: AgentConfig) {
     super();
     this.llmProvider = llmProvider;
     this.toolExecutor = toolExecutor;
     this.logger = config.logger ?? {};
+    this.toolExecutionLedger = config.toolExecutionLedger ?? new InMemoryToolExecutionLedger();
+    const llmTimeoutRatio = Number.isFinite(config.llmTimeoutRatio)
+      ? Number(config.llmTimeoutRatio)
+      : DEFAULT_LLM_TIMEOUT_RATIO;
+    const clampedLlmTimeoutRatio = Math.min(0.95, Math.max(0.05, llmTimeoutRatio));
     this.config = {
       maxRetryCount: config.maxRetryCount ?? DEFAULT_MAX_RETRY_COUNT,
       enableCompaction: config.enableCompaction ?? false,
@@ -112,18 +165,16 @@ export class StatelessAgent extends EventEmitter {
       ),
       toolConcurrencyPolicyResolver: config.toolConcurrencyPolicyResolver,
       logger: this.logger,
+      timeoutBudgetMs:
+        config.timeoutBudgetMs && Number.isFinite(config.timeoutBudgetMs) && config.timeoutBudgetMs > 0
+          ? Math.floor(config.timeoutBudgetMs)
+          : undefined,
+      llmTimeoutRatio: clampedLlmTimeoutRatio,
     };
   }
 
-  private convertMessageToLLMMessage(message: Message): LLMRequestMessage {
-    return {
-      role: message.role,
-      content: message.content,
-      tool_call_id: message.tool_call_id,
-      tool_calls: message.tool_calls,
-      id: message.id,
-      reasoning_content: message.reasoning_content,
-    };
+  private convertMessageToLLMMessage(message: Message) {
+    return toLLMMessage(message);
   }
 
   private needsCompaction(messages: Message[], tools?: Tool[]): boolean {
@@ -165,119 +216,336 @@ export class StatelessAgent extends EventEmitter {
     input: AgentInput,
     callbacks?: AgentCallbacks
   ): AsyncGenerator<StreamEvent, void, unknown> {
-    const { messages: inputMessages, maxSteps = 100, abortSignal } = input;
+    const { messages: inputMessages, maxSteps = 100, abortSignal: inputAbortSignal } = input;
     const messages = [...inputMessages];
+    const timeoutBudget = this.createTimeoutBudgetState(input);
+    const executionScope = this.createExecutionAbortScope(inputAbortSignal, timeoutBudget);
+    const abortSignal = executionScope.signal;
+    const traceId = input.executionId || generateId('trace_');
+    const runSpan = await this.startSpan(callbacks, traceId, 'agent.run', undefined, {
+      executionId: input.executionId,
+      conversationId: input.conversationId,
+      maxSteps,
+      timeoutBudgetMs: timeoutBudget?.totalMs,
+    });
+    this.logInfo('[Agent] run.start', {
+      executionId: input.executionId,
+      traceId,
+      spanId: runSpan.spanId,
+      messageCount: messages.length,
+    });
 
     let stepIndex = 0;
     let retryCount = 0;
+    let runOutcome: 'done' | 'error' | 'aborted' | 'timeout' | 'max_retries' = 'done';
+    let runErrorCode: string | undefined;
 
-    while (stepIndex < maxSteps) {
-      if (abortSignal?.aborted) {
-        yield* this.yieldErrorEvent(new AgentAbortedError(ABORTED_MESSAGE));
-        break;
-      }
+    try {
+      while (stepIndex < maxSteps) {
+        if (abortSignal?.aborted) {
+          const timeoutError = this.timeoutBudgetErrorFromSignal(abortSignal);
+          if (timeoutError) {
+            runOutcome = 'timeout';
+            runErrorCode = timeoutError.errorCode;
+            yield* this.yieldErrorEvent(timeoutError);
+          } else {
+            runOutcome = 'aborted';
+            runErrorCode = 'AGENT_ABORTED';
+            yield* this.yieldErrorEvent(new AgentAbortedError(ABORTED_MESSAGE));
+          }
+          break;
+        }
 
-      if (retryCount >= this.config.maxRetryCount) {
-        yield* this.yieldMaxRetriesError();
-        break;
-      }
+        if (retryCount >= this.config.maxRetryCount) {
+          runOutcome = 'max_retries';
+          runErrorCode = 'AGENT_MAX_RETRIES_REACHED';
+          yield* this.yieldMaxRetriesError();
+          break;
+        }
 
-      stepIndex++;
+        stepIndex++;
 
-      try {
-        this.throwIfAborted(abortSignal);
-        const messageCountBeforeCompaction = messages.length;
-        const removedMessageIds = await this.compactMessagesIfNeeded(messages, input.tools);
-        if (removedMessageIds.length > 0) {
-          const compactionInfo: CompactionInfo = {
+        try {
+          this.throwIfAborted(abortSignal);
+          const messageCountBeforeCompaction = messages.length;
+          const removedMessageIds = await this.compactMessagesIfNeeded(messages, input.tools);
+          if (removedMessageIds.length > 0) {
+            const compactionInfo: CompactionInfo = {
+              executionId: input.executionId,
+              stepIndex,
+              removedMessageIds,
+              messageCountBefore: messageCountBeforeCompaction,
+              messageCountAfter: messages.length,
+            };
+            await this.safeCallback(callbacks?.onCompaction, compactionInfo);
+            yield {
+              type: 'compaction',
+              data: compactionInfo,
+            };
+          }
+
+          this.throwIfAborted(abortSignal);
+
+          yield* this.emitProgress(input.executionId, stepIndex, 'llm', messages.length);
+          const llmSpan = await this.startSpan(callbacks, traceId, 'agent.llm.step', runSpan.spanId, {
             executionId: input.executionId,
             stepIndex,
-            removedMessageIds,
-            messageCountBefore: messageCountBeforeCompaction,
-            messageCountAfter: messages.length,
-          };
-          await this.safeCallback(callbacks?.onCompaction, compactionInfo);
-          yield {
-            type: 'compaction',
-            data: compactionInfo,
-          };
-        }
-
-        this.throwIfAborted(abortSignal);
-
-        yield* this.emitProgress(input.executionId, stepIndex, 'llm', messages.length);
-
-        const llmGen = this.callLLMAndProcessStream(
-          messages,
-          this.mergeLLMConfig(input.config, abortSignal),
-          abortSignal
-        );
-        let result = await llmGen.next();
-        while (!result.done) {
-          yield result.value;
-          result = await llmGen.next();
-        }
-        this.throwIfAborted(abortSignal);
-
-        const llmResult = result.value as { assistantMessage: Message; toolCalls: ToolCall[] };
-        const assistantMessage = llmResult.assistantMessage;
-        const toolCalls = llmResult.toolCalls;
-
-        messages.push(assistantMessage);
-        await this.safeCallback(callbacks?.onMessage, assistantMessage);
-
-        if (toolCalls.length > 0) {
-          yield* this.emitProgress(input.executionId, stepIndex, 'tool', messages.length);
-
-          const toolGen = this.processToolCalls(
-            toolCalls,
-            messages,
-            stepIndex,
-            callbacks,
-            abortSignal
-          );
-          let toolResult = await toolGen.next();
-          while (!toolResult.done) {
-            yield toolResult.value;
-            toolResult = await toolGen.next();
+            messageCount: messages.length,
+          });
+          const llmScope = this.createStageAbortScope(abortSignal, timeoutBudget, 'llm');
+          let llmResult:
+            | {
+                assistantMessage: Message;
+                toolCalls: ToolCall[];
+              }
+            | undefined;
+          let llmErrorCode: string | undefined;
+          let llmSucceeded = false;
+          try {
+            const llmGen = this.callLLMAndProcessStream(
+              messages,
+              this.mergeLLMConfig(input.config, llmScope.signal),
+              llmScope.signal
+            );
+            for (;;) {
+              const next = await llmGen.next();
+              if (next.done) {
+                llmResult = next.value;
+                break;
+              }
+              yield next.value as StreamEvent;
+            }
+            this.throwIfAborted(llmScope.signal);
+            llmSucceeded = true;
+          } catch (error) {
+            llmErrorCode = this.extractErrorCode(error) || 'AGENT_LLM_STAGE_FAILED';
+            throw error;
+          } finally {
+            llmScope.release();
+            const llmLatencyMs = Date.now() - llmSpan.startedAt;
+            await this.emitMetric(callbacks, {
+              name: 'agent.llm.duration_ms',
+              value: llmLatencyMs,
+              unit: 'ms',
+              timestamp: Date.now(),
+              tags: {
+                executionId: input.executionId,
+                stepIndex,
+                success: llmSucceeded ? 'true' : 'false',
+              },
+            });
+            await this.endSpan(callbacks, llmSpan, {
+              executionId: input.executionId,
+              stepIndex,
+              latencyMs: llmLatencyMs,
+              errorCode: llmErrorCode,
+            });
+            this.logInfo('[Agent] llm.step', {
+              executionId: input.executionId,
+              traceId,
+              spanId: llmSpan.spanId,
+              stepIndex,
+              latencyMs: llmLatencyMs,
+              errorCode: llmErrorCode,
+              messageCount: messages.length,
+            });
           }
 
-          const lastMessage = toolResult.value as Message | undefined;
-          yield* this.yieldCheckpoint(input.executionId, stepIndex, lastMessage, callbacks);
-          continue;
-        }
+          if (!llmResult) {
+            throw new UnknownError('LLM stream completed without result');
+          }
+          const assistantMessage = llmResult.assistantMessage;
+          const toolCalls = llmResult.toolCalls;
 
-        retryCount = 0;
-        yield* this.yieldDoneEvent(stepIndex);
-        break;
-      } catch (error) {
-        if (this.isAbortError(error) || abortSignal?.aborted) {
-          yield* this.yieldErrorEvent(new AgentAbortedError(ABORTED_MESSAGE));
-          break;
-        }
+          messages.push(assistantMessage);
+          await this.safeCallback(callbacks?.onMessage, assistantMessage);
 
-        const normalizedError = this.normalizeError(error);
-        const decision = await this.safeErrorCallback(callbacks?.onError, normalizedError);
-        yield* this.yieldErrorEvent(normalizedError);
-
-        if (!decision?.retry) {
-          break;
-        }
-
-        retryCount++;
-        if (retryCount < this.config.maxRetryCount) {
-          const retryDelay = this.calculateRetryDelay(retryCount, error as Error);
-          try {
-            await this.sleep(retryDelay, abortSignal);
-          } catch (sleepError) {
-            if (this.isAbortError(sleepError) || abortSignal?.aborted) {
-              yield* this.yieldErrorEvent(new AgentAbortedError(ABORTED_MESSAGE));
-              break;
+          if (toolCalls.length > 0) {
+            yield* this.emitProgress(input.executionId, stepIndex, 'tool', messages.length);
+            const toolStageSpan = await this.startSpan(
+              callbacks,
+              traceId,
+              'agent.tool.stage',
+              runSpan.spanId,
+              {
+                executionId: input.executionId,
+                stepIndex,
+                toolCalls: toolCalls.length,
+              }
+            );
+            const toolScope = this.createStageAbortScope(abortSignal, timeoutBudget, 'tool');
+            let toolResultMessage: Message | undefined;
+            let toolStageErrorCode: string | undefined;
+            let toolStageSucceeded = false;
+            try {
+              const toolGen = this.processToolCalls(
+                toolCalls,
+                messages,
+                stepIndex,
+                callbacks,
+                toolScope.signal,
+                input.executionId,
+                traceId,
+                toolStageSpan.spanId
+              );
+              for (;;) {
+                const next = await toolGen.next();
+                if (next.done) {
+                  toolResultMessage = next.value;
+                  break;
+                }
+                yield next.value as StreamEvent;
+              }
+              toolStageSucceeded = true;
+            } catch (error) {
+              toolStageErrorCode = this.extractErrorCode(error) || 'AGENT_TOOL_STAGE_FAILED';
+              throw error;
+            } finally {
+              toolScope.release();
+              const toolStageLatencyMs = Date.now() - toolStageSpan.startedAt;
+              await this.emitMetric(callbacks, {
+                name: 'agent.tool.stage.duration_ms',
+                value: toolStageLatencyMs,
+                unit: 'ms',
+                timestamp: Date.now(),
+                tags: {
+                  executionId: input.executionId,
+                  stepIndex,
+                  success: toolStageSucceeded ? 'true' : 'false',
+                },
+              });
+              await this.endSpan(callbacks, toolStageSpan, {
+                executionId: input.executionId,
+                stepIndex,
+                latencyMs: toolStageLatencyMs,
+                errorCode: toolStageErrorCode,
+                toolCalls: toolCalls.length,
+              });
+              this.logInfo('[Agent] tool.stage', {
+                executionId: input.executionId,
+                traceId,
+                spanId: toolStageSpan.spanId,
+                stepIndex,
+                latencyMs: toolStageLatencyMs,
+                errorCode: toolStageErrorCode,
+                toolCalls: toolCalls.length,
+              });
             }
-            throw sleepError;
+
+            const lastMessage = toolResultMessage;
+            yield* this.yieldCheckpoint(input.executionId, stepIndex, lastMessage, callbacks);
+            continue;
+          }
+
+          retryCount = 0;
+          runOutcome = 'done';
+          yield* this.yieldDoneEvent(stepIndex);
+          break;
+        } catch (error) {
+          const timeoutError = this.normalizeTimeoutBudgetError(error, abortSignal);
+          if (timeoutError) {
+            runOutcome = 'timeout';
+            runErrorCode = timeoutError.errorCode;
+            yield* this.yieldErrorEvent(timeoutError);
+            break;
+          }
+
+          if (this.isAbortError(error) || inputAbortSignal?.aborted) {
+            runOutcome = 'aborted';
+            runErrorCode = 'AGENT_ABORTED';
+            yield* this.yieldErrorEvent(new AgentAbortedError(ABORTED_MESSAGE));
+            break;
+          }
+
+          const normalizedError = this.normalizeError(error);
+          this.logError('[Agent] run.error', normalizedError, {
+            executionId: input.executionId,
+            traceId,
+            stepIndex,
+            retryCount,
+            errorCode: normalizedError.errorCode,
+            category: normalizedError.category,
+          });
+          runOutcome = 'error';
+          runErrorCode = normalizedError.errorCode;
+          const decision = await this.safeErrorCallback(callbacks?.onError, normalizedError);
+          yield* this.yieldErrorEvent(normalizedError);
+
+          if (!decision?.retry) {
+            break;
+          }
+
+          retryCount++;
+          this.logWarn('[Agent] retry.scheduled', {
+            executionId: input.executionId,
+            traceId,
+            stepIndex,
+            retryCount,
+            errorCode: normalizedError.errorCode,
+          });
+          if (retryCount < this.config.maxRetryCount) {
+            const retryDelay = this.calculateRetryDelay(retryCount, error as Error);
+            try {
+              await this.sleep(retryDelay, abortSignal);
+            } catch (sleepError) {
+              const sleepTimeoutError = this.normalizeTimeoutBudgetError(sleepError, abortSignal);
+              if (sleepTimeoutError) {
+                runOutcome = 'timeout';
+                runErrorCode = sleepTimeoutError.errorCode;
+                yield* this.yieldErrorEvent(sleepTimeoutError);
+                break;
+              }
+              if (this.isAbortError(sleepError) || inputAbortSignal?.aborted) {
+                runOutcome = 'aborted';
+                runErrorCode = 'AGENT_ABORTED';
+                yield* this.yieldErrorEvent(new AgentAbortedError(ABORTED_MESSAGE));
+                break;
+              }
+              throw sleepError;
+            }
           }
         }
       }
+    } finally {
+      const runLatencyMs = Date.now() - runSpan.startedAt;
+      await this.emitMetric(callbacks, {
+        name: 'agent.run.duration_ms',
+        value: runLatencyMs,
+        unit: 'ms',
+        timestamp: Date.now(),
+        tags: {
+          executionId: input.executionId,
+          outcome: runOutcome,
+        },
+      });
+      await this.emitMetric(callbacks, {
+        name: 'agent.retry.count',
+        value: retryCount,
+        unit: 'count',
+        timestamp: Date.now(),
+        tags: {
+          executionId: input.executionId,
+        },
+      });
+      await this.endSpan(callbacks, runSpan, {
+        executionId: input.executionId,
+        stepIndex,
+        latencyMs: runLatencyMs,
+        outcome: runOutcome,
+        errorCode: runErrorCode,
+        retryCount,
+      });
+      this.logInfo('[Agent] run.finish', {
+        executionId: input.executionId,
+        traceId,
+        spanId: runSpan.spanId,
+        stepIndex,
+        latencyMs: runLatencyMs,
+        outcome: runOutcome,
+        errorCode: runErrorCode,
+        retryCount,
+      });
+      executionScope.release();
     }
   }
 
@@ -285,28 +553,16 @@ export class StatelessAgent extends EventEmitter {
     callback: ((arg: T) => void | Promise<void>) | undefined,
     arg: T
   ): Promise<void> {
-    if (!callback) return;
-    try {
-      await callback(arg);
-    } catch (error) {
-      this.logError('[Agent] Callback error:', error);
-    }
+    await invokeSafeCallback(callback, arg, (error) => this.logError('[Agent] Callback error:', error));
   }
 
   private async safeErrorCallback(
     callback: ((error: Error) => ErrorDecision | void | Promise<ErrorDecision | void>) | undefined,
     error: Error
   ): Promise<ErrorDecision | undefined> {
-    if (!callback) {
-      return undefined;
-    }
-    try {
-      const result = await callback(error);
-      return result as ErrorDecision | undefined;
-    } catch (err) {
-      this.logError('[Agent] Error callback error:', err);
-      return undefined;
-    }
+    return invokeSafeErrorCallback(callback, error, (err) =>
+      this.logError('[Agent] Error callback error:', err)
+    );
   }
 
   private async mergeToolCalls(
@@ -314,211 +570,20 @@ export class StatelessAgent extends EventEmitter {
     newCalls: ToolCall[],
     messageId: string
   ): Promise<ToolCall[]> {
-    const result = existing.map((call) => ({ ...call }));
-
-    for (const newCall of newCalls) {
-      const existingCall = result.find((c) => c.id === newCall.id);
-      if (existingCall) {
-        if (!existingCall.function.name && newCall.function.name) {
-          existingCall.function.name = newCall.function.name;
-        }
-        existingCall.function.arguments += newCall.function.arguments;
-        await this.bufferWriteFileToolCallChunk(existingCall, newCall.function.arguments, messageId);
-      } else {
-        result.push({ ...newCall });
-        await this.bufferWriteFileToolCallChunk(newCall, newCall.function.arguments, messageId);
-      }
-    }
-    return result;
-  }
-
-  private isWriteFileToolCall(toolCall: ToolCall): boolean {
-    return toolCall.function.name?.trim() === WRITE_FILE_TOOL_NAME;
-  }
-
-  private extractWriteFileContentPrefix(argumentsText: string): string | null {
-    const contentMarkerMatch = /"content"\s*:\s*"/.exec(argumentsText);
-    if (!contentMarkerMatch || typeof contentMarkerMatch.index !== 'number') {
-      return null;
-    }
-
-    let cursor = contentMarkerMatch.index + contentMarkerMatch[0].length;
-    let output = '';
-
-    while (cursor < argumentsText.length) {
-      const ch = argumentsText[cursor];
-      if (ch === '"') {
-        return output;
-      }
-
-      if (ch !== '\\') {
-        output += ch;
-        cursor += 1;
-        continue;
-      }
-
-      if (cursor + 1 >= argumentsText.length) {
-        return output;
-      }
-
-      const esc = argumentsText[cursor + 1];
-      if (esc === '"' || esc === '\\' || esc === '/') {
-        output += esc;
-        cursor += 2;
-      } else if (esc === 'b') {
-        output += '\b';
-        cursor += 2;
-      } else if (esc === 'f') {
-        output += '\f';
-        cursor += 2;
-      } else if (esc === 'n') {
-        output += '\n';
-        cursor += 2;
-      } else if (esc === 'r') {
-        output += '\r';
-        cursor += 2;
-      } else if (esc === 't') {
-        output += '\t';
-        cursor += 2;
-      } else if (esc === 'u') {
-        const unicodeHex = argumentsText.slice(cursor + 2, cursor + 6);
-        if (!/^[0-9a-fA-F]{4}$/.test(unicodeHex)) {
-          return output;
-        }
-        output += String.fromCharCode(parseInt(unicodeHex, 16));
-        cursor += 6;
-      } else {
-        output += esc;
-        cursor += 2;
-      }
-    }
-
-    return output;
-  }
-
-  private async bufferWriteFileToolCallChunk(
-    toolCall: ToolCall,
-    argumentsChunk: string,
-    messageId: string
-  ): Promise<void> {
-    if (!this.isWriteFileToolCall(toolCall)) {
-      return;
-    }
-
-    try {
-      let runtime = this.writeBufferSessions.get(toolCall.id);
-      if (!runtime) {
-        const session = await createWriteBufferSession({
-          messageId,
-          toolCallId: toolCall.id,
+    return mergeToolCallsWithBuffer({
+      existing,
+      incoming: newCalls,
+      messageId,
+      onArgumentsChunk: async (toolCall, argumentsChunk, chunkMessageId) => {
+        await bufferWriteFileChunk({
+          toolCall,
+          argumentsChunk,
+          messageId: chunkMessageId,
+          sessions: this.writeBufferSessions,
+          onError: (error) => this.logError('[Agent] Failed to buffer write_file tool chunk:', error),
         });
-        runtime = {
-          session,
-          bufferedContentChars: 0,
-        };
-        this.writeBufferSessions.set(toolCall.id, runtime);
-      }
-
-      if (argumentsChunk) {
-        await appendRawArgs(runtime.session, argumentsChunk);
-      }
-
-      const decodedContentPrefix = this.extractWriteFileContentPrefix(toolCall.function.arguments);
-      if (decodedContentPrefix === null) {
-        return;
-      }
-
-      if (decodedContentPrefix.length <= runtime.bufferedContentChars) {
-        return;
-      }
-
-      const contentDelta = decodedContentPrefix.slice(runtime.bufferedContentChars);
-      await appendContent(runtime.session, contentDelta);
-      runtime.bufferedContentChars = decodedContentPrefix.length;
-    } catch (error) {
-      this.logError('[Agent] Failed to buffer write_file tool chunk:', error);
-    }
-  }
-
-  private async enrichWriteFileToolError(toolCall: ToolCall, content: string): Promise<string> {
-    if (!this.isWriteFileToolCall(toolCall)) {
-      return content;
-    }
-    const runtime = this.writeBufferSessions.get(toolCall.id);
-    if (!runtime) {
-      return JSON.stringify({
-        ok: false,
-        code: 'WRITE_FILE_NEED_RESUME',
-        message: content,
-        nextAction: 'resume',
-      });
-    }
-    try {
-      const meta = await loadWriteBufferSession(runtime.session.metaPath);
-      return JSON.stringify({
-        ok: false,
-        code: 'WRITE_FILE_PARTIAL_BUFFERED',
-        message: content,
-        buffer: {
-          bufferId: meta.bufferId,
-          path: meta.targetPath || '',
-          bufferedBytes: meta.contentBytes,
-          maxChunkBytes: 32768,
-        },
-        nextAction: 'resume',
-      });
-    } catch {
-      return JSON.stringify({
-        ok: false,
-        code: 'WRITE_FILE_NEED_RESUME',
-        message: content,
-        nextAction: 'resume',
-      });
-    }
-  }
-
-  private isWriteFileProtocolOutput(content: string | undefined): content is string {
-    if (!content || content.trim().length === 0) {
-      return false;
-    }
-    try {
-      const parsed = JSON.parse(content) as Partial<WriteFileProtocolPayload>;
-      if (!parsed || typeof parsed !== 'object') {
-        return false;
-      }
-      return (
-        typeof parsed.code === 'string' &&
-        typeof parsed.ok === 'boolean' &&
-        (parsed.nextAction === 'resume' ||
-          parsed.nextAction === 'finalize' ||
-          parsed.nextAction === 'none')
-      );
-    } catch {
-      return false;
-    }
-  }
-
-  private shouldEnrichWriteFileFailure(
-    error: { name?: string } | undefined,
-    output?: string
-  ): boolean {
-    if (this.isWriteFileProtocolOutput(output)) {
-      return false;
-    }
-    const errorName = error?.name;
-    return errorName === 'InvalidArgumentsError' || errorName === 'ToolValidationError';
-  }
-
-  private async cleanupWriteFileBufferIfNeeded(toolCall: ToolCall): Promise<void> {
-    if (!this.isWriteFileToolCall(toolCall)) {
-      return;
-    }
-    const runtime = this.writeBufferSessions.get(toolCall.id);
-    if (!runtime) {
-      return;
-    }
-    this.writeBufferSessions.delete(toolCall.id);
-    await cleanupWriteBufferSessionFiles(runtime.session);
+      },
+    });
   }
 
   private async *callLLMAndProcessStream(
@@ -610,112 +675,182 @@ export class StatelessAgent extends EventEmitter {
     toolCall: ToolCall,
     stepIndex: number,
     callbacks?: AgentCallbacks,
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    executionId?: string,
+    traceId?: string,
+    parentSpanId?: string
   ): AsyncGenerator<StreamEvent, Message, unknown> {
     this.throwIfAborted(abortSignal);
-    const toolExecResult = await this.toolExecutor.execute(toolCall, {
-      onChunk: (chunk) => {
-        this.emit('tool_chunk', {
-          toolCallId: toolCall.id,
-          toolName: toolCall.function.name,
-          arguments: toolCall.function.arguments,
-          chunk: chunk.data,
-          chunkType: chunk.type,
-        });
-      },
-      onConfirm: async (info) => {
-        return new Promise((resolve) => {
-          let settled = false;
-          const abortHandler = () => {
-            if (!settled) {
-              settled = true;
-              clearTimeout(timeout);
-              resolve({ approved: false, message: ABORTED_MESSAGE });
-            }
-          };
-
-          const timeout = setTimeout(() => {
-            if (!settled) {
-              settled = true;
-              const err = new ConfirmationTimeoutError();
-              resolve({ approved: false, message: err.message });
-            }
-          }, 30000);
-
-          const cleanup = () => {
-            if (!settled) {
-              settled = true;
-              clearTimeout(timeout);
-            }
-            abortSignal?.removeEventListener('abort', abortHandler);
-          };
-
-          if (abortSignal?.aborted) {
-            abortHandler();
-            return;
-          }
-          abortSignal?.addEventListener('abort', abortHandler, { once: true });
-
-          this.emit('tool_confirm', {
-            ...info,
-            resolve: (decision: ToolDecision) => {
-              cleanup();
-              resolve(decision);
-            },
-          });
-        });
-      },
-      onPolicyCheck: callbacks?.onToolPolicy
-        ? async (info) => {
-            const decision = await callbacks.onToolPolicy?.(info);
-            return decision || { allowed: true };
-          }
-        : undefined,
+    const effectiveTraceId = traceId || executionId || generateId('trace_');
+    const toolSpan = await this.startSpan(callbacks, effectiveTraceId, 'agent.tool.execute', parentSpanId, {
+      executionId,
+      stepIndex,
       toolCallId: toolCall.id,
-      loopIndex: stepIndex,
-      agent: this,
-      toolAbortSignal: abortSignal,
+      toolName: toolCall.function.name,
     });
-
-    const toolResult: Message = {
-      messageId: generateId('msg_'),
-      type: 'tool-result',
-      role: 'tool',
-      content: '',
-      tool_call_id: toolCall.id,
-      timestamp: Date.now(),
-    };
-
-    if (toolExecResult.success) {
-      toolResult.content = toolExecResult.output || '';
-      await this.cleanupWriteFileBufferIfNeeded(toolCall);
-    } else {
-      if (this.isWriteFileToolCall(toolCall)) {
-        if (this.isWriteFileProtocolOutput(toolExecResult.output)) {
-          toolResult.content = toolExecResult.output;
-        } else if (this.shouldEnrichWriteFileFailure(toolExecResult.error, toolExecResult.output)) {
-          const errorContent =
-            toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
-          toolResult.content = await this.enrichWriteFileToolError(toolCall, errorContent);
-        } else {
-          const errorContent =
-            toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
-          toolResult.content = errorContent;
-        }
-      } else {
-        toolResult.content =
-          toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
+    let toolErrorCode: string | undefined;
+    let cachedHit = false;
+    let toolSucceeded = false;
+    try {
+      const cachedResult = await this.getLedgerRecord(executionId, toolCall.id);
+      if (cachedResult) {
+        cachedHit = true;
+        toolSucceeded = true;
+        const replayResult = this.createToolResultMessageFromLedger(toolCall.id, cachedResult.output);
+        await this.safeCallback(callbacks?.onMessage, replayResult);
+        yield {
+          type: 'tool_result',
+          data: replayResult,
+        };
+        return replayResult;
       }
+
+      const toolExecResult = await this.toolExecutor.execute(toolCall, {
+        onChunk: (chunk) => {
+          this.emit('tool_chunk', {
+            toolCallId: toolCall.id,
+            toolName: toolCall.function.name,
+            arguments: toolCall.function.arguments,
+            chunk: chunk.data,
+            chunkType: chunk.type,
+          });
+        },
+        onConfirm: async (info) => {
+          return new Promise((resolve) => {
+            let settled = false;
+            const abortHandler = () => {
+              if (!settled) {
+                settled = true;
+                clearTimeout(timeout);
+                resolve({ approved: false, message: ABORTED_MESSAGE });
+              }
+            };
+
+            const timeout = setTimeout(() => {
+              if (!settled) {
+                settled = true;
+                const err = new ConfirmationTimeoutError();
+                resolve({ approved: false, message: err.message });
+              }
+            }, 30000);
+
+            const cleanup = () => {
+              if (!settled) {
+                settled = true;
+                clearTimeout(timeout);
+              }
+              abortSignal?.removeEventListener('abort', abortHandler);
+            };
+
+            if (abortSignal?.aborted) {
+              abortHandler();
+              return;
+            }
+            abortSignal?.addEventListener('abort', abortHandler, { once: true });
+
+            this.emit('tool_confirm', {
+              ...info,
+              resolve: (decision: ToolDecision) => {
+                cleanup();
+                resolve(decision);
+              },
+            });
+          });
+        },
+        onPolicyCheck: callbacks?.onToolPolicy
+          ? async (info) => {
+              const decision = await callbacks.onToolPolicy?.(info);
+              return decision || { allowed: true };
+            }
+          : undefined,
+        toolCallId: toolCall.id,
+        loopIndex: stepIndex,
+        agent: this,
+        toolAbortSignal: abortSignal,
+      });
+
+      const toolResult: Message = {
+        ...this.createToolResultMessageFromLedger(toolCall.id, ''),
+        content: '',
+      };
+
+      if (toolExecResult.success) {
+        toolSucceeded = true;
+        toolResult.content = toolExecResult.output || '';
+        await cleanupWriteFileBufferSession(toolCall, this.writeBufferSessions);
+      } else {
+        if (isWriteFileTool(toolCall)) {
+          if (isWriteFileProtocolResponse(toolExecResult.output)) {
+            toolResult.content = toolExecResult.output;
+          } else if (needEnrichWriteFileFailure(toolExecResult.error, toolExecResult.output)) {
+            const errorContent =
+              toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
+            toolResult.content = await buildWriteFileToolErrorPayload(
+              toolCall,
+              errorContent,
+              this.writeBufferSessions
+            );
+          } else {
+            const errorContent =
+              toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
+            toolResult.content = errorContent;
+          }
+        } else {
+          toolResult.content =
+            toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
+        }
+        toolErrorCode = this.extractErrorCode(toolExecResult.error) || 'TOOL_EXECUTION_FAILED';
+      }
+
+      await this.safeCallback(callbacks?.onMessage, toolResult);
+      await this.recordLedgerResult(executionId, toolCall.id, toolExecResult, toolResult.content);
+
+      yield {
+        type: 'tool_result',
+        data: toolResult,
+      };
+
+      return toolResult;
+    } catch (error) {
+      toolErrorCode = this.extractErrorCode(error) || 'TOOL_EXECUTION_FAILED';
+      throw error;
+    } finally {
+      const toolLatencyMs = Date.now() - toolSpan.startedAt;
+      await this.emitMetric(callbacks, {
+        name: 'agent.tool.duration_ms',
+        value: toolLatencyMs,
+        unit: 'ms',
+        timestamp: Date.now(),
+        tags: {
+          executionId: executionId || '',
+          stepIndex,
+          toolCallId: toolCall.id,
+          cached: cachedHit ? 'true' : 'false',
+          success: toolSucceeded ? 'true' : 'false',
+        },
+      });
+      await this.endSpan(callbacks, toolSpan, {
+        executionId,
+        stepIndex,
+        toolCallId: toolCall.id,
+        toolName: toolCall.function.name,
+        latencyMs: toolLatencyMs,
+        cached: cachedHit,
+        errorCode: toolErrorCode,
+      });
+      this.logInfo('[Agent] tool.execute', {
+        executionId,
+        traceId: effectiveTraceId,
+        spanId: toolSpan.spanId,
+        parentSpanId: toolSpan.parentSpanId,
+        stepIndex,
+        toolCallId: toolCall.id,
+        toolName: toolCall.function.name,
+        latencyMs: toolLatencyMs,
+        cached: cachedHit,
+        errorCode: toolErrorCode,
+      });
     }
-
-    await this.safeCallback(callbacks?.onMessage, toolResult);
-
-    yield {
-      type: 'tool_result',
-      data: toolResult,
-    };
-
-    return toolResult;
   }
 
   private async *processToolCalls(
@@ -723,7 +858,10 @@ export class StatelessAgent extends EventEmitter {
     messages: Message[],
     stepIndex: number,
     callbacks?: AgentCallbacks,
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    executionId?: string,
+    traceId?: string,
+    parentSpanId?: string
   ): AsyncGenerator<StreamEvent, Message, unknown> {
     if (this.config.maxConcurrentToolCalls <= 1 || toolCalls.length <= 1) {
       for (const toolCall of toolCalls) {
@@ -737,14 +875,25 @@ export class StatelessAgent extends EventEmitter {
           },
         };
 
-        const toolGen = this.executeTool(toolCall, stepIndex, callbacks, abortSignal);
-        let toolResult = await toolGen.next();
-        while (!toolResult.done) {
-          yield toolResult.value;
-          toolResult = await toolGen.next();
+        const toolGen = this.executeTool(
+          toolCall,
+          stepIndex,
+          callbacks,
+          abortSignal,
+          executionId,
+          traceId,
+          parentSpanId
+        );
+        let resultMessage: Message | undefined;
+        for (;;) {
+          const next = await toolGen.next();
+          if (next.done) {
+            resultMessage = next.value;
+            break;
+          }
+          yield next.value as StreamEvent;
         }
 
-        const resultMessage = toolResult.value as Message;
         if (resultMessage) {
           messages.push(resultMessage);
         }
@@ -777,12 +926,28 @@ export class StatelessAgent extends EventEmitter {
       this.throwIfAborted(abortSignal);
       if (wave.type === 'exclusive') {
         allResults.push(
-          await this.executeToolTask(wave.plans[0].toolCall, stepIndex, callbacks, abortSignal)
+          await this.executeToolTask(
+            wave.plans[0].toolCall,
+            stepIndex,
+            callbacks,
+            abortSignal,
+            executionId,
+            traceId,
+            parentSpanId
+          )
         );
         continue;
       }
 
-      const parallelResults = await this.runParallelWave(wave.plans, stepIndex, callbacks, abortSignal);
+      const parallelResults = await this.runParallelWave(
+        wave.plans,
+        stepIndex,
+        callbacks,
+        abortSignal,
+        executionId,
+        traceId,
+        parentSpanId
+      );
       allResults.push(...parallelResults);
     }
 
@@ -821,42 +986,30 @@ export class StatelessAgent extends EventEmitter {
     type: 'exclusive' | 'parallel';
     plans: Array<{ toolCall: ToolCall; policy: ToolConcurrencyPolicy }>;
   }> {
-    const waves: Array<{
-      type: 'exclusive' | 'parallel';
-      plans: Array<{ toolCall: ToolCall; policy: ToolConcurrencyPolicy }>;
-    }> = [];
-    let currentParallel: Array<{ toolCall: ToolCall; policy: ToolConcurrencyPolicy }> = [];
-
-    const flushParallel = () => {
-      if (currentParallel.length === 0) {
-        return;
-      }
-      waves.push({ type: 'parallel', plans: currentParallel });
-      currentParallel = [];
-    };
-
-    for (const plan of plans) {
-      if (plan.policy.mode === 'exclusive') {
-        flushParallel();
-        waves.push({ type: 'exclusive', plans: [plan] });
-      } else {
-        currentParallel.push(plan);
-      }
-    }
-    flushParallel();
-
-    return waves;
+    return buildToolExecutionWaves(plans);
   }
 
   private async runParallelWave(
     plans: Array<{ toolCall: ToolCall; policy: ToolConcurrencyPolicy }>,
     stepIndex: number,
     callbacks?: AgentCallbacks,
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    executionId?: string,
+    traceId?: string,
+    parentSpanId?: string
   ): Promise<Array<{ events: StreamEvent[]; message?: Message }>> {
     const tasks = plans.map((plan) => ({
       lockKey: plan.policy.lockKey,
-      run: async () => this.executeToolTask(plan.toolCall, stepIndex, callbacks, abortSignal),
+      run: async () =>
+        this.executeToolTask(
+          plan.toolCall,
+          stepIndex,
+          callbacks,
+          abortSignal,
+          executionId,
+          traceId,
+          parentSpanId
+        ),
     }));
     return this.runWithConcurrencyAndLock(tasks, this.config.maxConcurrentToolCalls);
   }
@@ -865,18 +1018,33 @@ export class StatelessAgent extends EventEmitter {
     toolCall: ToolCall,
     stepIndex: number,
     callbacks?: AgentCallbacks,
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    executionId?: string,
+    traceId?: string,
+    parentSpanId?: string
   ): Promise<{ events: StreamEvent[]; message?: Message }> {
     const events: StreamEvent[] = [];
-    const toolGen = this.executeTool(toolCall, stepIndex, callbacks, abortSignal);
-    let toolResult = await toolGen.next();
-    while (!toolResult.done) {
-      events.push(toolResult.value);
-      toolResult = await toolGen.next();
+    const toolGen = this.executeTool(
+      toolCall,
+      stepIndex,
+      callbacks,
+      abortSignal,
+      executionId,
+      traceId,
+      parentSpanId
+    );
+    let resultMessage: Message | undefined;
+    for (;;) {
+      const next = await toolGen.next();
+      if (next.done) {
+        resultMessage = next.value;
+        break;
+      }
+      events.push(next.value as StreamEvent);
     }
     return {
       events,
-      message: toolResult.value as Message | undefined,
+      message: resultMessage,
     };
   }
 
@@ -884,67 +1052,7 @@ export class StatelessAgent extends EventEmitter {
     tasks: Array<{ lockKey?: string; run: () => Promise<T> }>,
     limit: number
   ): Promise<T[]> {
-    if (tasks.length === 0) {
-      return [];
-    }
-
-    const results: T[] = new Array(tasks.length);
-    const pending = tasks.map((_, index) => index);
-    const runningLocks = new Set<string>();
-    let activeCount = 0;
-    let settled = false;
-
-    return new Promise<T[]>((resolve, reject) => {
-      const tryStart = () => {
-        while (activeCount < limit && pending.length > 0) {
-          const nextPos = pending.findIndex((index) => {
-            const lockKey = tasks[index].lockKey;
-            return !lockKey || !runningLocks.has(lockKey);
-          });
-          if (nextPos === -1) {
-            break;
-          }
-
-          const taskIndex = pending.splice(nextPos, 1)[0];
-          const lockKey = tasks[taskIndex].lockKey;
-          if (lockKey) {
-            runningLocks.add(lockKey);
-          }
-          activeCount += 1;
-
-          tasks[taskIndex]
-            .run()
-            .then((value) => {
-              results[taskIndex] = value;
-            })
-            .catch((error) => {
-              if (!settled) {
-                settled = true;
-                reject(error);
-              }
-            })
-            .finally(() => {
-              activeCount -= 1;
-              if (lockKey) {
-                runningLocks.delete(lockKey);
-              }
-
-              if (settled) {
-                return;
-              }
-              if (pending.length === 0 && activeCount === 0) {
-                settled = true;
-                resolve(results);
-                return;
-              }
-              tryStart();
-            });
-        }
-
-      };
-
-      tryStart();
-    });
+    return runTasksWithConcurrencyAndLock(tasks, limit);
   }
 
   private async *yieldCheckpoint(
@@ -953,13 +1061,7 @@ export class StatelessAgent extends EventEmitter {
     lastMessage: Message | undefined,
     callbacks?: AgentCallbacks
   ): AsyncGenerator<StreamEvent, void, unknown> {
-    const checkpoint: ExecutionCheckpoint = {
-      executionId: executionId || '',
-      stepIndex,
-      lastMessageId: lastMessage?.messageId || '',
-      lastMessageTime: Date.now(),
-      canResume: true,
-    };
+    const checkpoint = createCheckpoint(executionId, stepIndex, lastMessage?.messageId);
     await this.safeCallback(callbacks?.onCheckpoint, checkpoint);
 
     yield {
@@ -978,129 +1080,184 @@ export class StatelessAgent extends EventEmitter {
     currentAction: 'llm' | 'tool',
     messageCount: number
   ): Generator<StreamEvent> {
-    yield {
-      type: 'progress',
-      data: {
-        executionId,
-        stepIndex,
-        currentAction,
-        messageCount,
-      },
-    };
+    yield createProgressEvent(executionId, stepIndex, currentAction, messageCount);
   }
 
   private *yieldErrorEvent(error: AgentError): Generator<StreamEvent> {
-    yield {
-      type: 'error',
-      data: {
-        name: error.name,
-        code: error.code,
-        errorCode: error.errorCode,
-        category: error.category,
-        retryable: error.retryable,
-        httpStatus: error.httpStatus,
-        message: error.message,
-      },
-    };
+    yield createErrorEvent(error);
   }
 
   private *yieldDoneEvent(stepIndex: number): Generator<StreamEvent> {
-    yield {
-      type: 'done',
-      data: {
-        finishReason: 'stop',
-        steps: stepIndex,
-      },
-    };
+    yield createDoneEvent(stepIndex);
   }
 
   private mergeLLMConfig(
     config: AgentInput['config'],
     abortSignal?: AbortSignal
   ): AgentInput['config'] {
-    if (!abortSignal) {
-      return config;
-    }
-    return {
-      ...(config || {}),
-      abortSignal,
-    };
+    return mergeLLMRequestConfig(config, abortSignal);
   }
 
-  private throwIfAborted(signal?: AbortSignal): void {
-    if (!signal?.aborted) {
-      return;
-    }
-    const error = new Error(ABORTED_MESSAGE);
-    error.name = 'AbortError';
-    throw error;
+  private async emitMetric(
+    callbacks: AgentCallbacks | undefined,
+    metric: Parameters<typeof pushMetric>[1]
+  ): Promise<void> {
+    await pushMetric(callbacks, metric, this.safeCallback.bind(this));
   }
 
-  private isAbortError(error: unknown): boolean {
-    if (!error || typeof error !== 'object') {
-      return false;
-    }
-    const abortError = error as { name?: string; message?: string };
-    return abortError.name === 'AbortError' || abortError.message === ABORTED_MESSAGE;
+  private async emitTrace(
+    callbacks: AgentCallbacks | undefined,
+    event: Parameters<typeof pushTrace>[1]
+  ): Promise<void> {
+    await pushTrace(callbacks, event, this.safeCallback.bind(this));
   }
 
-  private normalizeError(error: unknown): AgentError {
-    if (error instanceof AgentError) {
-      return error;
-    }
-
-    if (this.isAbortError(error)) {
-      return new AgentAbortedError(ABORTED_MESSAGE);
-    }
-
-    if (error instanceof Error) {
-      if (error.name === 'ConfirmationTimeoutError' || error.message === 'Confirmation timeout') {
-        return new ConfirmationTimeoutError(error.message);
-      }
-      return new UnknownError(error.message || new UnknownError().message);
-    }
-
-    return new UnknownError();
-  }
-
-  private calculateRetryDelay(retryCount: number, error: Error): number {
-    const retryAfterMs = error instanceof LLMRetryableError ? error.retryAfter : undefined;
-    return calculateBackoff(retryCount - 1, retryAfterMs, this.config.backoffConfig);
-  }
-
-  private async sleep(ms: number, signal?: AbortSignal): Promise<void> {
-    if (ms <= 0) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      const onAbort = () => {
-        cleanup();
-        clearTimeout(timer);
-        const err = new Error(ABORTED_MESSAGE);
-        err.name = 'AbortError';
-        reject(err);
-      };
-
-      const cleanup = () => {
-        signal?.removeEventListener('abort', onAbort);
-      };
-
-      const timer = setTimeout(() => {
-        cleanup();
-        resolve();
-      }, ms);
-
-      if (signal) {
-        if (signal.aborted) {
-          onAbort();
-          return;
-        }
-        signal.addEventListener('abort', onAbort, { once: true });
-      }
+  private async startSpan(
+    callbacks: AgentCallbacks | undefined,
+    traceId: string,
+    name: string,
+    parentSpanId?: string,
+    attributes?: Record<string, unknown>
+  ): Promise<SpanRuntime> {
+    return beginSpan({
+      callbacks,
+      traceId,
+      name,
+      parentSpanId,
+      attributes,
+      createSpanId: () => generateId('span_'),
+      emitTrace: async (cbs, event) => {
+        await this.emitTrace(cbs, event);
+      },
     });
   }
 
-  private logError(message: string, error: unknown): void {
-    this.logger.error?.(message, error);
+  private async endSpan(
+    callbacks: AgentCallbacks | undefined,
+    span: SpanRuntime,
+    attributes?: Record<string, unknown>
+  ): Promise<void> {
+    await finishSpan({
+      callbacks,
+      span,
+      attributes,
+      emitTrace: async (cbs, event) => {
+        await this.emitTrace(cbs, event);
+      },
+    });
+  }
+
+  private extractErrorCode(error: unknown): string | undefined {
+    return parseErrorCode(error);
+  }
+
+  private createTimeoutBudgetState(input: AgentInput): TimeoutBudgetState | undefined {
+    return createBudgetState({
+      inputTimeoutBudgetMs: input.timeoutBudgetMs,
+      configTimeoutBudgetMs: this.config.timeoutBudgetMs,
+      inputLlmTimeoutRatio: input.llmTimeoutRatio,
+      configLlmTimeoutRatio: this.config.llmTimeoutRatio,
+    });
+  }
+
+  private createExecutionAbortScope(
+    inputAbortSignal: AbortSignal | undefined,
+    timeoutBudget: TimeoutBudgetState | undefined
+  ): AbortScope {
+    return createExecutionBudgetScope(inputAbortSignal, timeoutBudget);
+  }
+
+  private createStageAbortScope(
+    baseSignal: AbortSignal | undefined,
+    timeoutBudget: TimeoutBudgetState | undefined,
+    stage: TimeoutStage
+  ): AbortScope {
+    return createStageBudgetScope(baseSignal, timeoutBudget, stage);
+  }
+
+  private timeoutBudgetErrorFromSignal(signal: AbortSignal | undefined): TimeoutBudgetExceededError | undefined {
+    return timeoutErrorFromAbortSignal(signal);
+  }
+
+  private normalizeTimeoutBudgetError(
+    error: unknown,
+    signal: AbortSignal | undefined
+  ): TimeoutBudgetExceededError | undefined {
+    return normalizeAbortTimeoutBudgetError(error, signal);
+  }
+
+  private throwIfAborted(signal?: AbortSignal): void {
+    assertNotAborted(signal, ABORTED_MESSAGE);
+  }
+
+  private isAbortError(error: unknown): boolean {
+    return isAbortErrorByMessage(error, ABORTED_MESSAGE);
+  }
+
+  private normalizeError(error: unknown): AgentError {
+    return normalizeAgentError(error, ABORTED_MESSAGE);
+  }
+
+  private calculateRetryDelay(retryCount: number, error: Error): number {
+    return calculateRetryDelayWithBackoff(retryCount, error, this.config.backoffConfig);
+  }
+
+  private async sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    await sleepWithAbort(ms, signal, ABORTED_MESSAGE);
+  }
+
+  private logError(message: string, error: unknown, context?: Record<string, unknown>): void {
+    writeErrorLog(this.logger, message, error, context);
+  }
+
+  private logInfo(message: string, context?: Record<string, unknown>, data?: unknown): void {
+    writeInfoLog(this.logger, message, context, data);
+  }
+
+  private logWarn(message: string, context?: Record<string, unknown>, data?: unknown): void {
+    writeWarnLog(this.logger, message, context, data);
+  }
+
+  private createToolResultMessageFromLedger(toolCallId: string, content: string): Message {
+    return buildToolResultMessage({
+      toolCallId,
+      content,
+      createMessageId: () => generateId('msg_'),
+    });
+  }
+
+  private async getLedgerRecord(
+    executionId: string | undefined,
+    toolCallId: string
+  ): Promise<ToolExecutionLedgerRecord | undefined> {
+    return readToolLedgerRecord({
+      ledger: this.toolExecutionLedger,
+      executionId,
+      toolCallId,
+      onError: (error) => this.logError('[Agent] Failed to read tool execution ledger:', error),
+    });
+  }
+
+  private async recordLedgerResult(
+    executionId: string | undefined,
+    toolCallId: string,
+    toolExecResult: {
+      success: boolean;
+      output?: string;
+      error?: {
+        name?: string;
+        message?: string;
+      };
+    },
+    output: string
+  ): Promise<void> {
+    await writeToolLedgerRecord({
+      ledger: this.toolExecutionLedger,
+      executionId,
+      toolCallId,
+      toolExecResult,
+      output,
+      onError: (error) => this.logError('[Agent] Failed to write tool execution ledger:', error),
+    });
   }
 }

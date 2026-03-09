@@ -44,6 +44,8 @@ export interface AgentInput {
   config?: LLMGenerateOptions;
   maxSteps?: number;
   abortSignal?: AbortSignal;
+  timeoutBudgetMs?: number;
+  llmTimeoutRatio?: number;
 }
 
 export interface AgentOutput {
@@ -62,11 +64,31 @@ export interface ErrorDecision {
   message?: string;
 }
 
+export interface AgentMetric {
+  name: string;
+  value: number;
+  unit?: 'ms' | 'count';
+  timestamp: number;
+  tags?: Record<string, string | number | boolean>;
+}
+
+export interface AgentTraceEvent {
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
+  name: string;
+  phase: 'start' | 'end';
+  timestamp: number;
+  attributes?: Record<string, unknown>;
+}
+
 export interface AgentCallbacks {
   onMessage: (message: Message) => void | Promise<void>;
   onCheckpoint: (checkpoint: ExecutionCheckpoint) => void | Promise<void>;
   onProgress?: (progress: ExecutionProgress) => void | Promise<void>;
   onCompaction?: (compaction: CompactionInfo) => void | Promise<void>;
+  onMetric?: (metric: AgentMetric) => void | Promise<void>;
+  onTrace?: (event: AgentTraceEvent) => void | Promise<void>;
   onToolPolicy?: (
     info: ToolPolicyCheckInfo
   ) => ToolPolicyDecision | Promise<ToolPolicyDecision>;
@@ -128,6 +150,7 @@ export interface ToolPolicyDecision {
   allowed: boolean;
   code?: string;
   message?: string;
+  audit?: Record<string, unknown>;
 }
 
 // ============================================================

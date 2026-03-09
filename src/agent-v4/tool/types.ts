@@ -50,6 +50,7 @@ export interface ToolPolicyDecision {
   allowed: boolean;
   code?: string;
   message?: string;
+  audit?: Record<string, unknown>;
 }
 
 export type ToolConcurrencyMode = 'parallel-safe' | 'exclusive';

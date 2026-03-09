@@ -103,8 +103,14 @@ export class ToolPolicyDeniedError extends ToolExecutionError {
   public toolName: string;
   public reasonCode: string;
   public reason?: string;
+  public audit?: Record<string, unknown>;
 
-  constructor(toolName: string, reasonCode = 'POLICY_DENIED', reason?: string) {
+  constructor(
+    toolName: string,
+    reasonCode = 'POLICY_DENIED',
+    reason?: string,
+    audit?: Record<string, unknown>
+  ) {
     super(`Tool ${toolName} blocked by policy [${reasonCode}]: ${reason || 'Policy denied'}`, 2006);
     this.name = 'ToolPolicyDeniedError';
     this.errorCode = 'TOOL_POLICY_DENIED';
@@ -114,10 +120,12 @@ export class ToolPolicyDeniedError extends ToolExecutionError {
     this.toolName = toolName;
     this.reasonCode = reasonCode;
     this.reason = reason;
+    this.audit = audit;
     this.details = {
       toolName,
       reasonCode,
       reason,
+      audit,
     };
   }
 }

@@ -72,6 +72,17 @@ export class UnknownError extends AgentError {
   }
 }
 
+export class TimeoutBudgetExceededError extends AgentError {
+  constructor(message = 'Timeout budget exceeded', code = 1006) {
+    super(message, code);
+    this.name = 'TimeoutBudgetExceededError';
+    this.errorCode = 'AGENT_TIMEOUT_BUDGET_EXCEEDED';
+    this.category = 'timeout';
+    this.retryable = false;
+    this.httpStatus = 504;
+  }
+}
+
 export function toAgentErrorContract(error: AgentError): ErrorContract {
   return error.toJSON();
 }

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { AGENT_V4_TYPES_MODULE } from '../types';
 import type {
   AgentCallbacks,
+  AgentMetric,
+  AgentTraceEvent,
   AgentInput,
   AgentOutput,
   ConversationContext,
@@ -60,7 +62,23 @@ describe('agent-v4/types runtime contract', () => {
       onMessage: () => undefined,
       onCheckpoint: () => undefined,
       onProgress: () => undefined,
+      onMetric: () => undefined,
+      onTrace: () => undefined,
       onError: () => ({ retry: false }),
+    };
+    const metric: AgentMetric = {
+      name: 'agent.run.duration_ms',
+      value: 12,
+      unit: 'ms',
+      timestamp: Date.now(),
+      tags: { executionId: 'e1' },
+    };
+    const trace: AgentTraceEvent = {
+      traceId: 'e1',
+      spanId: 's1',
+      name: 'agent.run',
+      phase: 'start',
+      timestamp: Date.now(),
     };
 
     const errDecision: ErrorDecision = { retry: true, message: 'retry now' };
@@ -102,6 +120,10 @@ describe('agent-v4/types runtime contract', () => {
     expect(checkpoint.canResume).toBe(true);
     expect(progress.currentAction).toBe('llm');
     expect(typeof callbacks.onMessage).toBe('function');
+    expect(typeof callbacks.onMetric).toBe('function');
+    expect(typeof callbacks.onTrace).toBe('function');
+    expect(metric.name).toBe('agent.run.duration_ms');
+    expect(trace.name).toBe('agent.run');
     expect(errDecision.retry).toBe(true);
     expect(toolChunk.type).toBe('stdout');
     expect(confirmInfo.toolName).toBe('bash');

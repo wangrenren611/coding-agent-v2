@@ -53,6 +53,30 @@ describe('WriteFileTool', () => {
     expect(await fs.readFile(target, 'utf8')).toBe('hello');
   });
 
+  it('allows write when target path goes through a symlinked directory inside allowed roots', async () => {
+    const allowedDir = await createTempDir();
+    const linkBaseDir = await createTempDir();
+    const bufferDir = await createTempDir();
+    const linkDir = path.join(linkBaseDir, 'allowed-link');
+    await fs.symlink(allowedDir, linkDir);
+
+    const tool = new WriteFileTool({
+      allowedDirectories: [allowedDir],
+      bufferBaseDir: bufferDir,
+      maxChunkBytes: 64,
+    });
+
+    const targetViaLink = path.join(linkDir, 'through-link.txt');
+    const result = await tool.execute({
+      path: targetViaLink,
+      content: 'hello-link',
+      mode: 'direct',
+    });
+
+    expect(result.success).toBe(true);
+    expect(await fs.readFile(path.join(allowedDir, 'through-link.txt'), 'utf8')).toBe('hello-link');
+  });
+
   it('buffers large direct write and requests resume', async () => {
     const allowedDir = await createTempDir();
     const bufferDir = await createTempDir();
