@@ -76,10 +76,7 @@ export class HookManager {
   /**
    * 执行消息列表 Hook
    */
-  async executeMessageListHooks(
-    messages: MessageList,
-    ctx: HookContext
-  ): Promise<MessageList> {
+  async executeMessageListHooks(messages: MessageList, ctx: HookContext): Promise<MessageList> {
     let result = messages;
     for (const plugin of this.plugins) {
       if (plugin.messageList) {
@@ -96,10 +93,7 @@ export class HookManager {
   /**
    * 执行工具调用 Hook
    */
-  async executeToolUseHooks(
-    toolCall: ToolCall,
-    ctx: HookContext
-  ): Promise<ToolCall> {
+  async executeToolUseHooks(toolCall: ToolCall, ctx: HookContext): Promise<ToolCall> {
     let result = toolCall;
     for (const plugin of this.plugins) {
       if (plugin.toolUse) {

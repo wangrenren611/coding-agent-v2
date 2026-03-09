@@ -11,6 +11,7 @@ type PromptProps = {
   isThinking: boolean;
   disabled?: boolean;
   modelLabel: string;
+  contextUsagePercent: number | null;
   value: string;
   onValueChange: (value: string) => void;
   onSlashCommandSelect?: (command: SlashCommandDefinition) => boolean;
@@ -21,6 +22,7 @@ export const Prompt = ({
   isThinking,
   disabled = false,
   modelLabel,
+  contextUsagePercent,
   value,
   onValueChange,
   onSlashCommandSelect,
@@ -28,6 +30,8 @@ export const Prompt = ({
 }: PromptProps) => {
   const textareaRef = useRef<TextareaRenderable | null>(null);
   const inputLocked = isThinking || disabled;
+  const promptAlignPaddingX =
+    uiTheme.layout.conversationPaddingX + uiTheme.layout.conversationContentPaddingX + uiTheme.layout.promptPaddingX;
   const slashMenu = useSlashCommandMenu({
     value,
     onValueChange,
@@ -104,50 +108,50 @@ export const Prompt = ({
   }, []);
 
   return (
-    <box
-      flexDirection="column"
-      flexShrink={0}
-      gap={0}
-      paddingX={uiTheme.layout.promptPaddingX}
-      paddingBottom={uiTheme.layout.promptPaddingBottom}
-    >
-      <SlashCommandMenu
-        visible={slashMenu.visible}
-        options={slashMenu.options}
-        selectedIndex={slashMenu.selectedIndex}
-      />
-      <box flexDirection="row" backgroundColor={uiTheme.panel}>
-        <box width={1} backgroundColor={uiTheme.accent} />
-        <box flexGrow={1} paddingX={2} paddingTop={1} paddingBottom={0} backgroundColor={uiTheme.panel}>
-          <textarea
-            ref={textareaRef}
-            width="100%"
-            minHeight={1}
-            maxHeight={4}
-            initialValue={value}
-            textColor={uiTheme.text}
-            focusedTextColor={uiTheme.text}
-            backgroundColor={uiTheme.panel}
-            focusedBackgroundColor={uiTheme.panel}
-            placeholder={
-              isThinking ? "waiting for agent response..." : disabled ? "command dialog active..." : "Type your message..."
-            }
-            placeholderColor={uiTheme.muted}
-            onContentChange={handleContentChange}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-          />
-          <box flexDirection="row" gap={1} paddingTop={1} paddingBottom={1}>
-            <text fg={uiTheme.text} attributes={uiTheme.typography.heading}>
-              {modelLabel}
-            </text>
-            <text fg={uiTheme.muted} attributes={uiTheme.typography.muted}>
-              Coding Agent
-            </text>
+    <box flexDirection="column" flexShrink={0} gap={0} paddingBottom={uiTheme.layout.promptPaddingBottom}>
+      <box flexDirection="column" gap={0} paddingX={promptAlignPaddingX}>
+        <SlashCommandMenu
+          visible={slashMenu.visible}
+          options={slashMenu.options}
+          selectedIndex={slashMenu.selectedIndex}
+        />
+        <box flexDirection="row" backgroundColor={uiTheme.panel}>
+          <box width={1} backgroundColor={uiTheme.accent} />
+          <box flexGrow={1} paddingX={2} paddingTop={1} paddingBottom={0} backgroundColor={uiTheme.panel}>
+            <textarea
+              ref={textareaRef}
+              width="100%"
+              minHeight={1}
+              maxHeight={4}
+              initialValue={value}
+              textColor={uiTheme.text}
+              focusedTextColor={uiTheme.text}
+              backgroundColor={uiTheme.panel}
+              focusedBackgroundColor={uiTheme.panel}
+              placeholder={
+                isThinking
+                  ? "waiting for agent response..."
+                  : disabled
+                    ? "command dialog active..."
+                    : "Type your message..."
+              }
+              placeholderColor={uiTheme.muted}
+              onContentChange={handleContentChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+            />
+            <box flexDirection="row" gap={1} paddingTop={1} paddingBottom={1}>
+              <text fg={uiTheme.text} attributes={uiTheme.typography.heading}>
+                {modelLabel}
+              </text>
+              <text fg={uiTheme.muted} attributes={uiTheme.typography.muted}>
+                Coding Agent
+              </text>
+            </box>
           </box>
         </box>
       </box>
-      <FooterHints isThinking={isThinking} />
+      <FooterHints isThinking={isThinking} contextUsagePercent={contextUsagePercent} />
     </box>
   );
 };

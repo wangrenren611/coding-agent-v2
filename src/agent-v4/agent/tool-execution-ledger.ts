@@ -64,7 +64,11 @@ export class InMemoryToolExecutionLedger implements ToolExecutionLedger {
     return this.store.get(this.buildKey(executionId, toolCallId));
   }
 
-  async set(executionId: string, toolCallId: string, record: ToolExecutionLedgerRecord): Promise<void> {
+  async set(
+    executionId: string,
+    toolCallId: string,
+    record: ToolExecutionLedgerRecord
+  ): Promise<void> {
     this.store.set(this.buildKey(executionId, toolCallId), record);
   }
 

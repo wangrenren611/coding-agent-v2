@@ -3,10 +3,9 @@ import { config as loadDotEnv } from 'dotenv';
 import { ProviderRegistry, type ModelId } from '../src/providers/index.ts';
 import { StatelessAgent } from '../src/agent-v4/agent/index.ts';
 import { DefaultToolManager } from '../src/agent-v4/tool/tool-manager.ts';
-import type { Message, StreamEvent } from '../src/agent-v4/types.ts';
+import type { StreamEvent } from '../src/agent-v4/types.ts';
 import { BashTool } from '../src/agent-v4/tool/bash.ts';
 import { WriteFileTool } from '../src/agent-v4/tool/write-file.ts';
-import type { Usage } from '../src/providers/index.ts';
 import {
   AgentAppService,
   createSqliteAgentAppStore,
@@ -87,47 +86,6 @@ function printEvent(event: CliEventEnvelope): void {
   }
 }
 
-interface UsageStats {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-}
-
-function isUsage(value: unknown): value is Usage {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  const usage = value as Partial<Usage>;
-  return (
-    typeof usage.prompt_tokens === 'number' &&
-    typeof usage.completion_tokens === 'number' &&
-    typeof usage.total_tokens === 'number'
-  );
-}
-
-function updateUsageAndPrint(
-  message: Message,
-  cumulativeUsage: UsageStats,
-  usageStepCounter: { value: number }
-): void {
-  if (message.role !== 'assistant' || !isUsage(message.usage)) {
-    return;
-  }
-
-  usageStepCounter.value += 1;
-  const usage = message.usage;
-  cumulativeUsage.promptTokens += usage.prompt_tokens;
-  cumulativeUsage.completionTokens += usage.completion_tokens;
-  cumulativeUsage.totalTokens += usage.total_tokens;
-
-  console.log(
-    `\n[usage:step ${usageStepCounter.value}] prompt=${usage.prompt_tokens} completion=${usage.completion_tokens} total=${usage.total_tokens}`
-  );
-  console.log(
-    `[usage:total] prompt=${cumulativeUsage.promptTokens} completion=${cumulativeUsage.completionTokens} total=${cumulativeUsage.totalTokens}`
-  );
-}
-
 async function main(): Promise<void> {
   bootstrapEnv();
   const [modelArg, ...promptParts] = process.argv.slice(2);
@@ -162,12 +120,7 @@ async function main(): Promise<void> {
   console.log(`[demo] prompt=${prompt}`);
   console.log('---');
 
-  const cumulativeUsage: UsageStats = {
-    promptTokens: 0,
-    completionTokens: 0,
-    totalTokens: 0,
-  };
-  const usageStepCounter = { value: 0 };
+  let usageSeen = false;
 
   try {
     const result = await app.runForeground(
@@ -181,8 +134,19 @@ async function main(): Promise<void> {
         onEvent: (event) => {
           printEvent(event);
         },
-        onMessage: (message) => {
-          updateUsageAndPrint(message, cumulativeUsage, usageStepCounter);
+        onUsage: (usage) => {
+          usageSeen = true;
+          console.log(
+            `\n[usage:step ${usage.sequence}] prompt=${usage.usage.prompt_tokens} completion=${usage.usage.completion_tokens} total=${usage.usage.total_tokens}`
+          );
+          console.log(
+            `[usage:total] prompt=${usage.cumulativeUsage.prompt_tokens} completion=${usage.cumulativeUsage.completion_tokens} total=${usage.cumulativeUsage.total_tokens}`
+          );
+          if (typeof usage.contextUsagePercent === 'number') {
+            const contextUsagePercent = Math.max(0, usage.contextUsagePercent);
+            const contextLimit = usage.contextLimitTokens ?? 'unknown';
+            console.log(`[context] usage=${contextUsagePercent.toFixed(2)}% limit=${contextLimit}`);
+          }
         },
       }
     );
@@ -198,10 +162,8 @@ async function main(): Promise<void> {
     console.log(`[demo] terminalReason=${run?.terminalReason ?? 'UNKNOWN'}`);
     console.log(`[demo] persistedEvents=${runEvents.length}`);
     console.log(`[demo] runListCount=${listedRuns.items.length}`);
-    if (usageStepCounter.value > 0) {
-      console.log(
-        `[demo] usageTotal prompt=${cumulativeUsage.promptTokens} completion=${cumulativeUsage.completionTokens} total=${cumulativeUsage.totalTokens}`
-      );
+    if (!usageSeen) {
+      console.log('[demo] usage not reported by provider');
     }
   } finally {
     await store.close();

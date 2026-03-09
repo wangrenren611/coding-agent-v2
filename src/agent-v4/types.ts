@@ -5,12 +5,18 @@
  * 参考: ENTERPRISE_REALTIME.md
  */
 
-import { LLMGenerateOptions, MessageContent, Tool, ToolCall, Usage } from "../providers";
+import { LLMGenerateOptions, MessageContent, Tool, ToolCall, Usage } from '../providers';
 
 // ============================================================
 // 消息类型
 // ============================================================
-export type MessageType = 'system' | 'user' | 'tool-call' | 'tool-result' | 'summary' | 'assistant-text';
+export type MessageType =
+  | 'system'
+  | 'user'
+  | 'tool-call'
+  | 'tool-result'
+  | 'summary'
+  | 'assistant-text';
 
 export interface Message {
   messageId: string;
@@ -26,10 +32,6 @@ export interface Message {
   metadata?: Record<string, unknown>;
   usage?: Usage;
 }
-
-
-
-
 
 // ============================================================
 // Agent 输入输出
@@ -53,7 +55,6 @@ export interface AgentOutput {
   finishReason: 'stop' | 'max_steps' | 'error';
   steps: number;
 }
-
 
 // ============================================================
 // 回调接口
@@ -89,9 +90,7 @@ export interface AgentCallbacks {
   onCompaction?: (compaction: CompactionInfo) => void | Promise<void>;
   onMetric?: (metric: AgentMetric) => void | Promise<void>;
   onTrace?: (event: AgentTraceEvent) => void | Promise<void>;
-  onToolPolicy?: (
-    info: ToolPolicyCheckInfo
-  ) => ToolPolicyDecision | Promise<ToolPolicyDecision>;
+  onToolPolicy?: (info: ToolPolicyCheckInfo) => ToolPolicyDecision | Promise<ToolPolicyDecision>;
   onError?: (error: Error) => ErrorDecision | void | Promise<ErrorDecision | void>;
 }
 
@@ -158,7 +157,17 @@ export interface ToolPolicyDecision {
 // ============================================================
 
 export interface StreamEvent {
-  type: 'chunk' | 'reasoning_chunk' | 'tool_call' | 'tool_result' | 'tool_stream' | 'progress' | 'checkpoint' | 'compaction' | 'done' | 'error';
+  type:
+    | 'chunk'
+    | 'reasoning_chunk'
+    | 'tool_call'
+    | 'tool_result'
+    | 'tool_stream'
+    | 'progress'
+    | 'checkpoint'
+    | 'compaction'
+    | 'done'
+    | 'error';
   data: unknown;
 }
 
@@ -166,11 +175,11 @@ export interface StreamEvent {
 // 执行状态
 // ============================================================
 
-export type ExecutionStatus = 
-  | 'CREATED' 
-  | 'QUEUED' 
-  | 'RUNNING' 
-  | 'COMPLETED' 
+export type ExecutionStatus =
+  | 'CREATED'
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'COMPLETED'
   | 'FAILED'
   | 'CANCELLED';
 

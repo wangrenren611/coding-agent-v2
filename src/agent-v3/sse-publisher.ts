@@ -21,7 +21,7 @@ export interface SSEConnection {
  */
 export class SSEPublisher {
   private connections: Map<string, SSEConnection[]> = new Map();
-  
+
   /**
    * 订阅执行
    */
@@ -30,22 +30,22 @@ export class SSEPublisher {
     connections.push(connection);
     this.connections.set(executionId, connections);
   }
-  
+
   /**
    * 取消订阅
    */
   unsubscribe(executionId: string, connectionId: string): void {
     const connections = this.connections.get(executionId) || [];
-    const filtered = connections.filter(c => c.id !== connectionId);
+    const filtered = connections.filter((c) => c.id !== connectionId);
     this.connections.set(executionId, filtered);
   }
-  
+
   /**
    * 发布事件
    */
   publish(executionId: string, event: StreamEvent): void {
     const connections = this.connections.get(executionId) || [];
-    
+
     for (const connection of connections) {
       try {
         connection.send(event);
@@ -56,7 +56,7 @@ export class SSEPublisher {
       }
     }
   }
-  
+
   /**
    * 广播消息给所有订阅者
    */
@@ -71,7 +71,7 @@ export class SSEPublisher {
       }
     }
   }
-  
+
   /**
    * 获取订阅数量
    */

@@ -46,6 +46,17 @@ export type AgentStopEvent = {
   message?: string;
 };
 
+export type AgentUsageEvent = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cumulativePromptTokens?: number;
+  cumulativeCompletionTokens?: number;
+  cumulativeTotalTokens?: number;
+  contextLimit?: number;
+  contextUsagePercent?: number;
+};
+
 export type AgentEventHandlers = {
   onTextDelta?: (event: AgentTextDeltaEvent) => void;
   onTextComplete?: (text: string) => void;
@@ -56,6 +67,7 @@ export type AgentEventHandlers = {
   onStep?: (event: AgentStepEvent) => void;
   onLoop?: (event: AgentLoopEvent) => void;
   onStop?: (event: AgentStopEvent) => void;
+  onUsage?: (event: AgentUsageEvent) => void;
 };
 
 export type AgentRunResult = {
@@ -64,4 +76,5 @@ export type AgentRunResult = {
   completionMessage?: string;
   durationSeconds: number;
   modelLabel: string;
+  usage?: AgentUsageEvent;
 };

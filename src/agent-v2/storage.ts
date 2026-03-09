@@ -62,17 +62,11 @@ class FileStorage extends StorageBackend {
     };
   }
 
-  async initialize(): Promise<void> {
-    
-  }
+  async initialize(): Promise<void> {}
 
-  async saveMessage(message: Message): Promise<void> {
-    
-  }
+  async saveMessage(message: Message): Promise<void> {}
 
-  async updateMessage(messageId: string, updates: Partial<Message>): Promise<void> {
-    
-  }
+  async updateMessage(messageId: string, updates: Partial<Message>): Promise<void> {}
 
   async getMessage(messageId: string): Promise<Message | null> {
     return null;
@@ -82,9 +76,7 @@ class FileStorage extends StorageBackend {
     return [];
   }
 
-  async saveSession(session: Session): Promise<void> {
-    
-  }
+  async saveSession(session: Session): Promise<void> {}
 
   async getSession(sessionId: string): Promise<Session | null> {
     return null;
@@ -94,19 +86,13 @@ class FileStorage extends StorageBackend {
     return [];
   }
 
-  async deleteSession(sessionId: string): Promise<void> {
-    
-  }
+  async deleteSession(sessionId: string): Promise<void> {}
 
-  async saveState(sessionId: string, state: AgentLoopState): Promise<void> {
-    
-  }
+  async saveState(sessionId: string, state: AgentLoopState): Promise<void> {}
 
   async getState(sessionId: string): Promise<AgentLoopState | null> {
     return null;
   }
 
-  async close(): Promise<void> {
-    
-  }
+  async close(): Promise<void> {}
 }

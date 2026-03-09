@@ -17,6 +17,15 @@ import { DefaultToolManager } from '../../tool/tool-manager';
 import { BashTool } from '../../tool/bash';
 import { WriteFileTool } from '../../tool/write-file';
 import type { Chunk, LLMProvider, ToolCall } from '../../../providers';
+import {
+  LLMAuthError,
+  LLMBadRequestError,
+  LLMError,
+  LLMNotFoundError,
+  LLMPermanentError,
+  LLMRateLimitError,
+  LLMRetryableError,
+} from '../../../providers';
 import { AgentError } from '../error';
 import type { ToolConcurrencyPolicy } from '../../tool/types';
 import * as compactionModule from '../compaction';
@@ -2150,6 +2159,127 @@ describe('StatelessAgent', () => {
     expect(events.map((e) => e.type)).toEqual(['progress', 'error', 'progress', 'chunk', 'done']);
   });
 
+  it('retries retryable upstream errors by default when onError does not provide a decision', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        (async function* () {
+          for (const chunk of [] as Chunk[]) {
+            yield chunk;
+          }
+          throw new LLMRetryableError(
+            '500 Internal Server Error - 操作失败',
+            undefined,
+            'SERVER_500'
+          );
+        })()
+      )
+      .mockReturnValueOnce(
+        toStream([
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { content: 'ok-after-retry' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+          },
+        ])
+      );
+
+    const onError = vi.fn().mockResolvedValue(undefined);
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      backoffConfig: { initialDelayMs: 1, maxDelayMs: 1, base: 2, jitter: false },
+    });
+    const events = await collectEvents(
+      agent.runStream(createInput(), { onMessage: vi.fn(), onCheckpoint: vi.fn(), onError })
+    );
+
+    expect(onError).toHaveBeenCalledOnce();
+    expect(events.map((e) => e.type)).toEqual(['progress', 'error', 'progress', 'chunk', 'done']);
+    expect(events[1]).toMatchObject({
+      type: 'error',
+      data: {
+        name: 'AgentUpstreamServerError',
+        errorCode: 'AGENT_UPSTREAM_SERVER',
+        retryable: true,
+      },
+    });
+  });
+
+  it('stops with max-retries when retryable upstream errors keep failing', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi.fn().mockImplementation(() =>
+      (async function* () {
+        for (const chunk of [] as Chunk[]) {
+          yield chunk;
+        }
+        throw new LLMRetryableError('upstream 500', undefined, 'SERVER_500');
+      })()
+    );
+
+    const onError = vi.fn().mockResolvedValue(undefined);
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 2,
+      backoffConfig: { initialDelayMs: 1, maxDelayMs: 1, base: 2, jitter: false },
+    });
+    const events = await collectEvents(
+      agent.runStream(createInput(), { onMessage: vi.fn(), onCheckpoint: vi.fn(), onError })
+    );
+
+    expect(onError).toHaveBeenCalledTimes(2);
+    expect(provider.generateStream).toHaveBeenCalledTimes(2);
+    expect(events.map((event) => event.type)).toEqual([
+      'progress',
+      'error',
+      'progress',
+      'error',
+      'error',
+    ]);
+    expect(events.at(-1)).toMatchObject({
+      type: 'error',
+      data: {
+        name: 'MaxRetriesError',
+        errorCode: 'AGENT_MAX_RETRIES_REACHED',
+      },
+    });
+  });
+
+  it('stops immediately for non-retryable upstream errors when onError has no decision', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi.fn().mockImplementation(() =>
+      (async function* () {
+        for (const chunk of [] as Chunk[]) {
+          yield chunk;
+        }
+        throw new LLMAuthError('Invalid API key');
+      })()
+    );
+
+    const onError = vi.fn().mockResolvedValue(undefined);
+    const agent = new StatelessAgent(provider, manager, { maxRetryCount: 3 });
+    const events = await collectEvents(
+      agent.runStream(createInput(), { onMessage: vi.fn(), onCheckpoint: vi.fn(), onError })
+    );
+
+    expect(onError).toHaveBeenCalledOnce();
+    expect(provider.generateStream).toHaveBeenCalledTimes(1);
+    expect(events.map((event) => event.type)).toEqual(['progress', 'error']);
+    expect(events[1]).toMatchObject({
+      type: 'error',
+      data: {
+        name: 'AgentUpstreamAuthError',
+        errorCode: 'AGENT_UPSTREAM_AUTH',
+        retryable: false,
+      },
+    });
+  });
+
   it('does not leak retry state across separate executions on the same instance', async () => {
     const provider = createProvider();
     const manager = createToolManager();
@@ -2538,6 +2668,72 @@ describe('StatelessAgent', () => {
     expect(timeoutNormalized).toMatchObject({
       name: 'ConfirmationTimeoutError',
       message: 'Confirmation timeout',
+    });
+  });
+
+  it('normalizeError maps provider error types from providers/errors.ts', () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    const agent = new StatelessAgent(provider, manager, { maxRetryCount: 2 });
+    const agentPrivate = agent as unknown as AgentPrivate;
+
+    expect(agentPrivate.normalizeError(new LLMRateLimitError('rate limited'))).toMatchObject({
+      name: 'AgentUpstreamRateLimitError',
+      errorCode: 'AGENT_UPSTREAM_RATE_LIMIT',
+      retryable: true,
+    });
+    expect(
+      agentPrivate.normalizeError(new LLMRetryableError('timeout', undefined, 'TIMEOUT'))
+    ).toMatchObject({
+      name: 'AgentUpstreamTimeoutError',
+      errorCode: 'AGENT_UPSTREAM_TIMEOUT',
+      retryable: true,
+    });
+    expect(
+      agentPrivate.normalizeError(new LLMRetryableError('network', undefined, 'NETWORK_ERROR'))
+    ).toMatchObject({
+      name: 'AgentUpstreamNetworkError',
+      errorCode: 'AGENT_UPSTREAM_NETWORK',
+      retryable: true,
+    });
+    expect(
+      agentPrivate.normalizeError(new LLMRetryableError('server error', undefined, 'SERVER_503'))
+    ).toMatchObject({
+      name: 'AgentUpstreamServerError',
+      errorCode: 'AGENT_UPSTREAM_SERVER',
+      retryable: true,
+    });
+    expect(agentPrivate.normalizeError(new LLMAuthError('bad key'))).toMatchObject({
+      name: 'AgentUpstreamAuthError',
+      errorCode: 'AGENT_UPSTREAM_AUTH',
+      retryable: false,
+    });
+    expect(agentPrivate.normalizeError(new LLMNotFoundError('missing'))).toMatchObject({
+      name: 'AgentUpstreamNotFoundError',
+      errorCode: 'AGENT_UPSTREAM_NOT_FOUND',
+      retryable: false,
+    });
+    expect(agentPrivate.normalizeError(new LLMBadRequestError('invalid'))).toMatchObject({
+      name: 'AgentUpstreamBadRequestError',
+      errorCode: 'AGENT_UPSTREAM_BAD_REQUEST',
+      retryable: false,
+    });
+    expect(agentPrivate.normalizeError(new LLMPermanentError('blocked', 501))).toMatchObject({
+      name: 'AgentUpstreamPermanentError',
+      errorCode: 'AGENT_UPSTREAM_PERMANENT',
+      retryable: false,
+    });
+    expect(agentPrivate.normalizeError(new LLMError('provider boom', 'HTTP_418'))).toMatchObject({
+      name: 'AgentUpstreamError',
+      errorCode: 'AGENT_UPSTREAM_ERROR',
+      retryable: false,
+    });
+    expect(
+      agentPrivate.normalizeError(new LLMRetryableError('provider retry', undefined, 'TRANSIENT_X'))
+    ).toMatchObject({
+      name: 'AgentUpstreamRetryableError',
+      errorCode: 'AGENT_UPSTREAM_RETRYABLE',
+      retryable: true,
     });
   });
 

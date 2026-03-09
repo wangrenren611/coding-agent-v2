@@ -4,6 +4,8 @@ import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ToolManager } from '../../tool/tool-manager';
 import type { Chunk, LLMProvider } from '../../../providers';
+import { LLMRateLimitError } from '../../../providers';
+import { LLMRetryableError } from '../../../providers';
 import { StatelessAgent } from '../../agent';
 import { AgentAppService } from '../agent-app-service';
 import { SqliteAgentAppStore } from '../sqlite-agent-app-store';
@@ -121,6 +123,87 @@ describe('AgentAppService', () => {
     expect(dropped).toHaveLength(0);
   });
 
+  it('emits usage callback with cumulative totals and compaction-aligned context percentage', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi.fn().mockReturnValue(
+      toStream([
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { content: 'usage-demo' } }],
+          usage: {
+            prompt_tokens: 120,
+            completion_tokens: 30,
+            total_tokens: 150,
+          },
+        },
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+        },
+      ])
+    );
+
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-app-service-usage-'));
+    store = new SqliteAgentAppStore(path.join(tempDir, 'agent.db'));
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 2,
+      backoffConfig: { initialDelayMs: 1, maxDelayMs: 1, base: 2, jitter: false },
+    });
+    const app = new AgentAppService({
+      agent,
+      executionStore: store,
+      eventStore: store,
+      messageStore: store,
+    });
+
+    const usageEvents: Array<{
+      sequence: number;
+      stepIndex: number;
+      usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+      cumulativeUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+      contextLimitTokens?: number;
+      contextUsagePercent?: number;
+    }> = [];
+
+    const result = await app.runForeground(
+      {
+        conversationId: 'conv_usage',
+        executionId: 'exec_usage',
+        userInput: 'Show usage',
+        maxSteps: 3,
+      },
+      {
+        onUsage: (usage) => {
+          usageEvents.push({
+            sequence: usage.sequence,
+            stepIndex: usage.stepIndex,
+            usage: usage.usage,
+            cumulativeUsage: usage.cumulativeUsage,
+            contextLimitTokens: usage.contextLimitTokens,
+            contextUsagePercent: usage.contextUsagePercent,
+          });
+        },
+      }
+    );
+
+    expect(result.finishReason).toBe('stop');
+    expect(usageEvents).toHaveLength(1);
+    expect(usageEvents[0]?.sequence).toBe(1);
+    expect(usageEvents[0]?.usage).toEqual({
+      prompt_tokens: 120,
+      completion_tokens: 30,
+      total_tokens: 150,
+    });
+    expect(usageEvents[0]?.cumulativeUsage).toEqual({
+      prompt_tokens: 120,
+      completion_tokens: 30,
+      total_tokens: 150,
+    });
+    expect(usageEvents[0]?.contextLimitTokens).toBe(32000 - 4096);
+    expect(usageEvents[0]?.contextUsagePercent).toBeCloseTo((120 / (32000 - 4096)) * 100, 6);
+  });
+
   it('maps aborted execution to CANCELLED terminal state', async () => {
     const provider = createProvider();
     const manager = createToolManager();
@@ -229,5 +312,176 @@ describe('AgentAppService', () => {
 
     const persistedEvents = await app.listRunEvents('exec_tool');
     expect(persistedEvents.some((event) => event.eventType === 'tool_stream')).toBe(true);
+  });
+
+  it('maps AGENT_UPSTREAM_TIMEOUT to FAILED timeout terminal state', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi.fn().mockImplementation(() =>
+      (async function* () {
+        for (const chunk of [] as Chunk[]) {
+          yield chunk;
+        }
+        throw new LLMRetryableError('Request timeout', undefined, 'TIMEOUT');
+      })()
+    );
+
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-app-service-upstream-timeout-'));
+    store = new SqliteAgentAppStore(path.join(tempDir, 'agent.db'));
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      backoffConfig: { initialDelayMs: 1, maxDelayMs: 1, base: 2, jitter: false },
+    });
+    const app = new AgentAppService({
+      agent,
+      executionStore: store,
+      eventStore: store,
+      messageStore: store,
+    });
+
+    const result = await app.runForeground(
+      {
+        conversationId: 'conv_upstream_timeout',
+        executionId: 'exec_upstream_timeout',
+        userInput: 'trigger timeout',
+      },
+      {
+        onError: async () => ({ retry: false }),
+      }
+    );
+
+    expect(result.finishReason).toBe('error');
+    expect(result.run.status).toBe('FAILED');
+    expect(result.run.terminalReason).toBe('timeout');
+    expect(result.run.errorCode).toBe('AGENT_UPSTREAM_TIMEOUT');
+  });
+
+  it('maps AGENT_UPSTREAM_RATE_LIMIT to FAILED rate_limit terminal state', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi.fn().mockImplementation(() =>
+      (async function* () {
+        for (const chunk of [] as Chunk[]) {
+          yield chunk;
+        }
+        throw new LLMRateLimitError('Too many requests');
+      })()
+    );
+
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-app-service-rate-limit-'));
+    store = new SqliteAgentAppStore(path.join(tempDir, 'agent.db'));
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      backoffConfig: { initialDelayMs: 1, maxDelayMs: 1, base: 2, jitter: false },
+    });
+    const app = new AgentAppService({
+      agent,
+      executionStore: store,
+      eventStore: store,
+      messageStore: store,
+    });
+
+    const result = await app.runForeground(
+      {
+        conversationId: 'conv_rate_limit',
+        executionId: 'exec_rate_limit',
+        userInput: 'trigger rate limit',
+      },
+      {
+        onError: async () => ({ retry: false }),
+      }
+    );
+
+    expect(result.finishReason).toBe('error');
+    expect(result.run.status).toBe('FAILED');
+    expect(result.run.terminalReason).toBe('rate_limit');
+    expect(result.run.errorCode).toBe('AGENT_UPSTREAM_RATE_LIMIT');
+  });
+
+  it('keeps upstream server/network/generic retryable terminal reason as error', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        (async function* () {
+          for (const chunk of [] as Chunk[]) {
+            yield chunk;
+          }
+          throw new LLMRetryableError('Server unavailable', undefined, 'SERVER_503');
+        })()
+      )
+      .mockImplementationOnce(() =>
+        (async function* () {
+          for (const chunk of [] as Chunk[]) {
+            yield chunk;
+          }
+          throw new LLMRetryableError('Network unstable', undefined, 'NETWORK_ERROR');
+        })()
+      )
+      .mockImplementationOnce(() =>
+        (async function* () {
+          for (const chunk of [] as Chunk[]) {
+            yield chunk;
+          }
+          throw new LLMRetryableError('Retry later', undefined, 'TRANSIENT_X');
+        })()
+      );
+
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-app-service-upstream-error-'));
+    store = new SqliteAgentAppStore(path.join(tempDir, 'agent.db'));
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      backoffConfig: { initialDelayMs: 1, maxDelayMs: 1, base: 2, jitter: false },
+    });
+    const app = new AgentAppService({
+      agent,
+      executionStore: store,
+      eventStore: store,
+      messageStore: store,
+    });
+
+    const serverResult = await app.runForeground(
+      {
+        conversationId: 'conv_upstream_error',
+        executionId: 'exec_upstream_server',
+        userInput: 'trigger upstream server',
+      },
+      {
+        onError: async () => ({ retry: false }),
+      }
+    );
+    const networkResult = await app.runForeground(
+      {
+        conversationId: 'conv_upstream_error',
+        executionId: 'exec_upstream_network',
+        userInput: 'trigger upstream network',
+      },
+      {
+        onError: async () => ({ retry: false }),
+      }
+    );
+    const genericRetryableResult = await app.runForeground(
+      {
+        conversationId: 'conv_upstream_error',
+        executionId: 'exec_upstream_retryable',
+        userInput: 'trigger upstream retryable',
+      },
+      {
+        onError: async () => ({ retry: false }),
+      }
+    );
+
+    expect(serverResult.run.status).toBe('FAILED');
+    expect(serverResult.run.terminalReason).toBe('error');
+    expect(serverResult.run.errorCode).toBe('AGENT_UPSTREAM_SERVER');
+
+    expect(networkResult.run.status).toBe('FAILED');
+    expect(networkResult.run.terminalReason).toBe('error');
+    expect(networkResult.run.errorCode).toBe('AGENT_UPSTREAM_NETWORK');
+
+    expect(genericRetryableResult.run.status).toBe('FAILED');
+    expect(genericRetryableResult.run.terminalReason).toBe('error');
+    expect(genericRetryableResult.run.errorCode).toBe('AGENT_UPSTREAM_RETRYABLE');
   });
 });

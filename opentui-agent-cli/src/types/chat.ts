@@ -14,6 +14,9 @@ export type AssistantReply = {
   agentLabel: string;
   startedAtMs?: number;
   durationSeconds: number;
+  usagePromptTokens?: number;
+  usageCompletionTokens?: number;
+  usageTotalTokens?: number;
   status: ReplyStatus;
   completionReason?: string;
   completionMessage?: string;

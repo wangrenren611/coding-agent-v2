@@ -11,9 +11,9 @@ type TurnItemProps = {
 
 const PendingReply = () => {
   return (
-    <box flexDirection="row" gap={1}>
+    <box flexDirection="row">
       <box width={1} backgroundColor={uiTheme.divider} />
-      <box flexGrow={1}>
+      <box flexGrow={1} paddingLeft={2}>
         <text attributes={uiTheme.typography.body}>
           <i fg={uiTheme.thinking}>Thinking:</i>
           <span fg={uiTheme.muted}> preparing response...</span>

@@ -141,7 +141,9 @@ describe('agent-v4 compaction', () => {
     const generateMock = vi.fn().mockResolvedValue({
       choices: [{ message: { content: 'Summary text' } }],
     });
-    const provider = createProvider({ generate: generateMock as unknown as LLMProvider['generate'] });
+    const provider = createProvider({
+      generate: generateMock as unknown as LLMProvider['generate'],
+    });
     const logger = { info: vi.fn(), warn: vi.fn() };
     const messages: Message[] = [
       createMessage({
@@ -182,14 +184,21 @@ describe('agent-v4 compaction', () => {
     });
     expect(String(result.summaryMessage?.content)).toContain('Summary text');
     expect(result.removedMessageIds.sort()).toEqual(['a1', 'u1']);
-    expect(result.messages.map((m) => m.messageId)).toEqual(['s1', result.summaryMessage!.messageId, 'u2']);
-    const secondArg = (generateMock as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]?.[1] as {
+    expect(result.messages.map((m) => m.messageId)).toEqual([
+      's1',
+      result.summaryMessage!.messageId,
+      'u2',
+    ]);
+    const secondArg = (generateMock as unknown as { mock: { calls: unknown[][] } }).mock
+      .calls[0]?.[1] as {
       model?: string;
       abortSignal?: AbortSignal;
     };
     expect(secondArg.model).toBe('mock-model');
     expect(secondArg.abortSignal).toBeDefined();
-    expect((logger.info as unknown as { mock: { calls: unknown[][] } }).mock.calls.length).toBeGreaterThan(0);
+    expect(
+      (logger.info as unknown as { mock: { calls: unknown[][] } }).mock.calls.length
+    ).toBeGreaterThan(0);
   });
 
   it('compact handles invalid summary response and returns null summary', async () => {
@@ -216,7 +225,9 @@ describe('agent-v4 compaction', () => {
 
   it('compact skips llm summary generation when pending is empty', async () => {
     const generateMock = vi.fn();
-    const provider = createProvider({ generate: generateMock as unknown as LLMProvider['generate'] });
+    const provider = createProvider({
+      generate: generateMock as unknown as LLMProvider['generate'],
+    });
     const messages = [
       createMessage({ messageId: 's1', type: 'system', role: 'system', content: 'sys' }),
       createMessage({ messageId: 'u1', type: 'user', role: 'user', content: 'u1' }),
@@ -230,7 +241,9 @@ describe('agent-v4 compaction', () => {
 
   it('compact handles provider.generate throw and logs warning', async () => {
     const provider = createProvider({
-      generate: vi.fn().mockRejectedValue(new Error('network failed')) as unknown as LLMProvider['generate'],
+      generate: vi
+        .fn()
+        .mockRejectedValue(new Error('network failed')) as unknown as LLMProvider['generate'],
     });
     const logger = { info: vi.fn(), warn: vi.fn() };
     const messages = [
@@ -300,7 +313,8 @@ describe('agent-v4 compaction', () => {
 
     const result = await compact(messages, { provider, keepMessagesNum: 1 });
     expect(result.summaryMessage?.content).toContain('summary ok');
-    const options = (generateMock as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]?.[1] as {
+    const options = (generateMock as unknown as { mock: { calls: unknown[][] } }).mock
+      .calls[0]?.[1] as {
       abortSignal?: AbortSignal;
     };
     expect(options.abortSignal).toBeUndefined();

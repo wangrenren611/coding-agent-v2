@@ -1,12 +1,6 @@
 import type { StreamEvent } from '../types';
 
-export type RunStatus =
-  | 'CREATED'
-  | 'QUEUED'
-  | 'RUNNING'
-  | 'COMPLETED'
-  | 'FAILED'
-  | 'CANCELLED';
+export type RunStatus = 'CREATED' | 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 export type TerminalReason =
   | 'stop'
@@ -14,6 +8,7 @@ export type TerminalReason =
   | 'error'
   | 'aborted'
   | 'timeout'
+  | 'rate_limit'
   | 'max_retries';
 
 export interface RunRecord {

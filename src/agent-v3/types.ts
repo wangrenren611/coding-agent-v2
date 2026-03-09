@@ -124,11 +124,11 @@ export interface StreamEvent {
 // 执行状态
 // ============================================================
 
-export type ExecutionStatus = 
-  | 'CREATED' 
-  | 'QUEUED' 
-  | 'RUNNING' 
-  | 'COMPLETED' 
+export type ExecutionStatus =
+  | 'CREATED'
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'COMPLETED'
   | 'FAILED'
   | 'CANCELLED';
 

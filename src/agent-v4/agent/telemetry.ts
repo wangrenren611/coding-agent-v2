@@ -40,8 +40,15 @@ export async function startSpan(params: {
   createSpanId: () => string;
   emitTrace: (callbacks: AgentCallbacks | undefined, event: AgentTraceEvent) => Promise<void>;
 }): Promise<SpanRuntime> {
-  const { callbacks, traceId, name, parentSpanId, attributes, createSpanId, emitTrace: emitTraceFn } =
-    params;
+  const {
+    callbacks,
+    traceId,
+    name,
+    parentSpanId,
+    attributes,
+    createSpanId,
+    emitTrace: emitTraceFn,
+  } = params;
   const startedAt = Date.now();
   const span: SpanRuntime = {
     traceId,

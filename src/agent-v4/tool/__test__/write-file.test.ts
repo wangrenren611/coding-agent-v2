@@ -165,7 +165,9 @@ describe('WriteFileTool', () => {
       mode: 'finalize',
       bufferId: directPayload.buffer.bufferId,
     });
-    const finalizePayload = parseOutput<{ ok: boolean; code: string; nextAction: string }>(finalize.output);
+    const finalizePayload = parseOutput<{ ok: boolean; code: string; nextAction: string }>(
+      finalize.output
+    );
     expect(finalizePayload).toMatchObject({
       ok: true,
       code: 'WRITE_FILE_FINALIZE_OK',

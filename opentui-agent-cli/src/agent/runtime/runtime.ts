@@ -10,9 +10,11 @@ import type {
   AgentToolResultEvent,
   AgentToolStreamEvent,
   AgentToolUseEvent,
+  AgentUsageEvent,
 } from "./types";
 import type { AgentModelOption, AgentModelSwitchResult } from "./model-types";
 import {
+  type AgentAppUsageLike,
   type AgentAppRunResultLike,
   type AgentAppServiceLike,
   type AgentAppStoreLike,
@@ -24,6 +26,7 @@ import {
   type StatelessAgentLike,
   type ToolConfirmEventLike,
 } from "./source-modules";
+import { buildSystemPrompt } from "../../../../src/agent-v4/prompts/system";
 
 type RuntimeCore = {
   modelId: string;
@@ -94,14 +97,6 @@ const requireModelApiKey = (modules: SourceModules, modelId: string) => {
   return modelConfig;
 };
 
-const createSystemPrompt = (workspaceRoot: string) => {
-  return [
-    "You are OpenTUI Agent CLI.",
-    "Use concise, practical responses.",
-    "When the user writes Chinese, respond in Chinese.",
-    `Current workspace root: ${workspaceRoot}`,
-  ].join("\n");
-};
 
 const resolveToolDecision = () => {
   const parsed = toBoolean(process.env.AGENT_AUTO_CONFIRM_TOOLS);
@@ -150,6 +145,22 @@ const readString = (value: unknown): string | undefined => {
 
 const readNumber = (value: unknown): number | undefined => {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+};
+
+const toUsageEventFromApp = (usage: AgentAppUsageLike): AgentUsageEvent => {
+  return {
+    promptTokens: usage.usage.prompt_tokens,
+    completionTokens: usage.usage.completion_tokens,
+    totalTokens: usage.usage.total_tokens,
+    cumulativePromptTokens: usage.cumulativeUsage.prompt_tokens,
+    cumulativeCompletionTokens: usage.cumulativeUsage.completion_tokens,
+    cumulativeTotalTokens: usage.cumulativeUsage.total_tokens,
+    contextLimit: usage.contextLimitTokens,
+    contextUsagePercent:
+      typeof usage.contextUsagePercent === "number" && Number.isFinite(usage.contextUsagePercent)
+        ? Math.max(0, usage.contextUsagePercent)
+        : undefined,
+  };
 };
 
 const toJsonString = (value: unknown): string => {
@@ -267,6 +278,7 @@ const createRuntime = async (): Promise<RuntimeCore> => {
   const modules = await getSourceModules();
   const workspaceRoot = resolveWorkspaceRoot();
   await modules.loadEnvFiles(workspaceRoot);
+  const conversationId = resolveConversationId();
 
   const modelId = resolveModelId(modules, preferredModelId);
   const modelConfig = requireModelApiKey(modules, modelId);
@@ -274,10 +286,40 @@ const createRuntime = async (): Promise<RuntimeCore> => {
 
   const provider = modules.ProviderRegistry.createFromEnv(modelId);
   const toolManager = new modules.DefaultToolManager();
+  const taskStore = new modules.TaskStore({
+    baseDir: resolvePath(workspaceRoot, ".agent-cache", "task-system-v1"),
+  });
   toolManager.registerTool(new modules.BashTool());
   toolManager.registerTool(
     new modules.WriteFileTool({
       allowedDirectories: [workspaceRoot],
+    })
+  );
+  toolManager.registerTool(
+    new modules.FileReadTool({
+      allowedDirectories: [workspaceRoot],
+    })
+  );
+  toolManager.registerTool(
+    new modules.FileEditTool({
+      allowedDirectories: [workspaceRoot],
+    })
+  );
+  toolManager.registerTool(
+    new modules.GlobTool({
+      allowedDirectories: [workspaceRoot],
+    })
+  );
+  toolManager.registerTool(
+    new modules.GrepTool({
+      allowedDirectories: [workspaceRoot],
+    })
+  );
+  toolManager.registerTool(
+    new modules.SkillTool({
+      loaderOptions: {
+        workingDir: workspaceRoot,
+      },
     })
   );
 
@@ -301,12 +343,90 @@ const createRuntime = async (): Promise<RuntimeCore> => {
     messageStore: appStore,
   });
 
+  const resolveSubagentToolSchemas = (allowedTools?: string[]) => {
+    const allSchemas = toolManager
+      .getTools()
+      .map((tool) => {
+        const schema = tool?.toToolSchema?.();
+        if (!schema || typeof schema !== "object") {
+          return null;
+        }
+        return schema;
+      })
+      .filter((schema): schema is { type: string; function: { name?: string } } => Boolean(schema));
+
+    if (!allowedTools || allowedTools.length === 0) {
+      return allSchemas;
+    }
+
+    const allowed = new Set(allowedTools);
+    return allSchemas.filter((schema) => {
+      const name = schema.function?.name;
+      return typeof name === "string" && allowed.has(name);
+    });
+  };
+
+  const taskRunner = new modules.RealSubagentRunnerAdapter({
+    store: taskStore,
+    appService,
+    resolveTools: resolveSubagentToolSchemas,
+    // Use provider-level model name (e.g. MiniMax-M2.5), not registry id (e.g. minimax-2.5),
+    // so subagent requests match the same backend model as parent agent.
+    resolveModelId: () => modelConfig.model || modelId,
+  });
+
+  toolManager.registerTool(
+    new modules.TaskCreateTool({
+      store: taskStore,
+      defaultNamespace: conversationId,
+    })
+  );
+  toolManager.registerTool(
+    new modules.TaskGetTool({
+      store: taskStore,
+      defaultNamespace: conversationId,
+    })
+  );
+  toolManager.registerTool(
+    new modules.TaskListTool({
+      store: taskStore,
+      defaultNamespace: conversationId,
+    })
+  );
+  toolManager.registerTool(
+    new modules.TaskUpdateTool({
+      store: taskStore,
+      defaultNamespace: conversationId,
+    })
+  );
+  toolManager.registerTool(
+    new modules.TaskTool({
+      store: taskStore,
+      runner: taskRunner,
+      defaultNamespace: conversationId,
+    })
+  );
+  toolManager.registerTool(
+    new modules.TaskStopTool({
+      store: taskStore,
+      runner: taskRunner,
+      defaultNamespace: conversationId,
+    })
+  );
+  toolManager.registerTool(
+    new modules.TaskOutputTool({
+      store: taskStore,
+      runner: taskRunner,
+      defaultNamespace: conversationId,
+    })
+  );
+
   return {
     modules,
     modelId,
     modelLabel: modelConfig.name,
     maxSteps,
-    conversationId: resolveConversationId(),
+    conversationId,
     workspaceRoot,
     agent,
     appService,
@@ -342,6 +462,7 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
   };
   const toolStreamSequenceById = new Map<string, number>();
   const toolCallsById = new Map<string, AgentToolUseEvent>();
+  let latestUsageEvent: AgentUsageEvent | undefined;
 
   const onToolConfirm = (event: ToolConfirmEventLike): void => {
     const rawArgs = parseJsonObject(event.arguments);
@@ -371,10 +492,15 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
         conversationId: runtime.conversationId,
         userInput: prompt,
         historyMessages: historyMessages as AgentV4MessageLike[],
-        systemPrompt: createSystemPrompt(runtime.workspaceRoot),
+        systemPrompt: buildSystemPrompt({directory: runtime.workspaceRoot}),
         maxSteps: runtime.maxSteps,
       },
       {
+        onUsage: (usage) => {
+          const usageEvent = toUsageEventFromApp(usage);
+          latestUsageEvent = usageEvent;
+          safeInvoke(() => handlers.onUsage?.(usageEvent));
+        },
         onEvent: async (envelope) => {
           const payload = asRecord(envelope.data);
           switch (envelope.eventType) {
@@ -488,6 +614,7 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
     completionMessage,
     durationSeconds: (Date.now() - startedAt) / 1000,
     modelLabel: runtime.modelLabel,
+    usage: latestUsageEvent,
   };
 };
 

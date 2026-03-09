@@ -11,7 +11,7 @@
 - `updatedAt: number`
 - `stepIndex: number`
 - `lastCheckpointSeq?: number`
-- `terminalReason?: stop | max_steps | error | aborted | timeout | max_retries`
+- `terminalReason?: stop | max_steps | error | aborted | timeout | rate_limit | max_retries`
 - `errorCode?: string`
 - `errorCategory?: string`
 - `errorMessage?: string`
@@ -66,6 +66,8 @@
 - `done.finishReason=stop|max_steps` -> `RunRecord.status=COMPLETED`
 - `error.errorCode=AGENT_ABORTED` -> `RunRecord.status=CANCELLED`，`terminalReason=aborted`
 - `error.errorCode=AGENT_TIMEOUT_BUDGET_EXCEEDED` -> `RunRecord.status=FAILED`，`terminalReason=timeout`
+- `error.errorCode=AGENT_UPSTREAM_TIMEOUT` -> `RunRecord.status=FAILED`，`terminalReason=timeout`
+- `error.errorCode=AGENT_UPSTREAM_RATE_LIMIT` -> `RunRecord.status=FAILED`，`terminalReason=rate_limit`
 - `error.errorCode=AGENT_MAX_RETRIES_REACHED` -> `RunRecord.status=FAILED`，`terminalReason=max_retries`
 - 其他 `error` -> `RunRecord.status=FAILED`，`terminalReason=error`
 

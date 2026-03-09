@@ -2,6 +2,7 @@
 
 import { resolveSlashCommand } from "../commands/slash-commands";
 import { getAgentModelLabel, runAgentPrompt } from "../agent/runtime/runtime";
+import type { AgentUsageEvent } from "../agent/runtime/types";
 import { requestExit } from "../runtime/exit";
 import type { ChatTurn, ReplySegmentType } from "../types/chat";
 import { buildAgentEventHandlers } from "./agent-event-handlers";
@@ -20,6 +21,7 @@ export type UseAgentChatResult = {
   inputValue: string;
   isThinking: boolean;
   modelLabel: string;
+  contextUsagePercent: number | null;
   setInputValue: (value: string) => void;
   submitInput: () => void;
   clearInput: () => void;
@@ -29,11 +31,53 @@ export type UseAgentChatResult = {
 
 const INITIAL_MODEL_LABEL = process.env.AGENT_MODEL?.trim() || "glm-5";
 
+const normalizeTokenCount = (value: number | undefined): number | undefined => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return Math.max(0, Math.round(value));
+};
+
+const toReplyUsage = (
+  usage?: AgentUsageEvent,
+):
+  | {
+      usagePromptTokens?: number;
+      usageCompletionTokens?: number;
+      usageTotalTokens?: number;
+    }
+  | undefined => {
+  if (!usage) {
+    return undefined;
+  }
+
+  const usagePromptTokens = normalizeTokenCount(usage.cumulativePromptTokens ?? usage.promptTokens);
+  const usageCompletionTokens = normalizeTokenCount(
+    usage.cumulativeCompletionTokens ?? usage.completionTokens,
+  );
+  const usageTotalTokens = normalizeTokenCount(usage.cumulativeTotalTokens ?? usage.totalTokens);
+
+  if (
+    typeof usagePromptTokens !== "number" &&
+    typeof usageCompletionTokens !== "number" &&
+    typeof usageTotalTokens !== "number"
+  ) {
+    return undefined;
+  }
+
+  return {
+    usagePromptTokens,
+    usageCompletionTokens,
+    usageTotalTokens,
+  };
+};
+
 export const useAgentChat = (): UseAgentChatResult => {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [modelLabel, setModelLabel] = useState(INITIAL_MODEL_LABEL);
+  const [contextUsagePercent, setContextUsagePercent] = useState<number | null>(null);
 
   const turnIdRef = useRef(1);
   const requestIdRef = useRef(0);
@@ -57,6 +101,7 @@ export const useAgentChat = (): UseAgentChatResult => {
     requestIdRef.current += 1;
     setIsThinking(false);
     setTurns([]);
+    setContextUsagePercent(null);
   }, []);
 
   const appendSegment = useCallback(
@@ -176,14 +221,44 @@ export const useAgentChat = (): UseAgentChatResult => {
     const currentRequestId = ++requestIdRef.current;
     const isCurrentRequest = () => currentRequestId === requestIdRef.current;
 
+    setContextUsagePercent(null);
     setIsThinking(true);
 
-    const handlers = buildAgentEventHandlers({
+    const baseHandlers = buildAgentEventHandlers({
       turnId,
       isCurrentRequest,
       appendSegment,
       appendEventLine,
     });
+    const handlers = {
+      ...baseHandlers,
+      onUsage: (event: AgentUsageEvent) => {
+        if (!isCurrentRequest()) {
+          return;
+        }
+        setContextUsagePercent(
+          typeof event.contextUsagePercent === "number" ? event.contextUsagePercent : null,
+        );
+        const replyUsage = toReplyUsage(event);
+        if (!replyUsage) {
+          return;
+        }
+        setTurns((prev) =>
+          patchTurn(prev, turnId, (turn) => {
+            if (!turn.reply) {
+              return turn;
+            }
+            return {
+              ...turn,
+              reply: {
+                ...turn.reply,
+                ...replyUsage,
+              },
+            };
+          }),
+        );
+      },
+    };
 
     void runAgentPrompt(text, handlers)
       .then((result) => {
@@ -192,6 +267,12 @@ export const useAgentChat = (): UseAgentChatResult => {
         }
 
         setModelLabel(result.modelLabel);
+        if (result.usage) {
+          setContextUsagePercent(
+            typeof result.usage.contextUsagePercent === "number" ? result.usage.contextUsagePercent : null,
+          );
+        }
+        const replyUsage = toReplyUsage(result.usage);
         setTurns((prev) => {
           const withFallbackText = patchTurn(prev, turnId, (turn) => {
             if (!turn.reply || !result.text) {
@@ -223,6 +304,7 @@ export const useAgentChat = (): UseAgentChatResult => {
             completionReason: result.completionReason,
             completionMessage: result.completionMessage,
             modelLabel: result.modelLabel,
+            ...(replyUsage ?? {}),
           });
         });
       })
@@ -254,6 +336,7 @@ export const useAgentChat = (): UseAgentChatResult => {
     inputValue,
     isThinking,
     modelLabel,
+    contextUsagePercent,
     setInputValue,
     submitInput,
     clearInput,

@@ -15,6 +15,7 @@ export const App = () => {
     inputValue,
     isThinking,
     modelLabel,
+    contextUsagePercent,
     setInputValue,
     submitInput,
     clearInput,
@@ -85,6 +86,7 @@ export const App = () => {
         isThinking={isThinking}
         disabled={modelPicker.visible}
         modelLabel={modelLabel}
+        contextUsagePercent={contextUsagePercent}
         value={inputValue}
         onValueChange={setInputValue}
         onSlashCommandSelect={handleSlashCommandSelect}

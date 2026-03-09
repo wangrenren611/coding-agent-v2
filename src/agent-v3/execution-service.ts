@@ -12,7 +12,7 @@ import { RedisClient } from './real-time-storage';
  */
 export class ExecutionService {
   constructor(private redis: RedisClient) {}
-  
+
   /**
    * 创建执行记录
    */
@@ -21,20 +21,20 @@ export class ExecutionService {
     // TODO: 使用 HSET 存储执行信息
     throw new Error('Not implemented');
   }
-  
+
   /**
    * 更新执行状态
    */
   async updateStatus(
-    executionId: string, 
-    status: ExecutionStatus, 
+    executionId: string,
+    status: ExecutionStatus,
     extra?: Partial<Execution>
   ): Promise<void> {
     const key = `execution:${executionId}`;
     // TODO: 使用 HSET 更新状态
     throw new Error('Not implemented');
   }
-  
+
   /**
    * 获取执行状态
    */
@@ -43,7 +43,7 @@ export class ExecutionService {
     // TODO: 使用 HGETALL 获取
     throw new Error('Not implemented');
   }
-  
+
   /**
    * 获取锁 (防止重复执行)
    */
@@ -52,7 +52,7 @@ export class ExecutionService {
     // TODO: 使用 SET NX EX
     throw new Error('Not implemented');
   }
-  
+
   /**
    * 释放锁
    */
@@ -61,12 +61,12 @@ export class ExecutionService {
     // TODO: 使用 DEL
     throw new Error('Not implemented');
   }
-  
+
   /**
    * 更新执行进度
    */
   async updateProgress(
-    executionId: string, 
+    executionId: string,
     progress: { stepIndex?: number; currentAction?: string; messageCount?: number }
   ): Promise<void> {
     const key = `execution:${executionId}`;

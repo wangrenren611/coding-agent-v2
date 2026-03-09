@@ -191,9 +191,7 @@ function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
   }
 
   if (typeName === 'enum') {
-    const enumValues =
-      def?.values ||
-      (def?.entries ? Object.values(def.entries) : []);
+    const enumValues = def?.values || (def?.entries ? Object.values(def.entries) : []);
     return {
       type: 'string',
       enum: enumValues,
@@ -280,10 +278,7 @@ function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
     return { type: 'null' };
   }
 
-  if (
-    typeName === 'any' ||
-    typeName === 'unknown'
-  ) {
+  if (typeName === 'any' || typeName === 'unknown') {
     return {};
   }
 

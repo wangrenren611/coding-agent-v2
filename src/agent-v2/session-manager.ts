@@ -30,7 +30,7 @@ export class SessionManager {
 
   async initialize(): Promise<void> {
     await this.storage.initialize();
-    
+
     if (this.autoSaveEnabled) {
       this.startAutoSave();
     }
@@ -54,7 +54,7 @@ export class SessionManager {
 
   async resumeSession(sessionId: string): Promise<Session | null> {
     const session = await this.storage.getSession(sessionId);
-    
+
     if (session) {
       this.currentSession = session;
       this.dirty = false;
@@ -83,9 +83,7 @@ export class SessionManager {
   async updateMessage(messageId: string, updates: Partial<Message>): Promise<void> {
     if (!this.currentSession) return;
 
-    const index = this.currentSession.messages.findIndex(
-      (m) => m.messageId === messageId
-    );
+    const index = this.currentSession.messages.findIndex((m) => m.messageId === messageId);
 
     if (index >= 0) {
       this.currentSession.messages[index] = {

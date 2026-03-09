@@ -1,4 +1,4 @@
-import type { LLMGenerateOptions, Tool } from '../../providers';
+import type { LLMGenerateOptions, Tool, Usage } from '../../providers';
 import { StatelessAgent } from '../agent';
 import type { AgentCallbacks, Message } from '../types';
 import type {
@@ -40,11 +40,23 @@ export interface RunForegroundRequest {
   abortSignal?: AbortSignal;
   timeoutBudgetMs?: number;
   llmTimeoutRatio?: number;
+  contextLimitTokens?: number;
+}
+
+export interface RunForegroundUsage {
+  sequence: number;
+  stepIndex: number;
+  messageId: string;
+  usage: Usage;
+  cumulativeUsage: Usage;
+  contextLimitTokens?: number;
+  contextUsagePercent?: number;
 }
 
 export interface RunForegroundCallbacks extends Partial<AgentCallbacks> {
   onToolStream?: (event: CliEventEnvelope) => void | Promise<void>;
   onEvent?: (event: CliEventEnvelope) => void | Promise<void>;
+  onUsage?: (usage: RunForegroundUsage) => void | Promise<void>;
 }
 
 export interface RunForegroundResult {
@@ -85,6 +97,13 @@ export class AgentAppService {
     let latestErrorPayload: ErrorEventPayload | undefined;
     let streamFailure: unknown;
     let toolStreamFailure: unknown;
+    const contextLimitTokens = resolveContextLimitTokens(request, this.deps.agent);
+    const cumulativeUsage: Usage = {
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
+    };
+    let usageSequence = 0;
 
     await this.deps.executionStore.create({
       executionId,
@@ -145,6 +164,27 @@ export class AgentAppService {
           message,
           stepIndex: currentStepIndex,
         });
+        const usage = readUsage(message.usage);
+        if (message.role === 'assistant' && usage) {
+          usageSequence += 1;
+          cumulativeUsage.prompt_tokens += usage.prompt_tokens;
+          cumulativeUsage.completion_tokens += usage.completion_tokens;
+          cumulativeUsage.total_tokens += usage.total_tokens;
+
+          const usagePayload: RunForegroundUsage = {
+            sequence: usageSequence,
+            stepIndex: currentStepIndex,
+            messageId: message.messageId,
+            usage,
+            cumulativeUsage: { ...cumulativeUsage },
+            contextLimitTokens,
+            contextUsagePercent:
+              typeof contextLimitTokens === 'number' && contextLimitTokens > 0
+                ? (usage.prompt_tokens / contextLimitTokens) * 100
+                : undefined,
+          };
+          await callbacks?.onUsage?.(usagePayload);
+        }
         await callbacks?.onMessage?.(message);
       },
       onCheckpoint: async (checkpoint) => {
@@ -247,10 +287,13 @@ export class AgentAppService {
     }
     currentStepIndex = Math.max(currentStepIndex, steps);
 
-    await this.deps.executionStore.patch(executionId, buildTerminalPatch(finishReason, {
-      stepIndex: currentStepIndex,
-      error: latestErrorPayload,
-    }));
+    await this.deps.executionStore.patch(
+      executionId,
+      buildTerminalPatch(finishReason, {
+        stepIndex: currentStepIndex,
+        error: latestErrorPayload,
+      })
+    );
 
     const run = await this.deps.executionStore.get(executionId);
     if (!run) {
@@ -341,7 +384,10 @@ function mapErrorPayloadToTerminal(error?: ErrorEventPayload): {
     case 'AGENT_ABORTED':
       return { status: 'CANCELLED', terminalReason: 'aborted' };
     case 'AGENT_TIMEOUT_BUDGET_EXCEEDED':
+    case 'AGENT_UPSTREAM_TIMEOUT':
       return { status: 'FAILED', terminalReason: 'timeout' };
+    case 'AGENT_UPSTREAM_RATE_LIMIT':
+      return { status: 'FAILED', terminalReason: 'rate_limit' };
     case 'AGENT_MAX_RETRIES_REACHED':
       return { status: 'FAILED', terminalReason: 'max_retries' };
     default:
@@ -443,6 +489,42 @@ function readNumber(value: unknown): number | undefined {
 
 function readBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
+}
+
+function readUsage(value: unknown): Usage | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const promptTokens = readNumber(value.prompt_tokens);
+  const completionTokens = readNumber(value.completion_tokens);
+  const totalTokens = readNumber(value.total_tokens);
+  if (promptTokens === undefined || completionTokens === undefined || totalTokens === undefined) {
+    return undefined;
+  }
+  return {
+    prompt_tokens: Math.max(0, promptTokens),
+    completion_tokens: Math.max(0, completionTokens),
+    total_tokens: Math.max(0, totalTokens),
+  };
+}
+
+function resolveContextLimitTokens(
+  request: RunForegroundRequest,
+  agent: StatelessAgent
+): number | undefined {
+  if (
+    typeof request.contextLimitTokens === 'number' &&
+    Number.isFinite(request.contextLimitTokens) &&
+    request.contextLimitTokens > 0
+  ) {
+    return Math.floor(request.contextLimitTokens);
+  }
+
+  const fromAgent = agent.getContextLimitTokens();
+  if (typeof fromAgent !== 'number' || !Number.isFinite(fromAgent) || fromAgent <= 0) {
+    return undefined;
+  }
+  return Math.floor(fromAgent);
 }
 
 function resolveContextStore(

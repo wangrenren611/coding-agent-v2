@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  ContractError,
-  isErrorContract,
-  serializeErrorContract,
-} from '../error-contract';
+import { ContractError, isErrorContract, serializeErrorContract } from '../error-contract';
 
 describe('error-contract', () => {
   it('serializes ContractError with stable envelope', () => {

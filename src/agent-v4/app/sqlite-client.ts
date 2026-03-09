@@ -97,15 +97,21 @@ export class AgentAppSqliteClient {
   }
 
   async run(sql: string, params: unknown[] = []): Promise<void> {
-    this.requireDb().prepare(sql).run(...params);
+    this.requireDb()
+      .prepare(sql)
+      .run(...params);
   }
 
   async get<T>(sql: string, params: unknown[] = []): Promise<T | undefined> {
-    return this.requireDb().prepare(sql).get(...params) as T | undefined;
+    return this.requireDb()
+      .prepare(sql)
+      .get(...params) as T | undefined;
   }
 
   async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
-    return this.requireDb().prepare(sql).all(...params) as T[];
+    return this.requireDb()
+      .prepare(sql)
+      .all(...params) as T[];
   }
 
   async transaction<T>(fn: () => Promise<T>): Promise<T> {

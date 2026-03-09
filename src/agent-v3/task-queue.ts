@@ -15,14 +15,14 @@ export class TaskQueue {
     private redis: RedisClient,
     private queueName: string = 'task_queue'
   ) {}
-  
+
   /**
    * 放入任务 (LPUSH)
    */
   async push(task: Task): Promise<void> {
     await this.redis.lpush(this.queueName, JSON.stringify(task));
   }
-  
+
   /**
    * 阻塞取出任务 (BRPOP)
    */
@@ -32,7 +32,7 @@ export class TaskQueue {
     // 返回格式: [key, value]
     throw new Error('Not implemented');
   }
-  
+
   /**
    * 获取队列长度
    */
@@ -40,7 +40,7 @@ export class TaskQueue {
     // TODO: 实现 LLEN
     throw new Error('Not implemented');
   }
-  
+
   /**
    * 查看队首任务 (不取出)
    */

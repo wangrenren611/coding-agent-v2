@@ -12,14 +12,15 @@ import {
   cleanupWriteBufferSessionFiles,
 } from '../agent/write-buffer';
 import { ToolExecutionError } from './error';
+import { WRITE_FILE_TOOL_DESCRIPTION } from './tool-prompts';
 
 const writeModeSchema = z.enum(['direct', 'resume', 'finalize']);
 
 const schema = z.object({
-  path: z.string().min(1).describe('Target file path'),
-  content: z.string().optional().describe('Content chunk for this call'),
-  mode: writeModeSchema.default('direct').describe('Write mode'),
-  bufferId: z.string().optional().describe('Resume session id'),
+  path: z.string().min(1).describe('Required. Absolute or relative target path'),
+  content: z.string().optional().describe('Plain text content chunk for this call'),
+  mode: writeModeSchema.default('direct').describe('Write mode: direct, resume, or finalize'),
+  bufferId: z.string().optional().describe('Buffer session id used for resume/finalize'),
 });
 
 type WriteFileArgs = z.infer<typeof schema>;
@@ -40,11 +41,7 @@ interface WriteBufferInfo {
 
 interface WriteFileResponse {
   ok: boolean;
-  code:
-    | 'OK'
-    | 'WRITE_FILE_PARTIAL_BUFFERED'
-    | 'WRITE_FILE_NEED_RESUME'
-    | 'WRITE_FILE_FINALIZE_OK';
+  code: 'OK' | 'WRITE_FILE_PARTIAL_BUFFERED' | 'WRITE_FILE_NEED_RESUME' | 'WRITE_FILE_FINALIZE_OK';
   message: string;
   buffer?: WriteBufferInfo;
   nextAction: 'resume' | 'finalize' | 'none';
@@ -56,7 +53,7 @@ interface SessionPointer {
 
 export class WriteFileTool extends BaseTool<typeof schema> {
   name = 'write_file';
-  description = 'Write file content directly or via resumable buffered protocol';
+  description = WRITE_FILE_TOOL_DESCRIPTION;
   parameters = schema;
 
   private readonly allowedDirectories: string[];
@@ -65,11 +62,11 @@ export class WriteFileTool extends BaseTool<typeof schema> {
 
   constructor(options: WriteFileToolOptions = {}) {
     super();
-    this.allowedDirectories = (options.allowedDirectories?.length
-      ? options.allowedDirectories
-      : [process.cwd()]
+    this.allowedDirectories = (
+      options.allowedDirectories?.length ? options.allowedDirectories : [process.cwd()]
     ).map((dir) => this.normalizeAllowedDirectory(dir));
-    this.maxChunkBytes = options.maxChunkBytes && options.maxChunkBytes > 0 ? options.maxChunkBytes : 32768;
+    this.maxChunkBytes =
+      options.maxChunkBytes && options.maxChunkBytes > 0 ? options.maxChunkBytes : 32768;
     this.bufferBaseDir = path.resolve(
       options.bufferBaseDir || path.join(process.cwd(), '.agent-cache', 'write-file')
     );
@@ -88,10 +85,7 @@ export class WriteFileTool extends BaseTool<typeof schema> {
       if (mode === 'resume') {
         return this.handleResume(targetPath, content, args.bufferId, context);
       }
-      return this.handleFinalize(
-        targetPath,
-        args.bufferId
-      );
+      return this.handleFinalize(targetPath, args.bufferId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return {
@@ -118,7 +112,12 @@ export class WriteFileTool extends BaseTool<typeof schema> {
       });
     }
 
-    const session = await this.createOrLoadSession(targetPath, context?.toolCallId, undefined, targetPath);
+    const session = await this.createOrLoadSession(
+      targetPath,
+      context?.toolCallId,
+      undefined,
+      targetPath
+    );
     const firstChunk = this.truncateUtf8ByBytes(content, this.maxChunkBytes);
     await appendContent(session, firstChunk);
     const latest = await loadWriteBufferSession(session.metaPath);
@@ -321,7 +320,8 @@ export class WriteFileTool extends BaseTool<typeof schema> {
     const normalizedResolved = this.normalizePathWithExistingAncestor(resolved);
     const allowed = this.allowedDirectories.some((allowedDir) => {
       return (
-        normalizedResolved === allowedDir || normalizedResolved.startsWith(`${allowedDir}${path.sep}`)
+        normalizedResolved === allowedDir ||
+        normalizedResolved.startsWith(`${allowedDir}${path.sep}`)
       );
     });
     if (!allowed) {

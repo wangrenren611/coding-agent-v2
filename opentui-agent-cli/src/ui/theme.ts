@@ -37,15 +37,15 @@ export type UiTheme = {
 
 const baseLayout: UiTheme["layout"] = {
   appPaddingTop: 0,
-  appPaddingBottom: 0,
+  appPaddingBottom: 1,
   appPaddingX: 0,
   conversationPaddingX: 0,
   conversationPaddingY: 0,
   conversationContentPaddingX: 2,
   conversationContentPaddingY: 1,
   promptPaddingX: 0,
-  promptPaddingBottom: 0,
-  footerMarginTop: 0,
+  promptPaddingBottom: 1,
+  footerMarginTop: 1,
   footerPaddingRight: 0,
 };
 

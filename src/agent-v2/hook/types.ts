@@ -46,10 +46,7 @@ export type MessageListHook = (
 /**
  * 工具调用 Hook - 工具调用前修改参数
  */
-export type ToolUseHook = (
-  toolCall: ToolCall,
-  ctx: HookContext
-) => ToolCall | Promise<ToolCall>;
+export type ToolUseHook = (toolCall: ToolCall, ctx: HookContext) => ToolCall | Promise<ToolCall>;
 
 /**
  * 工具结果 Hook - 工具返回后修改结果
@@ -57,7 +54,9 @@ export type ToolUseHook = (
 export type ToolResultHook = (
   result: { toolCall: ToolCall; result: ToolResult },
   ctx: HookContext
-) => { toolCall: ToolCall; result: ToolResult } | Promise<{ toolCall: ToolCall; result: ToolResult }>;
+) =>
+  | { toolCall: ToolCall; result: ToolResult }
+  | Promise<{ toolCall: ToolCall; result: ToolResult }>;
 
 /**
  * 步骤 Hook - 步骤完成时通知

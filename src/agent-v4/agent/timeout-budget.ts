@@ -108,7 +108,9 @@ export function isTimeoutBudgetReason(value: unknown): value is TimeoutBudgetRea
   );
 }
 
-export function timeoutBudgetReasonFromSignal(signal: AbortSignal | undefined): TimeoutBudgetReason | undefined {
+export function timeoutBudgetReasonFromSignal(
+  signal: AbortSignal | undefined
+): TimeoutBudgetReason | undefined {
   if (!signal?.aborted) {
     return undefined;
   }

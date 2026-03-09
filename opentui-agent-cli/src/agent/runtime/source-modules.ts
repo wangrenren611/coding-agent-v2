@@ -5,6 +5,8 @@ type ProviderModelConfig = {
   name: string;
   envApiKey: string;
   provider?: string;
+  model?: string;
+  LLMMAX_TOKENS?: number;
 };
 
 export type ProviderRegistryLike = {
@@ -31,6 +33,11 @@ export type AgentV4MessageLike = {
   type: string;
   content: unknown;
   tool_call_id?: string;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
 };
 
 export type CliEventEnvelopeLike = {
@@ -59,10 +66,30 @@ type AgentAppRunRequestLike = {
   historyMessages?: AgentV4MessageLike[];
   systemPrompt?: string;
   maxSteps?: number;
+  contextLimitTokens?: number;
+};
+
+export type AgentAppUsageLike = {
+  sequence: number;
+  stepIndex: number;
+  messageId: string;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+  cumulativeUsage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+  contextLimitTokens?: number;
+  contextUsagePercent?: number;
 };
 
 type AgentAppRunCallbacksLike = {
   onEvent?: (event: CliEventEnvelopeLike) => void | Promise<void>;
+  onUsage?: (usage: AgentAppUsageLike) => void | Promise<void>;
 };
 
 export type AgentAppServiceLike = {
@@ -80,6 +107,7 @@ export type StatelessAgentLike = {
 
 export type ToolManagerLike = {
   registerTool: (tool: unknown) => void;
+  getTools: () => Array<{ name?: string; toToolSchema?: () => unknown }>;
 };
 
 export type AgentAppStoreLike = {
@@ -99,6 +127,8 @@ type AgentAppServiceCtor = new (deps: {
 }) => AgentAppServiceLike;
 type ToolManagerCtor = new (config?: Record<string, unknown>) => ToolManagerLike;
 type ToolCtor = new (options?: Record<string, unknown>) => unknown;
+type TaskStoreCtor = new (options?: Record<string, unknown>) => unknown;
+type TaskRunnerCtor = new (options: Record<string, unknown>) => unknown;
 
 export type SourceModules = {
   repoRoot: string;
@@ -110,6 +140,20 @@ export type SourceModules = {
   DefaultToolManager: ToolManagerCtor;
   BashTool: ToolCtor;
   WriteFileTool: ToolCtor;
+  FileReadTool: ToolCtor;
+  FileEditTool: ToolCtor;
+  GlobTool: ToolCtor;
+  GrepTool: ToolCtor;
+  SkillTool: ToolCtor;
+  TaskTool: ToolCtor;
+  TaskCreateTool: ToolCtor;
+  TaskGetTool: ToolCtor;
+  TaskListTool: ToolCtor;
+  TaskUpdateTool: ToolCtor;
+  TaskStopTool: ToolCtor;
+  TaskOutputTool: ToolCtor;
+  TaskStore: TaskStoreCtor;
+  RealSubagentRunnerAdapter: TaskRunnerCtor;
 };
 
 let modulesPromise: Promise<SourceModules> | null = null;
@@ -143,7 +187,29 @@ const getRequiredExport = <T>(moduleObj: Record<string, unknown>, name: string):
 const loadSourceModules = async (): Promise<SourceModules> => {
   const repoRoot = resolveRepoRoot();
 
-  const [providerMod, configMod, appMod, agentV4Mod, toolManagerMod, bashToolMod, writeToolMod] =
+  const [
+    providerMod,
+    configMod,
+    appMod,
+    agentV4Mod,
+    toolManagerMod,
+    bashToolMod,
+    writeToolMod,
+    fileReadToolMod,
+    fileEditToolMod,
+    globToolMod,
+    grepToolMod,
+    skillToolMod,
+    taskToolMod,
+    taskCreateToolMod,
+    taskGetToolMod,
+    taskListToolMod,
+    taskUpdateToolMod,
+    taskStopToolMod,
+    taskOutputToolMod,
+    taskStoreMod,
+    taskRunnerAdapterMod,
+  ] =
     await Promise.all([
       import(toModuleUrl(resolve(repoRoot, "src/providers/index.ts"))),
       import(toModuleUrl(resolve(repoRoot, "src/config/index.ts"))),
@@ -152,6 +218,20 @@ const loadSourceModules = async (): Promise<SourceModules> => {
       import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/tool-manager.ts"))),
       import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/bash.ts"))),
       import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/write-file.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/file-read-tool.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/file-edit-tool.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/glob.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/grep.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/skill-tool.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/task.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/task-create.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/task-get.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/task-list.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/task-update.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/task-stop.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/task-output.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/task-store.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/task-runner-adapter.ts"))),
     ]);
 
   return {
@@ -166,6 +246,23 @@ const loadSourceModules = async (): Promise<SourceModules> => {
     DefaultToolManager: getRequiredExport<ToolManagerCtor>(toolManagerMod, "DefaultToolManager"),
     BashTool: getRequiredExport<ToolCtor>(bashToolMod, "BashTool"),
     WriteFileTool: getRequiredExport<ToolCtor>(writeToolMod, "WriteFileTool"),
+    FileReadTool: getRequiredExport<ToolCtor>(fileReadToolMod, "FileReadTool"),
+    FileEditTool: getRequiredExport<ToolCtor>(fileEditToolMod, "FileEditTool"),
+    GlobTool: getRequiredExport<ToolCtor>(globToolMod, "GlobTool"),
+    GrepTool: getRequiredExport<ToolCtor>(grepToolMod, "GrepTool"),
+    SkillTool: getRequiredExport<ToolCtor>(skillToolMod, "SkillTool"),
+    TaskTool: getRequiredExport<ToolCtor>(taskToolMod, "TaskTool"),
+    TaskCreateTool: getRequiredExport<ToolCtor>(taskCreateToolMod, "TaskCreateTool"),
+    TaskGetTool: getRequiredExport<ToolCtor>(taskGetToolMod, "TaskGetTool"),
+    TaskListTool: getRequiredExport<ToolCtor>(taskListToolMod, "TaskListTool"),
+    TaskUpdateTool: getRequiredExport<ToolCtor>(taskUpdateToolMod, "TaskUpdateTool"),
+    TaskStopTool: getRequiredExport<ToolCtor>(taskStopToolMod, "TaskStopTool"),
+    TaskOutputTool: getRequiredExport<ToolCtor>(taskOutputToolMod, "TaskOutputTool"),
+    TaskStore: getRequiredExport<TaskStoreCtor>(taskStoreMod, "TaskStore"),
+    RealSubagentRunnerAdapter: getRequiredExport<TaskRunnerCtor>(
+      taskRunnerAdapterMod,
+      "RealSubagentRunnerAdapter"
+    ),
   };
 };
 

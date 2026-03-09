@@ -158,7 +158,9 @@ describe('BaseTool', () => {
           textPatternUnknown: {
             _def: {
               type: 'string',
-              checks: [{ check: 'string_format', format: 'regex', pattern: 123 as unknown as RegExp }],
+              checks: [
+                { check: 'string_format', format: 'regex', pattern: 123 as unknown as RegExp },
+              ],
             },
           },
           num: {
@@ -260,7 +262,10 @@ describe('BaseTool', () => {
       }
     }
 
-    const parameters = new FallbackTool().toToolSchema().function.parameters as Record<string, unknown>;
+    const parameters = new FallbackTool().toToolSchema().function.parameters as Record<
+      string,
+      unknown
+    >;
     expect(parameters.type).toBe('object');
     expect((parameters.properties as Record<string, unknown>)['unknownField']).toEqual({});
     expect((parameters.properties as Record<string, unknown>)['tupleField']).toMatchObject({
@@ -356,8 +361,12 @@ describe('BaseTool', () => {
           legacyIntersection: {
             _def: {
               typeName: 'ZodIntersection',
-              left: { _def: { typeName: 'ZodObject', shape: { a: { _def: { typeName: 'ZodString' } } } } },
-              right: { _def: { typeName: 'ZodObject', shape: { b: { _def: { typeName: 'ZodNumber' } } } } },
+              left: {
+                _def: { typeName: 'ZodObject', shape: { a: { _def: { typeName: 'ZodString' } } } },
+              },
+              right: {
+                _def: { typeName: 'ZodObject', shape: { b: { _def: { typeName: 'ZodNumber' } } } },
+              },
             },
           },
         },
@@ -375,14 +384,22 @@ describe('BaseTool', () => {
       }
     }
 
-    const parameters = new LegacyTool().toToolSchema().function.parameters as Record<string, unknown>;
+    const parameters = new LegacyTool().toToolSchema().function.parameters as Record<
+      string,
+      unknown
+    >;
     expect(parameters.type).toBe('object');
     expect(parameters.required).toBeInstanceOf(Array);
     expect(parameters.required as string[]).not.toContain('optionalOnly');
     expect(parameters.required as string[]).not.toContain('defaultOnly');
     expect(parameters.required as string[]).toContain('legacyString');
     const props = parameters.properties as Record<string, Record<string, unknown>>;
-    expect(props.legacyString).toMatchObject({ type: 'string', minLength: 1, maxLength: 3, pattern: 'abc' });
+    expect(props.legacyString).toMatchObject({
+      type: 'string',
+      minLength: 1,
+      maxLength: 3,
+      pattern: 'abc',
+    });
     expect(props.legacyNumber).toMatchObject({
       type: 'number',
       minimum: 1,

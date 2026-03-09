@@ -31,6 +31,16 @@ const formatDurationSeconds = (reply: AssistantReplyType, nowMs: number): string
   return Math.max(reply.durationSeconds, elapsedSeconds).toFixed(1);
 };
 
+const formatTokenCount = (tokens: number): string => {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(1)}M`;
+  }
+  if (tokens >= 1_000) {
+    return `${(tokens / 1_000).toFixed(1)}k`;
+  }
+  return `${tokens}`;
+};
+
 export const AssistantReply = ({ reply }: AssistantReplyProps) => {
   const status = renderStatus(reply.status);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -49,6 +59,10 @@ export const AssistantReply = ({ reply }: AssistantReplyProps) => {
   }, [reply.status]);
 
   const durationText = formatDurationSeconds(reply, nowMs);
+  const usageText =
+    typeof reply.usageTotalTokens === "number" && Number.isFinite(reply.usageTotalTokens)
+      ? formatTokenCount(Math.max(0, Math.round(reply.usageTotalTokens)))
+      : undefined;
 
   return (
     <box flexDirection="column" gap={1}>
@@ -64,6 +78,7 @@ export const AssistantReply = ({ reply }: AssistantReplyProps) => {
           <span fg={uiTheme.accent}>▣</span> assistant
           <span fg={uiTheme.muted}> · {reply.modelLabel}</span>
           <span fg={uiTheme.muted}> · {durationText}s</span>
+          {usageText ? <span fg={uiTheme.muted}> · token {usageText}</span> : null}
           {status ? <span fg={uiTheme.muted}> · {status}</span> : null}
         </text>
       </box>

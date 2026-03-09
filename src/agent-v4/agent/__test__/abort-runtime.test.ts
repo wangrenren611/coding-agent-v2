@@ -39,7 +39,9 @@ describe('abort-runtime', () => {
   it('throwIfAborted throws AbortError when signal is aborted without budget reason', () => {
     const controller = new AbortController();
     controller.abort();
-    expect(() => throwIfAborted(controller.signal, 'Operation aborted')).toThrowError('Operation aborted');
+    expect(() => throwIfAborted(controller.signal, 'Operation aborted')).toThrowError(
+      'Operation aborted'
+    );
   });
 
   it('throwIfAborted throws TimeoutBudgetExceededError when budget reason exists', () => {
@@ -49,7 +51,9 @@ describe('abort-runtime', () => {
       stage: 'total',
       message: 'Timeout budget exceeded at execution stage',
     });
-    expect(() => throwIfAborted(controller.signal, 'Operation aborted')).toThrow(TimeoutBudgetExceededError);
+    expect(() => throwIfAborted(controller.signal, 'Operation aborted')).toThrow(
+      TimeoutBudgetExceededError
+    );
   });
 
   it('sleepWithAbort resolves for non-positive delay and rejects on abort', async () => {

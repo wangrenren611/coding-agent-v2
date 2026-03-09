@@ -17,11 +17,7 @@ export interface WriteBufferRuntime {
 
 interface WriteFileProtocolPayload {
   ok: boolean;
-  code:
-    | 'OK'
-    | 'WRITE_FILE_PARTIAL_BUFFERED'
-    | 'WRITE_FILE_NEED_RESUME'
-    | 'WRITE_FILE_FINALIZE_OK';
+  code: 'OK' | 'WRITE_FILE_PARTIAL_BUFFERED' | 'WRITE_FILE_NEED_RESUME' | 'WRITE_FILE_FINALIZE_OK';
   nextAction: 'resume' | 'finalize' | 'none';
 }
 

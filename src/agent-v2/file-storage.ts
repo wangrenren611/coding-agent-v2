@@ -61,7 +61,7 @@ export class FileStorage implements StorageBackend {
   async saveMessage(message: Message): Promise<void> {
     const sessionId = message.sessionId || 'default';
     const filePath = this.getMessageFilePath(sessionId);
-    
+
     let messages: Message[] = [];
     try {
       const data = await fs.promises.readFile(filePath, 'utf-8');
@@ -83,7 +83,7 @@ export class FileStorage implements StorageBackend {
   async updateMessage(messageId: string, updates: Partial<Message>): Promise<void> {
     const messages = await this.getAllMessages();
     const index = messages.findIndex((m) => m.messageId === messageId);
-    
+
     if (index >= 0) {
       messages[index] = { ...messages[index], ...updates };
       const sessionId = messages[index].sessionId || 'default';
@@ -121,7 +121,7 @@ export class FileStorage implements StorageBackend {
 
   async getMessages(sessionId: string): Promise<Message[]> {
     const filePath = this.getMessageFilePath(sessionId);
-    
+
     try {
       const data = await fs.promises.readFile(filePath, 'utf-8');
       return JSON.parse(data);
@@ -137,7 +137,7 @@ export class FileStorage implements StorageBackend {
 
   async getSession(sessionId: string): Promise<Session | null> {
     const filePath = this.getSessionFilePath(sessionId);
-    
+
     try {
       const data = await fs.promises.readFile(filePath, 'utf-8');
       return JSON.parse(data);
@@ -189,7 +189,7 @@ export class FileStorage implements StorageBackend {
 
   async getState(sessionId: string): Promise<AgentLoopState | null> {
     const filePath = this.getStateFilePath(sessionId);
-    
+
     try {
       const data = await fs.promises.readFile(filePath, 'utf-8');
       return JSON.parse(data);

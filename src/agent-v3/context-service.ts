@@ -23,42 +23,42 @@ export class ContextService {
     private redis: RedisClient,
     private clickhouse: ClickHouseClient
   ) {}
-  
+
   /**
    * 加载上下文
    * 优先从 Redis 缓存获取，缓存不存在从 ClickHouse 加载
    */
   async load(conversationId: string): Promise<ConversationContext> {
     const cacheKey = `conversation:${conversationId}:context`;
-    
+
     // 1. 先从 Redis 缓存获取
     // TODO: 使用 GET
     const cached = null; // await this.redis.get(cacheKey);
     if (cached) {
       return JSON.parse(cached);
     }
-    
+
     // 2. 缓存不存在，从 ClickHouse 加载
     // TODO: 查询消息
     const messages: Message[] = [];
-    
+
     // TODO: 查询会话配置
     const systemPrompt = '';
     const tools = [];
-    
+
     const context: ConversationContext = {
       messages,
       systemPrompt,
-      tools
+      tools,
     };
-    
+
     // 3. 写入缓存
     // TODO: 使用 SET EX
     // await this.redis.set(cacheKey, JSON.stringify(context), { EX: 300 });
-    
+
     return context;
   }
-  
+
   /**
    * 保存上下文到缓存
    */
@@ -67,7 +67,7 @@ export class ContextService {
     // TODO: 使用 SET EX
     throw new Error('Not implemented');
   }
-  
+
   /**
    * 清除上下文缓存
    */

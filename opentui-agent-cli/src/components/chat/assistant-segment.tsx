@@ -13,9 +13,9 @@ const ThinkingSegment = ({ content }: { content: string }) => {
   }
 
   return (
-    <box flexDirection="row" gap={1} marginTop={1}>
+    <box flexDirection="row" marginTop={1}>
       <box width={1} backgroundColor={uiTheme.divider} />
-      <box flexGrow={1}>
+      <box flexGrow={1} paddingLeft={2}>
         <code
           filetype="markdown"
           drawUnstyledText={false}

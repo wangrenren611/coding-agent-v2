@@ -6,7 +6,7 @@ export interface Tool {
   parameters: unknown;
 }
 
-export interface LLMTool{
+export interface LLMTool {
   type: 'function';
   function: Tool;
 }
@@ -60,7 +60,6 @@ export interface ToolConcurrencyPolicy {
   lockKey?: string;
 }
 
-
 /**
  * 工具流式事件类型
  */
@@ -90,8 +89,6 @@ export interface ToolStreamEventInput {
   timestamp?: number;
 }
 
-
-
 /**
  * 工具执行上下文
  *
@@ -107,9 +104,7 @@ export interface ToolExecutionContext {
   /** 工具流式事件发射器（可选） */
   onChunk?: (event: ToolStreamEventInput) => void | Promise<void>;
   onConfirm?: (info: ToolConfirmInfo) => Promise<ToolDecision>;
-  onPolicyCheck?: (
-    info: ToolPolicyCheckInfo
-  ) => ToolPolicyDecision | Promise<ToolPolicyDecision>;
+  onPolicyCheck?: (info: ToolPolicyCheckInfo) => ToolPolicyDecision | Promise<ToolPolicyDecision>;
   /** 工具执行中断信号（超时/取消时触发） */
   toolAbortSignal?: AbortSignal;
 }

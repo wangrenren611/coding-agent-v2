@@ -215,7 +215,11 @@ const APP_MIGRATIONS = [
 ];
 
 export class SqliteAgentAppStore
-  implements ExecutionStorePort, EventStorePort, MessageProjectionStorePort, ContextProjectionStorePort
+  implements
+    ExecutionStorePort,
+    EventStorePort,
+    MessageProjectionStorePort,
+    ContextProjectionStorePort
 {
   private readonly client: AgentAppSqliteClient;
   private prepared = false;

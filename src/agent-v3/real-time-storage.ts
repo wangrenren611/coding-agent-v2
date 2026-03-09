@@ -33,7 +33,7 @@ export class RealTimeStorage {
     private redis: RedisClient,
     private kafka: KafkaClient
   ) {}
-  
+
   /**
    * 保存消息到 Redis 并发送到 Kafka
    */
@@ -42,36 +42,38 @@ export class RealTimeStorage {
     const key = `conversation:${conversationId}:messages`;
     await this.redis.rpush(key, JSON.stringify(message));
     await this.redis.expire(key, 1800); // 30 分钟过期
-    
+
     // 2. 发送到 Kafka (异步持久化)
     await this.kafka.send({
       topic: 'messages',
-      messages: [{
-        key: conversationId,
-        value: JSON.stringify({
-          event: 'message_created',
-          conversationId,
-          message
-        })
-      }]
+      messages: [
+        {
+          key: conversationId,
+          value: JSON.stringify({
+            event: 'message_created',
+            conversationId,
+            message,
+          }),
+        },
+      ],
     });
   }
-  
+
   /**
    * 获取会话的所有消息
    */
   async getMessages(conversationId: string): Promise<Message[]> {
     const key = `conversation:${conversationId}:messages`;
     const messages = await this.redis.lrange(key, 0, -1);
-    return messages.map(msg => JSON.parse(msg));
+    return messages.map((msg) => JSON.parse(msg));
   }
-  
+
   /**
    * 获取最后 N 条消息
    */
   async getLastMessages(conversationId: string, count: number): Promise<Message[]> {
     const key = `conversation:${conversationId}:messages`;
     const messages = await this.redis.lrange(key, -count, -1);
-    return messages.map(msg => JSON.parse(msg));
+    return messages.map((msg) => JSON.parse(msg));
   }
 }

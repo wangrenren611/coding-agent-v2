@@ -207,7 +207,9 @@ describe('StatelessAgent fault injection', () => {
     });
 
     const metrics = onMetric.mock.calls.map((call) => call[0] as AgentMetric);
-    const toolStageMetric = metrics.find((metric) => metric.name === 'agent.tool.stage.duration_ms');
+    const toolStageMetric = metrics.find(
+      (metric) => metric.name === 'agent.tool.stage.duration_ms'
+    );
     const toolMetric = metrics.find((metric) => metric.name === 'agent.tool.duration_ms');
 
     expect(toolStageMetric?.tags?.success).toBe('false');

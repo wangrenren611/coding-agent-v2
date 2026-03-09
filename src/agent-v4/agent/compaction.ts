@@ -90,7 +90,7 @@ export function estimateMessagesTokens(messages: Message[], tools?: LLMTool[]): 
       total += estimateTokens(m.role);
     }
 
-    const name = ((m as unknown) as Record<string, unknown>).name as string | undefined;
+    const name = (m as unknown as Record<string, unknown>).name as string | undefined;
     if (name) {
       // Name field has an additional overhead token.
       total += estimateTokens(name) + 1;
@@ -289,4 +289,3 @@ async function generateSummary(input: {
     return '';
   }
 }
-

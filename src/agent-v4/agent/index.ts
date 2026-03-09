@@ -173,6 +173,12 @@ export class StatelessAgent extends EventEmitter {
     };
   }
 
+  getContextLimitTokens(): number {
+    const maxTokens = this.llmProvider.getLLMMaxTokens();
+    const maxOutputTokens = this.llmProvider.getMaxOutputTokens();
+    return Math.max(1, maxTokens - maxOutputTokens);
+  }
+
   private convertMessageToLLMMessage(message: Message) {
     return toLLMMessage(message);
   }
@@ -182,9 +188,7 @@ export class StatelessAgent extends EventEmitter {
       return false;
     }
 
-    const maxTokens = this.llmProvider.getLLMMaxTokens();
-    const maxOutputTokens = this.llmProvider.getMaxOutputTokens();
-    const usableLimit = Math.max(1, maxTokens - maxOutputTokens);
+    const usableLimit = this.getContextLimitTokens();
     const threshold = usableLimit * this.config.compactionTriggerRatio;
 
     const llmTools = tools as unknown as LLMTool[] | undefined;
@@ -497,7 +501,8 @@ export class StatelessAgent extends EventEmitter {
           const decision = await this.safeErrorCallback(callbacks?.onError, normalizedError);
           yield* this.yieldErrorEvent(normalizedError);
 
-          if (!decision?.retry) {
+          const shouldRetry = decision?.retry ?? normalizedError.retryable;
+          if (!shouldRetry) {
             break;
           }
 

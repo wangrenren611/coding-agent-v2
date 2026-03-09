@@ -10,14 +10,11 @@ export interface LLMProvider {
    * 生成响应 (非流式)
    */
   generate(messages: Message[], config?: LLMConfig): Promise<LLMResponse>;
-  
+
   /**
    * 生成响应 (流式)
    */
-  generateStream(
-    messages: Message[], 
-    config?: LLMConfig
-  ): AsyncGenerator<Chunk, void, unknown>;
+  generateStream(messages: Message[], config?: LLMConfig): AsyncGenerator<Chunk, void, unknown>;
 }
 
 /**
@@ -25,10 +22,13 @@ export interface LLMProvider {
  * TODO: 实现具体的 OpenAI API 调用
  */
 export class OpenAIProvider implements LLMProvider {
-  constructor(private apiKey: string, private baseUrl?: string) {
+  constructor(
+    private apiKey: string,
+    private baseUrl?: string
+  ) {
     // TODO: 初始化 HTTP 客户端
   }
-  
+
   async generate(messages: Message[], config?: LLMConfig): Promise<LLMResponse> {
     // TODO: 调用 OpenAI Chat API
     // 1. 构建请求
@@ -37,9 +37,9 @@ export class OpenAIProvider implements LLMProvider {
     // 4. 返回 LLMResponse
     throw new Error('Not implemented');
   }
-  
+
   async *generateStream(
-    messages: Message[], 
+    messages: Message[],
     config?: LLMConfig
   ): AsyncGenerator<Chunk, void, unknown> {
     // TODO: 实现流式调用
@@ -59,13 +59,13 @@ export class AnthropicProvider implements LLMProvider {
   constructor(private apiKey: string) {
     // TODO: 初始化
   }
-  
+
   async generate(messages: Message[], config?: LLMConfig): Promise<LLMResponse> {
     throw new Error('Not implemented');
   }
-  
+
   async *generateStream(
-    messages: Message[], 
+    messages: Message[],
     config?: LLMConfig
   ): AsyncGenerator<Chunk, void, unknown> {
     throw new Error('Not implemented');

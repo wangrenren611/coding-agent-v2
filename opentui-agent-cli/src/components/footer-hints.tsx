@@ -5,13 +5,20 @@ import { uiTheme } from "../ui/theme";
 
 type FooterHintsProps = {
   isThinking: boolean;
+  contextUsagePercent: number | null;
 };
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_INTERVAL_MS = 80;
 
-export const FooterHints = ({ isThinking }: FooterHintsProps) => {
+export const FooterHints = ({ isThinking, contextUsagePercent }: FooterHintsProps) => {
   const [frameIndex, setFrameIndex] = useState(0);
+  const hintAlignPaddingX =
+    uiTheme.layout.conversationPaddingX + uiTheme.layout.conversationContentPaddingX + uiTheme.layout.promptPaddingX;
+  const contextUsageLabel =
+    typeof contextUsagePercent === "number" && Number.isFinite(contextUsagePercent)
+      ? `${Math.max(0, Math.round(contextUsagePercent))}%`
+      : "0%";
 
   useEffect(() => {
     if (!isThinking) {
@@ -32,8 +39,9 @@ export const FooterHints = ({ isThinking }: FooterHintsProps) => {
     <box
       width="100%"
       justifyContent="space-between"
+      paddingLeft={hintAlignPaddingX}
       paddingTop={0}
-      paddingRight={uiTheme.layout.footerPaddingRight}
+      paddingRight={hintAlignPaddingX + uiTheme.layout.footerPaddingRight}
       backgroundColor={uiTheme.bg}
       flexDirection="row"
       marginTop={uiTheme.layout.footerMarginTop}
@@ -51,7 +59,7 @@ export const FooterHints = ({ isThinking }: FooterHintsProps) => {
         <text />
       )}
       <text fg={uiTheme.muted} attributes={TextAttributes.BOLD}>
-        <strong>tab</strong> agents  <strong>ctrl+p</strong> commands
+        <strong>context</strong> {contextUsageLabel}
       </text>
     </box>
   );

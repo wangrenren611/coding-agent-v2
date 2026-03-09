@@ -1,0 +1,127 @@
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { promises as fs } from 'node:fs';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { TaskTool } from '../task';
+import { TaskStore } from '../task-store';
+import type { SubagentRunnerAdapter } from '../task-runner-adapter';
+import type { AgentRunEntity } from '../task-types';
+
+function parseOutput<T>(output: string | undefined): T {
+  return JSON.parse(output || '{}') as T;
+}
+
+function makeRun(agentId: string): AgentRunEntity {
+  const now = Date.now();
+  return {
+    agentId,
+    status: 'running',
+    subagentType: 'Plan',
+    prompt: 'p',
+    createdAt: now,
+    startedAt: now,
+    updatedAt: now,
+    metadata: {},
+    version: 1,
+  };
+}
+
+describe('task subagent config integration', () => {
+  let baseDir: string;
+  let store: TaskStore;
+
+  beforeEach(async () => {
+    baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-task-subagent-config-'));
+    store = new TaskStore({ baseDir });
+  });
+
+  afterEach(async () => {
+    await fs.rm(baseDir, { recursive: true, force: true });
+  });
+
+  it('injects default tools and systemPrompt from subagent config', async () => {
+    let captured: { allowedTools?: string[]; systemPrompt?: string } | null = null;
+    const runner: SubagentRunnerAdapter = {
+      start: async (_ns, input) => {
+        captured = {
+          allowedTools: input.allowedTools,
+          systemPrompt: input.systemPrompt,
+        };
+        return makeRun('agent-default-config');
+      },
+      poll: async () => null,
+      cancel: async () => null,
+    };
+
+    const tool = new TaskTool({ store, runner });
+    const result = await tool.execute({
+      namespace: 'ns1',
+      subagent_type: 'Plan',
+      prompt: 'build plan',
+      run_in_background: true,
+    });
+    expect(result.success).toBe(true);
+    expect(captured?.allowedTools).toContain('glob');
+    expect(captured?.allowedTools).toContain('grep');
+    expect(captured?.allowedTools).toContain('file_read');
+    expect(captured?.systemPrompt).toContain('planning specialist');
+  });
+
+  it('filters requested allowed_tools through config whitelist', async () => {
+    let captured: { allowedTools?: string[]; systemPrompt?: string } | null = null;
+    const runner: SubagentRunnerAdapter = {
+      start: async (_ns, input) => {
+        captured = {
+          allowedTools: input.allowedTools,
+          systemPrompt: input.systemPrompt,
+        };
+        return makeRun('agent-filtered-config');
+      },
+      poll: async () => null,
+      cancel: async () => null,
+    };
+
+    const tool = new TaskTool({ store, runner });
+    const result = await tool.execute({
+      namespace: 'ns2',
+      subagent_type: 'Plan',
+      prompt: 'plan with narrowed tools',
+      run_in_background: true,
+      allowed_tools: ['glob', 'bash', 'write_file'],
+    });
+    expect(result.success).toBe(true);
+    expect(captured?.allowedTools).toEqual(['glob']);
+
+    const payload = parseOutput<{ agent_run: { agentId: string } }>(result.output);
+    expect(payload.agent_run.agentId).toBe('agent-filtered-config');
+  });
+
+  it('injects find-skills defaults (skill + bash) and skill-discovery prompt', async () => {
+    let captured: { allowedTools?: string[]; systemPrompt?: string } | null = null;
+    const runner: SubagentRunnerAdapter = {
+      start: async (_ns, input) => {
+        captured = {
+          allowedTools: input.allowedTools,
+          systemPrompt: input.systemPrompt,
+        };
+        return makeRun('agent-find-skills-config');
+      },
+      poll: async () => null,
+      cancel: async () => null,
+    };
+
+    const tool = new TaskTool({ store, runner });
+    const result = await tool.execute({
+      namespace: 'ns3',
+      subagent_type: 'find-skills',
+      prompt: 'find and install skill for code review',
+      run_in_background: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(captured?.allowedTools).toEqual(['skill', 'bash']);
+    expect(captured?.systemPrompt).toContain('skill discovery and installation specialist');
+    expect(captured?.systemPrompt).toContain('Always try the skill tool first');
+    expect(captured?.systemPrompt).toContain('load the "find-skills" skill');
+  });
+});
