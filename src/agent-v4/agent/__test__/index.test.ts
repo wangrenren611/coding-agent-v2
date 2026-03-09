@@ -19,7 +19,7 @@ import type { Chunk, LLMProvider, ToolCall } from '../../../providers';
 import { AgentError } from '../error';
 import type { ToolConcurrencyPolicy } from '../../tool/types';
 import * as compactionModule from '../compaction';
-import { cleanupWriteBufferSessionFiles } from '../write-buffer';
+import { InMemoryToolExecutionLedger } from '../tool-execution-ledger';
 
 type ChunkDelta = NonNullable<NonNullable<Chunk['choices']>[number]>['delta'];
 
@@ -168,7 +168,10 @@ describe('StatelessAgent', () => {
       ])
     );
 
-    const agent = new StatelessAgent(provider, manager, { maxRetryCount: 3 });
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
     const onMessage = vi.fn();
     const events = await collectEvents(agent.runStream(createInput(), { onMessage, onCheckpoint: vi.fn() }));
 
@@ -204,7 +207,10 @@ describe('StatelessAgent', () => {
     );
 
     const controller = new AbortController();
-    const agent = new StatelessAgent(provider, manager, { maxRetryCount: 3 });
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
     await collectEvents(
       agent.runStream(
         {
@@ -222,6 +228,167 @@ describe('StatelessAgent', () => {
     const callConfig = generateStreamCalls[0]?.[1] as { temperature?: number; abortSignal?: AbortSignal };
     expect(callConfig.temperature).toBe(0.1);
     expect(callConfig.abortSignal).toBe(controller.signal);
+  });
+
+  it('injects systemPrompt as system message when input has no system role message', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi.fn().mockReturnValue(
+      toStream([
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { content: 'ok' } }],
+        },
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+        },
+      ])
+    );
+
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
+    await collectEvents(
+      agent.runStream(
+        {
+          ...createInput(),
+          systemPrompt: 'You are a strict code assistant',
+        },
+        { onMessage: vi.fn(), onCheckpoint: vi.fn() }
+      )
+    );
+
+    const generateStreamCalls = (provider.generateStream as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls;
+    const llmMessages = generateStreamCalls[0]?.[0] as Array<{ role: string; content: unknown }>;
+    expect(llmMessages[0]).toMatchObject({
+      role: 'system',
+      content: 'You are a strict code assistant',
+    });
+  });
+
+  it('emits max_steps done event when loop exits by step budget', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+
+    provider.generateStream = vi.fn().mockReturnValue(
+      toStream([
+        {
+          index: 0,
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    id: 'tool_max_steps_1',
+                    type: 'function',
+                    index: 0,
+                    function: { name: 'bash', arguments: '{"command":"echo hi"}' },
+                  },
+                ],
+                finish_reason: 'tool_calls',
+              } as unknown as ChunkDelta,
+            },
+          ],
+        },
+      ])
+    );
+    manager.execute = vi.fn().mockResolvedValue({ success: true, output: 'ok' });
+
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
+    const events = await collectEvents(
+      agent.runStream(
+        {
+          ...createInput(),
+          maxSteps: 1,
+        },
+        { onMessage: vi.fn(), onCheckpoint: vi.fn() }
+      )
+    );
+
+    const doneEvent = events.find((event) => event.type === 'done');
+    expect(doneEvent).toMatchObject({
+      type: 'done',
+      data: {
+        finishReason: 'max_steps',
+        steps: 1,
+      },
+    });
+  });
+
+  it('emits executionId on all progress events including per-tool progress', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+
+    provider.generateStream = vi
+      .fn()
+      .mockReturnValueOnce(
+        toStream([
+          {
+            index: 0,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      id: 'tool_progress_1',
+                      type: 'function',
+                      index: 0,
+                      function: { name: 'bash', arguments: '{"command":"echo 1"}' },
+                    },
+                    {
+                      id: 'tool_progress_2',
+                      type: 'function',
+                      index: 1,
+                      function: { name: 'bash', arguments: '{"command":"echo 2"}' },
+                    },
+                  ],
+                  finish_reason: 'tool_calls',
+                } as unknown as ChunkDelta,
+              },
+            ],
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        toStream([
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { content: 'done' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+          },
+        ])
+      );
+    manager.execute = vi.fn().mockResolvedValue({ success: true, output: 'ok' });
+
+    const agent = new StatelessAgent(provider, manager, { maxRetryCount: 3 });
+    const events = await collectEvents(
+      agent.runStream(
+        {
+          ...createInput(),
+          executionId: 'exec_progress_1',
+          maxSteps: 3,
+        },
+        { onMessage: vi.fn(), onCheckpoint: vi.fn() }
+      )
+    );
+    const progressEvents = events.filter((event) => event.type === 'progress');
+    expect(progressEvents.length).toBeGreaterThan(0);
+    for (const progressEvent of progressEvents) {
+      expect(progressEvent.data).toMatchObject({
+        executionId: 'exec_progress_1',
+      });
+    }
   });
 
   it('enforces llm timeout budget and emits timeout error event', async () => {
@@ -871,16 +1038,13 @@ describe('StatelessAgent', () => {
     expect(payload.buffer?.bufferId).toBe('wf_call_1');
     expect(payload.nextAction).toBe('resume');
 
-    const sessions = (agent as unknown as {
-      writeBufferSessions: Map<
-        string,
-        { session: { rawArgsPath: string; contentPath: string; metaPath: string } }
-      >;
-    }).writeBufferSessions;
-    for (const runtime of sessions.values()) {
-      await cleanupWriteBufferSessionFiles(runtime.session);
-    }
-    sessions.clear();
+    const writeBufferCacheDir = path.resolve(process.cwd(), '.agent-cache', 'write-file');
+    const cacheEntries = await fs.readdir(writeBufferCacheDir).catch(() => []);
+    await Promise.all(
+      cacheEntries
+        .filter((entry) => entry.includes('_wf_call_1_'))
+        .map((entry) => fs.rm(path.join(writeBufferCacheDir, entry), { force: true }))
+    );
   });
 
   it('supports streamed write_file direct/resume/finalize across multiple llm turns', async () => {
@@ -1293,7 +1457,10 @@ describe('StatelessAgent', () => {
       .mockReturnValueOnce(toolCallStream())
       .mockReturnValueOnce(doneStream());
 
-    const agent = new StatelessAgent(provider, manager, { maxRetryCount: 3 });
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
 
     const runInput = () => ({
       ...createInput(),
@@ -1319,6 +1486,86 @@ describe('StatelessAgent', () => {
       data: { content: 'tool-once', tool_call_id: toolCallId },
     });
     expect(manager.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('deduplicates concurrent duplicate tool execution for same executionId + toolCallId', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    const toolCallId = 'tool_idempotent_race_1';
+
+    manager.execute = vi.fn().mockImplementation(
+      async () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve({ success: true, output: 'tool-race-once' }), 20);
+        })
+    );
+
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
+    const toolCall: ToolCall = {
+      id: toolCallId,
+      type: 'function',
+      index: 0,
+      function: { name: 'bash', arguments: '{"command":"echo race"}' },
+    };
+
+    const [eventsA, eventsB] = await Promise.all([
+      collectEvents(
+        (agent as any).executeTool(
+          toolCall,
+          1,
+          { onMessage: vi.fn() },
+          undefined,
+          'exec_idempotent_race_1'
+        )
+      ),
+      collectEvents(
+        (agent as any).executeTool(
+          toolCall,
+          1,
+          { onMessage: vi.fn() },
+          undefined,
+          'exec_idempotent_race_1'
+        )
+      ),
+    ]);
+    const toolResultA = eventsA.find((event) => event.type === 'tool_result');
+    const toolResultB = eventsB.find((event) => event.type === 'tool_result');
+
+    expect(toolResultA).toMatchObject({
+      type: 'tool_result',
+      data: { content: 'tool-race-once', tool_call_id: toolCallId },
+    });
+    expect(toolResultB).toMatchObject({
+      type: 'tool_result',
+      data: { content: 'tool-race-once', tool_call_id: toolCallId },
+    });
+    expect(manager.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cache tool result by default without external ledger', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    manager.execute = vi.fn().mockResolvedValue({ success: true, output: 'tool-no-cache' });
+
+    const agent = new StatelessAgent(provider, manager, { maxRetryCount: 3 });
+    const toolCall: ToolCall = {
+      id: 'tool_no_cache_1',
+      type: 'function',
+      index: 0,
+      function: { name: 'bash', arguments: '{"command":"echo nc"}' },
+    };
+
+    await collectEvents(
+      (agent as any).executeTool(toolCall, 1, { onMessage: vi.fn() }, undefined, 'exec_no_cache_1')
+    );
+    await collectEvents(
+      (agent as any).executeTool(toolCall, 1, { onMessage: vi.fn() }, undefined, 'exec_no_cache_1')
+    );
+
+    expect(manager.execute).toHaveBeenCalledTimes(2);
   });
 
   it('processToolCalls supports bounded concurrency when configured', async () => {

@@ -54,6 +54,7 @@ import {
   type TimeoutStage,
 } from './timeout-budget';
 import {
+  buildWriteFileSessionKey as createWriteFileSessionKey,
   bufferWriteFileToolCallChunk as bufferWriteFileChunk,
   cleanupWriteFileBufferIfNeeded as cleanupWriteFileBufferSession,
   enrichWriteFileToolError as buildWriteFileToolErrorPayload,
@@ -64,11 +65,9 @@ import {
 } from './write-file-session';
 import {
   createToolResultMessage as buildToolResultMessage,
-  getLedgerRecord as readToolLedgerRecord,
-  InMemoryToolExecutionLedger,
-  recordLedgerResult as writeToolLedgerRecord,
+  NoopToolExecutionLedger,
+  executeToolCallWithLedger as executeWithToolLedger,
   type ToolExecutionLedger,
-  type ToolExecutionLedgerRecord,
 } from './tool-execution-ledger';
 import {
   emitMetric as pushMetric,
@@ -106,6 +105,10 @@ export interface AgentConfig {
   maxConcurrentToolCalls?: number;
   toolConcurrencyPolicyResolver?: (toolCall: ToolCall) => ToolConcurrencyPolicy;
   logger?: AgentLogger;
+  /**
+   * Optional external idempotency ledger.
+   * Defaults to Noop to keep the agent stateless across process restarts and scale-out replicas.
+   */
   toolExecutionLedger?: ToolExecutionLedger;
   timeoutBudgetMs?: number;
   llmTimeoutRatio?: number;
@@ -140,14 +143,13 @@ export class StatelessAgent extends EventEmitter {
   private toolExecutor: ToolManager;
   private config: InternalAgentConfig;
   private logger: AgentLogger;
-  private writeBufferSessions = new Map<string, WriteBufferRuntime>();
   private toolExecutionLedger: ToolExecutionLedger;
   constructor(llmProvider: LLMProvider, toolExecutor: ToolManager, config: AgentConfig) {
     super();
     this.llmProvider = llmProvider;
     this.toolExecutor = toolExecutor;
     this.logger = config.logger ?? {};
-    this.toolExecutionLedger = config.toolExecutionLedger ?? new InMemoryToolExecutionLedger();
+    this.toolExecutionLedger = config.toolExecutionLedger ?? new NoopToolExecutionLedger();
     const llmTimeoutRatio = Number.isFinite(config.llmTimeoutRatio)
       ? Number(config.llmTimeoutRatio)
       : DEFAULT_LLM_TIMEOUT_RATIO;
@@ -218,6 +220,19 @@ export class StatelessAgent extends EventEmitter {
   ): AsyncGenerator<StreamEvent, void, unknown> {
     const { messages: inputMessages, maxSteps = 100, abortSignal: inputAbortSignal } = input;
     const messages = [...inputMessages];
+    if (typeof input.systemPrompt === 'string' && input.systemPrompt.trim().length > 0) {
+      const hasSystemMessage = messages.some((message) => message.role === 'system');
+      if (!hasSystemMessage) {
+        messages.unshift({
+          messageId: generateId('msg_sys_'),
+          type: 'system',
+          role: 'system',
+          content: input.systemPrompt,
+          timestamp: Date.now(),
+        });
+      }
+    }
+    const writeBufferSessions = new Map<string, WriteBufferRuntime>();
     const timeoutBudget = this.createTimeoutBudgetState(input);
     const executionScope = this.createExecutionAbortScope(inputAbortSignal, timeoutBudget);
     const abortSignal = executionScope.signal;
@@ -237,8 +252,9 @@ export class StatelessAgent extends EventEmitter {
 
     let stepIndex = 0;
     let retryCount = 0;
-    let runOutcome: 'done' | 'error' | 'aborted' | 'timeout' | 'max_retries' = 'done';
+    let runOutcome: 'done' | 'error' | 'aborted' | 'timeout' | 'max_retries' | 'max_steps' = 'done';
     let runErrorCode: string | undefined;
+    let terminalDoneEmitted = false;
 
     try {
       while (stepIndex < maxSteps) {
@@ -305,7 +321,10 @@ export class StatelessAgent extends EventEmitter {
             const llmGen = this.callLLMAndProcessStream(
               messages,
               this.mergeLLMConfig(input.config, llmScope.signal),
-              llmScope.signal
+              llmScope.signal,
+              input.executionId,
+              stepIndex,
+              writeBufferSessions
             );
             for (;;) {
               const next = await llmGen.next();
@@ -386,7 +405,8 @@ export class StatelessAgent extends EventEmitter {
                 toolScope.signal,
                 input.executionId,
                 traceId,
-                toolStageSpan.spanId
+                toolStageSpan.spanId,
+                writeBufferSessions
               );
               for (;;) {
                 const next = await toolGen.next();
@@ -439,7 +459,8 @@ export class StatelessAgent extends EventEmitter {
 
           retryCount = 0;
           runOutcome = 'done';
-          yield* this.yieldDoneEvent(stepIndex);
+          terminalDoneEmitted = true;
+          yield* this.yieldDoneEvent(stepIndex, 'stop');
           break;
         } catch (error) {
           const timeoutError = this.normalizeTimeoutBudgetError(error, abortSignal);
@@ -506,6 +527,12 @@ export class StatelessAgent extends EventEmitter {
           }
         }
       }
+
+      if (!terminalDoneEmitted && runOutcome === 'done' && stepIndex >= maxSteps) {
+        runOutcome = 'max_steps';
+        terminalDoneEmitted = true;
+        yield* this.yieldDoneEvent(stepIndex, 'max_steps');
+      }
     } finally {
       const runLatencyMs = Date.now() - runSpan.startedAt;
       await this.emitMetric(callbacks, {
@@ -568,18 +595,27 @@ export class StatelessAgent extends EventEmitter {
   private async mergeToolCalls(
     existing: ToolCall[],
     newCalls: ToolCall[],
-    messageId: string
+    messageId: string,
+    executionId: string | undefined,
+    stepIndex: number,
+    writeBufferSessions: Map<string, WriteBufferRuntime>
   ): Promise<ToolCall[]> {
     return mergeToolCallsWithBuffer({
       existing,
       incoming: newCalls,
       messageId,
       onArgumentsChunk: async (toolCall, argumentsChunk, chunkMessageId) => {
+        const sessionKey = createWriteFileSessionKey({
+          executionId,
+          stepIndex,
+          toolCallId: toolCall.id,
+        });
         await bufferWriteFileChunk({
           toolCall,
           argumentsChunk,
           messageId: chunkMessageId,
-          sessions: this.writeBufferSessions,
+          sessionKey,
+          sessions: writeBufferSessions,
           onError: (error) => this.logError('[Agent] Failed to buffer write_file tool chunk:', error),
         });
       },
@@ -589,7 +625,10 @@ export class StatelessAgent extends EventEmitter {
   private async *callLLMAndProcessStream(
     messages: Message[],
     config: AgentInput['config'],
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    executionId?: string,
+    stepIndex = 0,
+    writeBufferSessions: Map<string, WriteBufferRuntime> = new Map()
   ): AsyncGenerator<StreamEvent, { assistantMessage: Message; toolCalls: ToolCall[] }, unknown> {
     const llmMessages = messages.map((msg) => this.convertMessageToLLMMessage(msg));
     const stream = this.llmProvider.generateStream(llmMessages, config);
@@ -645,7 +684,10 @@ export class StatelessAgent extends EventEmitter {
         toolCalls = await this.mergeToolCalls(
           toolCalls,
           delta.tool_calls,
-          assistantMessage.messageId
+          assistantMessage.messageId,
+          executionId,
+          stepIndex,
+          writeBufferSessions
         );
 
         yield {
@@ -678,7 +720,8 @@ export class StatelessAgent extends EventEmitter {
     abortSignal?: AbortSignal,
     executionId?: string,
     traceId?: string,
-    parentSpanId?: string
+    parentSpanId?: string,
+    writeBufferSessions: Map<string, WriteBufferRuntime> = new Map()
   ): AsyncGenerator<StreamEvent, Message, unknown> {
     this.throwIfAborted(abortSignal);
     const effectiveTraceId = traceId || executionId || generateId('trace_');
@@ -692,125 +735,142 @@ export class StatelessAgent extends EventEmitter {
     let cachedHit = false;
     let toolSucceeded = false;
     try {
-      const cachedResult = await this.getLedgerRecord(executionId, toolCall.id);
-      if (cachedResult) {
-        cachedHit = true;
-        toolSucceeded = true;
-        const replayResult = this.createToolResultMessageFromLedger(toolCall.id, cachedResult.output);
-        await this.safeCallback(callbacks?.onMessage, replayResult);
-        yield {
-          type: 'tool_result',
-          data: replayResult,
-        };
-        return replayResult;
-      }
-
-      const toolExecResult = await this.toolExecutor.execute(toolCall, {
-        onChunk: (chunk) => {
-          this.emit('tool_chunk', {
-            toolCallId: toolCall.id,
-            toolName: toolCall.function.name,
-            arguments: toolCall.function.arguments,
-            chunk: chunk.data,
-            chunkType: chunk.type,
-          });
-        },
-        onConfirm: async (info) => {
-          return new Promise((resolve) => {
-            let settled = false;
-            const abortHandler = () => {
-              if (!settled) {
-                settled = true;
-                clearTimeout(timeout);
-                resolve({ approved: false, message: ABORTED_MESSAGE });
-              }
-            };
-
-            const timeout = setTimeout(() => {
-              if (!settled) {
-                settled = true;
-                const err = new ConfirmationTimeoutError();
-                resolve({ approved: false, message: err.message });
-              }
-            }, 30000);
-
-            const cleanup = () => {
-              if (!settled) {
-                settled = true;
-                clearTimeout(timeout);
-              }
-              abortSignal?.removeEventListener('abort', abortHandler);
-            };
-
-            if (abortSignal?.aborted) {
-              abortHandler();
-              return;
-            }
-            abortSignal?.addEventListener('abort', abortHandler, { once: true });
-
-            this.emit('tool_confirm', {
-              ...info,
-              resolve: (decision: ToolDecision) => {
-                cleanup();
-                resolve(decision);
-              },
-            });
-          });
-        },
-        onPolicyCheck: callbacks?.onToolPolicy
-          ? async (info) => {
-              const decision = await callbacks.onToolPolicy?.(info);
-              return decision || { allowed: true };
-            }
-          : undefined,
+      const writeFileSessionKey = createWriteFileSessionKey({
+        executionId,
+        stepIndex,
         toolCallId: toolCall.id,
-        loopIndex: stepIndex,
-        agent: this,
-        toolAbortSignal: abortSignal,
       });
 
-      const toolResult: Message = {
-        ...this.createToolResultMessageFromLedger(toolCall.id, ''),
-        content: '',
-      };
+      const ledgerResult = await executeWithToolLedger({
+        ledger: this.toolExecutionLedger,
+        executionId,
+        toolCallId: toolCall.id,
+        execute: async () => {
+          const toolExecResult = await this.toolExecutor.execute(toolCall, {
+            onChunk: (chunk) => {
+              this.emit('tool_chunk', {
+                toolCallId: toolCall.id,
+                toolName: toolCall.function.name,
+                arguments: toolCall.function.arguments,
+                chunk: chunk.data,
+                chunkType: chunk.type,
+              });
+            },
+            onConfirm: async (info) => {
+              return new Promise((resolve) => {
+                let settled = false;
+                const abortHandler = () => {
+                  if (!settled) {
+                    settled = true;
+                    clearTimeout(timeout);
+                    resolve({ approved: false, message: ABORTED_MESSAGE });
+                  }
+                };
 
-      if (toolExecResult.success) {
-        toolSucceeded = true;
-        toolResult.content = toolExecResult.output || '';
-        await cleanupWriteFileBufferSession(toolCall, this.writeBufferSessions);
-      } else {
-        if (isWriteFileTool(toolCall)) {
-          if (isWriteFileProtocolResponse(toolExecResult.output)) {
-            toolResult.content = toolExecResult.output;
-          } else if (needEnrichWriteFileFailure(toolExecResult.error, toolExecResult.output)) {
-            const errorContent =
-              toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
-            toolResult.content = await buildWriteFileToolErrorPayload(
-              toolCall,
-              errorContent,
-              this.writeBufferSessions
-            );
+                const timeout = setTimeout(() => {
+                  if (!settled) {
+                    settled = true;
+                    const err = new ConfirmationTimeoutError();
+                    resolve({ approved: false, message: err.message });
+                  }
+                }, 30000);
+
+                const cleanup = () => {
+                  if (!settled) {
+                    settled = true;
+                    clearTimeout(timeout);
+                  }
+                  abortSignal?.removeEventListener('abort', abortHandler);
+                };
+
+                if (abortSignal?.aborted) {
+                  abortHandler();
+                  return;
+                }
+                abortSignal?.addEventListener('abort', abortHandler, { once: true });
+
+                this.emit('tool_confirm', {
+                  ...info,
+                  resolve: (decision: ToolDecision) => {
+                    cleanup();
+                    resolve(decision);
+                  },
+                });
+              });
+            },
+            onPolicyCheck: callbacks?.onToolPolicy
+              ? async (info) => {
+                  const decision = await callbacks.onToolPolicy?.(info);
+                  return decision || { allowed: true };
+                }
+              : undefined,
+            toolCallId: toolCall.id,
+            loopIndex: stepIndex,
+            agent: this,
+            toolAbortSignal: abortSignal,
+          });
+
+          let toolOutput = '';
+          let errorCode: string | undefined;
+
+          if (toolExecResult.success) {
+            toolOutput = toolExecResult.output || '';
+            await cleanupWriteFileBufferSession(toolCall, writeBufferSessions, writeFileSessionKey);
           } else {
-            const errorContent =
-              toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
-            toolResult.content = errorContent;
+            if (isWriteFileTool(toolCall)) {
+              if (isWriteFileProtocolResponse(toolExecResult.output)) {
+                toolOutput = toolExecResult.output;
+              } else if (needEnrichWriteFileFailure(toolExecResult.error, toolExecResult.output)) {
+                const errorContent =
+                  toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
+                toolOutput = await buildWriteFileToolErrorPayload(
+                  toolCall,
+                  errorContent,
+                  writeBufferSessions,
+                  writeFileSessionKey
+                );
+              } else {
+                toolOutput =
+                  toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
+              }
+            } else {
+              toolOutput =
+                toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
+            }
+            errorCode = this.extractErrorCode(toolExecResult.error) || 'TOOL_EXECUTION_FAILED';
           }
-        } else {
-          toolResult.content =
-            toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
-        }
-        toolErrorCode = this.extractErrorCode(toolExecResult.error) || 'TOOL_EXECUTION_FAILED';
-      }
 
-      await this.safeCallback(callbacks?.onMessage, toolResult);
-      await this.recordLedgerResult(executionId, toolCall.id, toolExecResult, toolResult.content);
+          return {
+            success: toolExecResult.success,
+            output: toolOutput,
+            errorName: toolExecResult.error?.name,
+            errorMessage: toolExecResult.error?.message,
+            errorCode,
+            recordedAt: Date.now(),
+          };
+        },
+        onError: (error) => {
+          this.logError('[Agent] Failed to execute tool with ledger:', error, {
+            executionId,
+            stepIndex,
+            toolCallId: toolCall.id,
+          });
+        },
+      });
+
+      cachedHit = ledgerResult.fromCache;
+      toolSucceeded = ledgerResult.record.success;
+      toolErrorCode = ledgerResult.record.errorCode;
+
+      const replayResult = this.createToolResultMessageFromLedger(toolCall.id, ledgerResult.record.output);
+      await this.safeCallback(callbacks?.onMessage, replayResult);
 
       yield {
         type: 'tool_result',
-        data: toolResult,
+        data: replayResult,
       };
 
-      return toolResult;
+      return replayResult;
     } catch (error) {
       toolErrorCode = this.extractErrorCode(error) || 'TOOL_EXECUTION_FAILED';
       throw error;
@@ -861,19 +921,13 @@ export class StatelessAgent extends EventEmitter {
     abortSignal?: AbortSignal,
     executionId?: string,
     traceId?: string,
-    parentSpanId?: string
+    parentSpanId?: string,
+    writeBufferSessions: Map<string, WriteBufferRuntime> = new Map()
   ): AsyncGenerator<StreamEvent, Message, unknown> {
     if (this.config.maxConcurrentToolCalls <= 1 || toolCalls.length <= 1) {
       for (const toolCall of toolCalls) {
         this.throwIfAborted(abortSignal);
-        yield {
-          type: 'progress',
-          data: {
-            stepIndex,
-            currentAction: 'tool',
-            messageCount: messages.length,
-          },
-        };
+        yield* this.emitProgress(executionId, stepIndex, 'tool', messages.length);
 
         const toolGen = this.executeTool(
           toolCall,
@@ -882,7 +936,8 @@ export class StatelessAgent extends EventEmitter {
           abortSignal,
           executionId,
           traceId,
-          parentSpanId
+          parentSpanId,
+          writeBufferSessions
         );
         let resultMessage: Message | undefined;
         for (;;) {
@@ -910,14 +965,7 @@ export class StatelessAgent extends EventEmitter {
 
     for (let i = 0; i < plans.length; i++) {
       this.throwIfAborted(abortSignal);
-      yield {
-        type: 'progress',
-        data: {
-          stepIndex,
-          currentAction: 'tool',
-          messageCount: messages.length,
-        },
-      };
+      yield* this.emitProgress(executionId, stepIndex, 'tool', messages.length);
     }
 
     const waves = this.buildExecutionWaves(plans);
@@ -933,7 +981,8 @@ export class StatelessAgent extends EventEmitter {
             abortSignal,
             executionId,
             traceId,
-            parentSpanId
+            parentSpanId,
+            writeBufferSessions
           )
         );
         continue;
@@ -946,7 +995,8 @@ export class StatelessAgent extends EventEmitter {
         abortSignal,
         executionId,
         traceId,
-        parentSpanId
+        parentSpanId,
+        writeBufferSessions
       );
       allResults.push(...parallelResults);
     }
@@ -996,7 +1046,8 @@ export class StatelessAgent extends EventEmitter {
     abortSignal?: AbortSignal,
     executionId?: string,
     traceId?: string,
-    parentSpanId?: string
+    parentSpanId?: string,
+    writeBufferSessions: Map<string, WriteBufferRuntime> = new Map()
   ): Promise<Array<{ events: StreamEvent[]; message?: Message }>> {
     const tasks = plans.map((plan) => ({
       lockKey: plan.policy.lockKey,
@@ -1008,7 +1059,8 @@ export class StatelessAgent extends EventEmitter {
           abortSignal,
           executionId,
           traceId,
-          parentSpanId
+          parentSpanId,
+          writeBufferSessions
         ),
     }));
     return this.runWithConcurrencyAndLock(tasks, this.config.maxConcurrentToolCalls);
@@ -1021,7 +1073,8 @@ export class StatelessAgent extends EventEmitter {
     abortSignal?: AbortSignal,
     executionId?: string,
     traceId?: string,
-    parentSpanId?: string
+    parentSpanId?: string,
+    writeBufferSessions: Map<string, WriteBufferRuntime> = new Map()
   ): Promise<{ events: StreamEvent[]; message?: Message }> {
     const events: StreamEvent[] = [];
     const toolGen = this.executeTool(
@@ -1031,7 +1084,8 @@ export class StatelessAgent extends EventEmitter {
       abortSignal,
       executionId,
       traceId,
-      parentSpanId
+      parentSpanId,
+      writeBufferSessions
     );
     let resultMessage: Message | undefined;
     for (;;) {
@@ -1087,8 +1141,11 @@ export class StatelessAgent extends EventEmitter {
     yield createErrorEvent(error);
   }
 
-  private *yieldDoneEvent(stepIndex: number): Generator<StreamEvent> {
-    yield createDoneEvent(stepIndex);
+  private *yieldDoneEvent(
+    stepIndex: number,
+    finishReason: 'stop' | 'max_steps' = 'stop'
+  ): Generator<StreamEvent> {
+    yield createDoneEvent(stepIndex, finishReason);
   }
 
   private mergeLLMConfig(
@@ -1223,41 +1280,6 @@ export class StatelessAgent extends EventEmitter {
       toolCallId,
       content,
       createMessageId: () => generateId('msg_'),
-    });
-  }
-
-  private async getLedgerRecord(
-    executionId: string | undefined,
-    toolCallId: string
-  ): Promise<ToolExecutionLedgerRecord | undefined> {
-    return readToolLedgerRecord({
-      ledger: this.toolExecutionLedger,
-      executionId,
-      toolCallId,
-      onError: (error) => this.logError('[Agent] Failed to read tool execution ledger:', error),
-    });
-  }
-
-  private async recordLedgerResult(
-    executionId: string | undefined,
-    toolCallId: string,
-    toolExecResult: {
-      success: boolean;
-      output?: string;
-      error?: {
-        name?: string;
-        message?: string;
-      };
-    },
-    output: string
-  ): Promise<void> {
-    await writeToolLedgerRecord({
-      ledger: this.toolExecutionLedger,
-      executionId,
-      toolCallId,
-      toolExecResult,
-      output,
-      onError: (error) => this.logError('[Agent] Failed to write tool execution ledger:', error),
     });
   }
 }

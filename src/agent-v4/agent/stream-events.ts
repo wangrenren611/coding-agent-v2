@@ -47,11 +47,14 @@ export function createErrorEvent(error: AgentError): StreamEvent {
   };
 }
 
-export function createDoneEvent(stepIndex: number): StreamEvent {
+export function createDoneEvent(
+  stepIndex: number,
+  finishReason: 'stop' | 'max_steps' = 'stop'
+): StreamEvent {
   return {
     type: 'done',
     data: {
-      finishReason: 'stop',
+      finishReason,
       steps: stepIndex,
     },
   };

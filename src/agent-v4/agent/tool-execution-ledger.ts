@@ -5,16 +5,57 @@ export interface ToolExecutionLedgerRecord {
   output: string;
   errorName?: string;
   errorMessage?: string;
+  errorCode?: string;
   recordedAt: number;
+}
+
+export interface ToolExecutionOnceResult {
+  record: ToolExecutionLedgerRecord;
+  fromCache: boolean;
 }
 
 export interface ToolExecutionLedger {
   get(executionId: string, toolCallId: string): Promise<ToolExecutionLedgerRecord | undefined>;
   set(executionId: string, toolCallId: string, record: ToolExecutionLedgerRecord): Promise<void>;
+  executeOnce(
+    executionId: string,
+    toolCallId: string,
+    execute: () => Promise<ToolExecutionLedgerRecord>
+  ): Promise<ToolExecutionOnceResult>;
+}
+
+export class NoopToolExecutionLedger implements ToolExecutionLedger {
+  async get(
+    _executionId: string,
+    _toolCallId: string
+  ): Promise<ToolExecutionLedgerRecord | undefined> {
+    return undefined;
+  }
+
+  async set(
+    _executionId: string,
+    _toolCallId: string,
+    _record: ToolExecutionLedgerRecord
+  ): Promise<void> {
+    return;
+  }
+
+  async executeOnce(
+    _executionId: string,
+    _toolCallId: string,
+    execute: () => Promise<ToolExecutionLedgerRecord>
+  ): Promise<ToolExecutionOnceResult> {
+    const record = await execute();
+    return {
+      record,
+      fromCache: false,
+    };
+  }
 }
 
 export class InMemoryToolExecutionLedger implements ToolExecutionLedger {
   private readonly store = new Map<string, ToolExecutionLedgerRecord>();
+  private readonly inflight = new Map<string, Promise<ToolExecutionLedgerRecord>>();
 
   async get(
     executionId: string,
@@ -25,6 +66,47 @@ export class InMemoryToolExecutionLedger implements ToolExecutionLedger {
 
   async set(executionId: string, toolCallId: string, record: ToolExecutionLedgerRecord): Promise<void> {
     this.store.set(this.buildKey(executionId, toolCallId), record);
+  }
+
+  async executeOnce(
+    executionId: string,
+    toolCallId: string,
+    execute: () => Promise<ToolExecutionLedgerRecord>
+  ): Promise<ToolExecutionOnceResult> {
+    const key = this.buildKey(executionId, toolCallId);
+    const cached = this.store.get(key);
+    if (cached) {
+      return {
+        record: cached,
+        fromCache: true,
+      };
+    }
+
+    const inflight = this.inflight.get(key);
+    if (inflight) {
+      const record = await inflight;
+      return {
+        record,
+        fromCache: true,
+      };
+    }
+
+    const pending = (async () => {
+      const record = await execute();
+      this.store.set(key, record);
+      return record;
+    })();
+    this.inflight.set(key, pending);
+
+    try {
+      const record = await pending;
+      return {
+        record,
+        fromCache: false,
+      };
+    } finally {
+      this.inflight.delete(key);
+    }
   }
 
   private buildKey(executionId: string, toolCallId: string): string {
@@ -48,52 +130,26 @@ export function createToolResultMessage(params: {
   };
 }
 
-export async function getLedgerRecord(params: {
+export async function executeToolCallWithLedger(params: {
   ledger: ToolExecutionLedger;
   executionId: string | undefined;
   toolCallId: string;
+  execute: () => Promise<ToolExecutionLedgerRecord>;
   onError?: (error: unknown) => void;
-}): Promise<ToolExecutionLedgerRecord | undefined> {
-  const { ledger, executionId, toolCallId, onError } = params;
-  if (!executionId) {
-    return undefined;
-  }
+}): Promise<ToolExecutionOnceResult> {
+  const { ledger, executionId, toolCallId, execute, onError } = params;
   try {
-    return await ledger.get(executionId, toolCallId);
-  } catch (error) {
-    onError?.(error);
-    return undefined;
-  }
-}
+    if (!executionId) {
+      const record = await execute();
+      return {
+        record,
+        fromCache: false,
+      };
+    }
 
-export async function recordLedgerResult(params: {
-  ledger: ToolExecutionLedger;
-  executionId: string | undefined;
-  toolCallId: string;
-  toolExecResult: {
-    success: boolean;
-    output?: string;
-    error?: {
-      name?: string;
-      message?: string;
-    };
-  };
-  output: string;
-  onError?: (error: unknown) => void;
-}): Promise<void> {
-  const { ledger, executionId, toolCallId, toolExecResult, output, onError } = params;
-  if (!executionId) {
-    return;
-  }
-  try {
-    await ledger.set(executionId, toolCallId, {
-      success: toolExecResult.success,
-      output,
-      errorName: toolExecResult.error?.name,
-      errorMessage: toolExecResult.error?.message,
-      recordedAt: Date.now(),
-    });
+    return await ledger.executeOnce(executionId, toolCallId, execute);
   } catch (error) {
     onError?.(error);
+    throw error;
   }
 }

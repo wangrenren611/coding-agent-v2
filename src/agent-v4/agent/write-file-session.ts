@@ -25,6 +25,16 @@ interface WriteFileProtocolPayload {
   nextAction: 'resume' | 'finalize' | 'none';
 }
 
+export function buildWriteFileSessionKey(params: {
+  executionId?: string;
+  stepIndex: number;
+  toolCallId: string;
+}): string {
+  const { executionId, stepIndex, toolCallId } = params;
+  const executionKey = executionId && executionId.trim().length > 0 ? executionId : '__anonymous__';
+  return `${executionKey}:${stepIndex}:${toolCallId}`;
+}
+
 export function isWriteFileToolCall(toolCall: ToolCall): boolean {
   return toolCall.function.name?.trim() === WRITE_FILE_TOOL_NAME;
 }
@@ -93,16 +103,18 @@ export async function bufferWriteFileToolCallChunk(params: {
   toolCall: ToolCall;
   argumentsChunk: string;
   messageId: string;
+  sessionKey?: string;
   sessions: Map<string, WriteBufferRuntime>;
   onError?: (error: unknown) => void;
 }): Promise<void> {
-  const { toolCall, argumentsChunk, messageId, sessions, onError } = params;
+  const { toolCall, argumentsChunk, messageId, sessionKey, sessions, onError } = params;
   if (!isWriteFileToolCall(toolCall)) {
     return;
   }
 
   try {
-    let runtime = sessions.get(toolCall.id);
+    const runtimeKey = sessionKey || toolCall.id;
+    let runtime = sessions.get(runtimeKey);
     if (!runtime) {
       const session = await createWriteBufferSession({
         messageId,
@@ -112,7 +124,7 @@ export async function bufferWriteFileToolCallChunk(params: {
         session,
         bufferedContentChars: 0,
       };
-      sessions.set(toolCall.id, runtime);
+      sessions.set(runtimeKey, runtime);
     }
 
     if (argumentsChunk) {
@@ -139,12 +151,13 @@ export async function bufferWriteFileToolCallChunk(params: {
 export async function enrichWriteFileToolError(
   toolCall: ToolCall,
   content: string,
-  sessions: Map<string, WriteBufferRuntime>
+  sessions: Map<string, WriteBufferRuntime>,
+  sessionKey?: string
 ): Promise<string> {
   if (!isWriteFileToolCall(toolCall)) {
     return content;
   }
-  const runtime = sessions.get(toolCall.id);
+  const runtime = sessions.get(sessionKey || toolCall.id);
   if (!runtime) {
     return JSON.stringify({
       ok: false,
@@ -211,15 +224,17 @@ export function shouldEnrichWriteFileFailure(
 
 export async function cleanupWriteFileBufferIfNeeded(
   toolCall: ToolCall,
-  sessions: Map<string, WriteBufferRuntime>
+  sessions: Map<string, WriteBufferRuntime>,
+  sessionKey?: string
 ): Promise<void> {
   if (!isWriteFileToolCall(toolCall)) {
     return;
   }
-  const runtime = sessions.get(toolCall.id);
+  const runtimeKey = sessionKey || toolCall.id;
+  const runtime = sessions.get(runtimeKey);
   if (!runtime) {
     return;
   }
-  sessions.delete(toolCall.id);
+  sessions.delete(runtimeKey);
   await cleanupWriteBufferSessionFiles(runtime.session);
 }
