@@ -1,4 +1,5 @@
-﻿import type {
+import { isAbsolute, resolve as resolvePath } from "node:path";
+import type {
   AgentEventHandlers,
   AgentLoopEvent,
   AgentRunResult,
@@ -12,24 +13,27 @@
 } from "./types";
 import type { AgentModelOption, AgentModelSwitchResult } from "./model-types";
 import {
+  type AgentAppRunResultLike,
+  type AgentAppServiceLike,
+  type AgentAppStoreLike,
+  type AgentV4MessageLike,
+  type CliEventEnvelopeLike,
   getSourceModules,
   resolveWorkspaceRoot,
-  type LoggerLike,
-  type MemoryManagerLike,
   type SourceModules,
-  type ToolManagerLike,
+  type StatelessAgentLike,
+  type ToolConfirmEventLike,
 } from "./source-modules";
 
 type RuntimeCore = {
   modelId: string;
   modelLabel: string;
   maxSteps: number;
-  sessionId: string;
+  conversationId: string;
   workspaceRoot: string;
-  provider: unknown;
-  toolManager: ToolManagerLike;
-  memoryManager: MemoryManagerLike;
-  logger: LoggerLike;
+  agent: StatelessAgentLike;
+  appService: AgentAppServiceLike;
+  appStore: AgentAppStoreLike;
   modules: SourceModules;
 };
 
@@ -38,6 +42,8 @@ let preferredModelId = process.env.AGENT_MODEL?.trim() || undefined;
 
 const DEFAULT_MODEL = "glm-5";
 const DEFAULT_MAX_STEPS = 200;
+const DEFAULT_MAX_RETRY_COUNT = 2;
+const DEFAULT_DB_PATH = ".agent-v4/agent.db";
 
 const toBoolean = (raw?: string): boolean | undefined => {
   if (!raw) {
@@ -70,7 +76,14 @@ const resolveModelId = (modules: SourceModules, requested?: string): string => {
   if (normalized && ids.includes(normalized)) {
     return normalized;
   }
-  return DEFAULT_MODEL;
+  if (ids.includes(DEFAULT_MODEL)) {
+    return DEFAULT_MODEL;
+  }
+  const fallback = ids[0];
+  if (!fallback) {
+    throw new Error("No models are registered in ProviderRegistry.");
+  }
+  return fallback;
 };
 
 const requireModelApiKey = (modules: SourceModules, modelId: string) => {
@@ -98,7 +111,27 @@ const resolveToolDecision = () => {
   return "approve";
 };
 
-const safeInvoke = (fn: (() => void) | undefined) => {
+const resolveConversationId = () => {
+  const fromEnv = process.env.AGENT_CONVERSATION_ID?.trim() || process.env.AGENT_SESSION_ID?.trim();
+  if (fromEnv) {
+    return fromEnv;
+  }
+  return `opentui-${Date.now()}`;
+};
+
+const resolveDbPath = (workspaceRoot: string): string => {
+  const raw = (
+    process.env.AGENT_V4_DB_PATH?.trim() ||
+    process.env.AGENT_DB_PATH?.trim() ||
+    DEFAULT_DB_PATH
+  ).trim();
+  if (isAbsolute(raw)) {
+    return raw;
+  }
+  return resolvePath(workspaceRoot, raw);
+};
+
+const safeInvoke = (fn: (() => void) | undefined): void => {
   if (!fn) {
     return;
   }
@@ -107,39 +140,127 @@ const safeInvoke = (fn: (() => void) | undefined) => {
   } catch {}
 };
 
-const createStreamPlugin = (handlers: AgentEventHandlers) => {
+const asRecord = (value: unknown): Record<string, unknown> => {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+};
+
+const readString = (value: unknown): string | undefined => {
+  return typeof value === "string" ? value : undefined;
+};
+
+const readNumber = (value: unknown): number | undefined => {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+};
+
+const toJsonString = (value: unknown): string => {
+  if (typeof value === "string") {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+};
+
+const parseJsonObject = (raw: string): Record<string, unknown> => {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, unknown>;
+    }
+    return { value: parsed };
+  } catch {
+    return { raw };
+  }
+};
+
+const toTextDeltaEvent = (payload: Record<string, unknown>, isReasoning: boolean): AgentTextDeltaEvent => {
   return {
-    name: "opentui-stream-bridge",
-    textDelta: (event: unknown) => {
-      safeInvoke(() => handlers.onTextDelta?.(event as AgentTextDeltaEvent));
-    },
-    textComplete: (text: unknown) => {
-      safeInvoke(() => handlers.onTextComplete?.(String(text ?? "")));
-    },
-    toolStream: (event: unknown) => {
-      safeInvoke(() => handlers.onToolStream?.(event as AgentToolStreamEvent));
-    },
-    toolConfirm: (event: unknown) => {
-      safeInvoke(() => handlers.onToolConfirm?.(event as AgentToolConfirmEvent));
-    },
-    toolUse: (event: unknown) => {
-      safeInvoke(() => handlers.onToolUse?.(event as AgentToolUseEvent));
-      return event as never;
-    },
-    toolResult: (event: unknown) => {
-      safeInvoke(() => handlers.onToolResult?.(event as AgentToolResultEvent));
-      return event as never;
-    },
-    step: (event: unknown) => {
-      safeInvoke(() => handlers.onStep?.(event as AgentStepEvent));
-    },
-    loop: (event: unknown) => {
-      safeInvoke(() => handlers.onLoop?.(event as AgentLoopEvent));
-    },
-    stop: (event: unknown) => {
-      safeInvoke(() => handlers.onStop?.(event as AgentStopEvent));
+    text: readString(payload.content) ?? readString(payload.reasoningContent) ?? "",
+    isReasoning,
+  };
+};
+
+const toStepEvent = (
+  payload: Record<string, unknown>,
+  finishReason: string,
+  toolCallsCount = 0
+): AgentStepEvent => {
+  return {
+    stepIndex: readNumber(payload.stepIndex) ?? 0,
+    finishReason,
+    toolCallsCount,
+  };
+};
+
+const toLoopEvent = (stepIndex: number): AgentLoopEvent => {
+  return {
+    loopIndex: stepIndex,
+    steps: stepIndex,
+  };
+};
+
+const toToolStreamEvent = (
+  envelope: CliEventEnvelopeLike,
+  sequenceByToolCallId: Map<string, number>
+): AgentToolStreamEvent => {
+  const payload = asRecord(envelope.data);
+  const toolCallId = readString(payload.toolCallId) ?? "unknown";
+  const previousSequence = sequenceByToolCallId.get(toolCallId) ?? 0;
+  const sequence = previousSequence + 1;
+  sequenceByToolCallId.set(toolCallId, sequence);
+
+  return {
+    toolCallId,
+    toolName: readString(payload.toolName) ?? "tool",
+    type: readString(payload.chunkType) ?? readString(payload.type) ?? "stdout",
+    sequence,
+    timestamp: envelope.createdAt,
+    content: readString(payload.chunk) ?? readString(payload.content),
+    data: payload,
+  };
+};
+
+const toToolResultEvent = (
+  payload: Record<string, unknown>,
+  toolCallsById: Map<string, AgentToolUseEvent>
+): AgentToolResultEvent => {
+  const toolCallId = readString(payload.tool_call_id) ?? readString(payload.toolCallId) ?? "unknown";
+  const toolCall =
+    toolCallsById.get(toolCallId) ??
+    ({
+      id: toolCallId,
+      function: { name: "tool", arguments: "{}" },
+    } as AgentToolUseEvent);
+
+  return {
+    toolCall,
+    result: {
+      success: true,
+      data: {
+        output: toJsonString(payload.content ?? payload),
+      },
+      raw: payload,
     },
   };
+};
+
+const extractAssistantText = (result: AgentAppRunResultLike): string => {
+  for (let i = result.messages.length - 1; i >= 0; i -= 1) {
+    const message = result.messages[i];
+    if (!message) {
+      continue;
+    }
+    if (message.role !== "assistant") {
+      continue;
+    }
+    if (typeof message.content === "string") {
+      return message.content;
+    }
+    return toJsonString(message.content);
+  }
+  return "";
 };
 
 const createRuntime = async (): Promise<RuntimeCore> => {
@@ -150,39 +271,46 @@ const createRuntime = async (): Promise<RuntimeCore> => {
   const modelId = resolveModelId(modules, preferredModelId);
   const modelConfig = requireModelApiKey(modules, modelId);
   const maxSteps = parsePositiveInt(process.env.AGENT_MAX_STEPS, DEFAULT_MAX_STEPS);
-  const logger = modules.createLoggerFromEnv(process.env, workspaceRoot);
-  const memoryManager = modules.createMemoryManagerFromEnv(process.env, workspaceRoot);
 
-  const provider = modules.ProviderRegistry.createFromEnv(modelId, {
-    logger: logger.child("Provider"),
+  const provider = modules.ProviderRegistry.createFromEnv(modelId);
+  const toolManager = new modules.DefaultToolManager();
+  toolManager.registerTool(new modules.BashTool());
+  toolManager.registerTool(
+    new modules.WriteFileTool({
+      allowedDirectories: [workspaceRoot],
+    })
+  );
+
+  const agent = new modules.StatelessAgent(provider, toolManager, {
+    maxRetryCount: parsePositiveInt(process.env.AGENT_MAX_RETRY_COUNT, DEFAULT_MAX_RETRY_COUNT),
+    enableCompaction: true,
   });
 
-  const toolManager = new modules.ToolManager();
-  const fileOptions = { allowedDirectories: [workspaceRoot] };
-  toolManager.register([
-    new modules.BashTool(),
-    new modules.FileReadTool(fileOptions),
-    new modules.FileWriteTool(fileOptions),
-    new modules.FileEditTool(fileOptions),
-    new modules.FileStatTool(fileOptions),
-    new modules.GlobTool(),
-    new modules.GrepTool(),
-    new modules.SkillTool(),
-  ]);
+  const appStore = modules.createSqliteAgentAppStore(resolveDbPath(workspaceRoot));
+  const preparableStore = appStore as AgentAppStoreLike & {
+    prepare?: () => Promise<void>;
+  };
+  if (typeof preparableStore.prepare === "function") {
+    await preparableStore.prepare();
+  }
 
-  const sessionId = process.env.AGENT_SESSION_ID ?? `opentui-${Date.now()}`;
+  const appService = new modules.AgentAppService({
+    agent,
+    executionStore: appStore,
+    eventStore: appStore,
+    messageStore: appStore,
+  });
 
   return {
     modules,
     modelId,
     modelLabel: modelConfig.name,
     maxSteps,
-    sessionId,
+    conversationId: resolveConversationId(),
     workspaceRoot,
-    provider,
-    toolManager,
-    memoryManager,
-    logger,
+    agent,
+    appService,
+    appStore,
   };
 };
 
@@ -200,33 +328,164 @@ const disposeRuntimeInstance = async () => {
   if (!runtime) {
     return;
   }
-
-  await runtime.memoryManager.close();
-  runtime.logger.close();
+  await runtime.appStore.close();
 };
 
 export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandlers): Promise<AgentRunResult> => {
   const runtime = await getRuntime();
   const startedAt = Date.now();
-  const plugin = createStreamPlugin(handlers);
+  const streamedState = {
+    text: "",
+    latestErrorMessage: undefined as string | undefined,
+    stopEmitted: false,
+    lastLoopStep: 0,
+  };
+  const toolStreamSequenceById = new Map<string, number>();
+  const toolCallsById = new Map<string, AgentToolUseEvent>();
 
-  const agent = new runtime.modules.Agent({
-    provider: runtime.provider,
-    toolManager: runtime.toolManager,
-    memoryManager: runtime.memoryManager,
-    logger: runtime.logger,
-    sessionId: runtime.sessionId,
-    maxSteps: runtime.maxSteps,
-    systemPrompt: createSystemPrompt(runtime.workspaceRoot),
-    plugins: [plugin],
-    onToolConfirm: async () => resolveToolDecision(),
-  });
+  const onToolConfirm = (event: ToolConfirmEventLike): void => {
+    const rawArgs = parseJsonObject(event.arguments);
+    const toolConfirmEvent: AgentToolConfirmEvent = {
+      toolCallId: event.toolCallId,
+      toolName: event.toolName,
+      args: rawArgs,
+      rawArgs,
+    };
+    safeInvoke(() => handlers.onToolConfirm?.(toolConfirmEvent));
 
-  const result = await agent.run(prompt);
+    const decision = resolveToolDecision();
+    event.resolve(
+      decision === "approve"
+        ? { approved: true }
+        : { approved: false, message: "Tool call denied by AGENT_AUTO_CONFIRM_TOOLS." }
+    );
+  };
+
+  runtime.agent.on("tool_confirm", onToolConfirm);
+
+  let result: AgentAppRunResultLike;
+  try {
+    const historyMessages = await runtime.appService.listContextMessages(runtime.conversationId);
+    result = await runtime.appService.runForeground(
+      {
+        conversationId: runtime.conversationId,
+        userInput: prompt,
+        historyMessages: historyMessages as AgentV4MessageLike[],
+        systemPrompt: createSystemPrompt(runtime.workspaceRoot),
+        maxSteps: runtime.maxSteps,
+      },
+      {
+        onEvent: async (envelope) => {
+          const payload = asRecord(envelope.data);
+          switch (envelope.eventType) {
+            case "chunk": {
+              const event = toTextDeltaEvent(payload, false);
+              if (event.text.length > 0) {
+                streamedState.text += event.text;
+                safeInvoke(() => handlers.onTextDelta?.(event));
+              }
+              break;
+            }
+            case "reasoning_chunk": {
+              const event = toTextDeltaEvent(payload, true);
+              if (event.text.length > 0) {
+                safeInvoke(() => handlers.onTextDelta?.(event));
+              }
+              break;
+            }
+            case "tool_stream": {
+              const toolStreamEvent = toToolStreamEvent(envelope, toolStreamSequenceById);
+              safeInvoke(() => handlers.onToolStream?.(toolStreamEvent));
+              break;
+            }
+            case "tool_call": {
+              const rawToolCalls = payload.toolCalls;
+              if (Array.isArray(rawToolCalls) && rawToolCalls.length > 0) {
+                for (const item of rawToolCalls) {
+                  const toolCall = asRecord(item) as AgentToolUseEvent;
+                  const toolCallId = readString(asRecord(toolCall).id);
+                  if (toolCallId) {
+                    toolCallsById.set(toolCallId, toolCall);
+                  }
+                  safeInvoke(() => handlers.onToolUse?.(toolCall));
+                }
+              } else {
+                safeInvoke(() => handlers.onToolUse?.(payload as AgentToolUseEvent));
+              }
+              break;
+            }
+            case "tool_result": {
+              const toolResultEvent = toToolResultEvent(payload, toolCallsById);
+              safeInvoke(() => handlers.onToolResult?.(toolResultEvent));
+              break;
+            }
+            case "progress": {
+              const currentAction = readString(payload.currentAction) ?? "progress";
+              const stepEvent = toStepEvent(payload, currentAction, 0);
+              safeInvoke(() => handlers.onStep?.(stepEvent));
+
+              if (currentAction === "llm" && stepEvent.stepIndex > streamedState.lastLoopStep) {
+                streamedState.lastLoopStep = stepEvent.stepIndex;
+                const loopEvent = toLoopEvent(stepEvent.stepIndex);
+                safeInvoke(() => handlers.onLoop?.(loopEvent));
+              }
+              break;
+            }
+            case "checkpoint": {
+              const stepEvent = toStepEvent(payload, "checkpoint", 0);
+              safeInvoke(() => handlers.onStep?.(stepEvent));
+              break;
+            }
+            case "done": {
+              safeInvoke(() => handlers.onTextComplete?.(streamedState.text));
+              const stopEvent: AgentStopEvent = {
+                reason: readString(payload.finishReason) ?? "stop",
+              };
+              safeInvoke(() => handlers.onStop?.(stopEvent));
+              streamedState.stopEmitted = true;
+              break;
+            }
+            case "error": {
+              const message = readString(payload.message);
+              streamedState.latestErrorMessage = message;
+              const stopEvent: AgentStopEvent = {
+                reason: "error",
+                message,
+              };
+              safeInvoke(() => handlers.onStop?.(stopEvent));
+              streamedState.stopEmitted = true;
+              break;
+            }
+            default:
+              break;
+          }
+        },
+      }
+    );
+  } finally {
+    runtime.agent.off("tool_confirm", onToolConfirm);
+  }
+
+  if (!streamedState.stopEmitted) {
+    safeInvoke(() => handlers.onTextComplete?.(streamedState.text));
+    safeInvoke(() =>
+      handlers.onStop?.({
+        reason: result.finishReason,
+        message: result.finishReason === "error" ? result.run.errorMessage : undefined,
+      })
+    );
+  }
+
+  const finalText = streamedState.text || extractAssistantText(result);
+  const completionMessage =
+    result.finishReason === "error"
+      ? streamedState.latestErrorMessage ?? result.run.errorMessage
+      : undefined;
+
   return {
-    text: result.text,
-    completionReason: result.completionReason,
-    completionMessage: result.completionMessage,
+    text: finalText,
+    completionReason: result.finishReason,
+    completionMessage,
     durationSeconds: (Date.now() - startedAt) / 1000,
     modelLabel: runtime.modelLabel,
   };

@@ -16,6 +16,11 @@ const TERMINAL_RESET_SEQUENCE = [
 
 let rendererRef: CliRenderer | null = null;
 let hasCleanedUp = false;
+let terminalBackgroundRestore: (() => void) | null = null;
+
+export const registerTerminalBackgroundRestore = (restore: (() => void) | null) => {
+  terminalBackgroundRestore = restore;
+};
 
 export const hardResetTerminal = () => {
   if (!process.stdout.isTTY) {
@@ -23,6 +28,10 @@ export const hardResetTerminal = () => {
   }
 
   try {
+    const restore = terminalBackgroundRestore;
+    terminalBackgroundRestore = null;
+    restore?.();
+
     process.stdout.write(TERMINAL_RESET_SEQUENCE);
     if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
       process.stdin.setRawMode(false);
@@ -58,4 +67,3 @@ export const bindExitGuards = () => {
   process.once("SIGTERM", () => requestExit(0));
   process.once("exit", hardResetTerminal);
 };
-

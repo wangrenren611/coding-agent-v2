@@ -14,13 +14,24 @@ export function convertMessageToLLMMessage(message: Message): LLMRequestMessage 
 
 export function mergeLLMConfig(
   config: AgentInput['config'],
+  tools?: AgentInput['tools'],
   abortSignal?: AbortSignal
 ): AgentInput['config'] {
-  if (!abortSignal) {
-    return config;
+  if (!config && !tools && !abortSignal) {
+    return undefined;
   }
-  return {
+
+  const merged: NonNullable<AgentInput['config']> = {
     ...(config || {}),
-    abortSignal,
   };
+
+  if (tools && tools.length > 0) {
+    merged.tools = tools;
+  }
+
+  if (abortSignal) {
+    merged.abortSignal = abortSignal;
+  }
+
+  return merged;
 }

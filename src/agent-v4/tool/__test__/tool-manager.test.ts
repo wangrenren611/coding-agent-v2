@@ -151,14 +151,7 @@ describe('DefaultToolManager', () => {
 
   it('returns ToolValidationError for invalid parameters', async () => {
     const manager = new DefaultToolManager();
-    manager.registerTool(
-      {
-        name: 'echo',
-        description: 'echo',
-        parameters: {},
-      },
-      new EchoTool()
-    );
+    manager.registerTool(new EchoTool());
 
     const result = await manager.execute(
       {
@@ -177,14 +170,7 @@ describe('DefaultToolManager', () => {
 
   it('returns ToolPolicyDeniedError when policy check rejects execution', async () => {
     const manager = new DefaultToolManager();
-    manager.registerTool(
-      {
-        name: 'echo',
-        description: 'echo',
-        parameters: {},
-      },
-      new EchoTool()
-    );
+    manager.registerTool(new EchoTool());
 
     const onPolicyCheck = vi.fn().mockResolvedValue({
       allowed: false,
@@ -209,14 +195,7 @@ describe('DefaultToolManager', () => {
 
   it('blocks dangerous bash command with built-in policy and includes audit details', async () => {
     const manager = new DefaultToolManager();
-    manager.registerTool(
-      {
-        name: 'bash',
-        description: 'bash',
-        parameters: {},
-      },
-      new SafeBashTool()
-    );
+    manager.registerTool(new SafeBashTool());
 
     const result = await manager.execute(
       {
@@ -246,14 +225,7 @@ describe('DefaultToolManager', () => {
     const manager = new DefaultToolManager();
     const tool = new EchoTool();
     const executeSpy = vi.spyOn(tool, 'execute');
-    manager.registerTool(
-      {
-        name: 'echo',
-        description: 'echo',
-        parameters: {},
-      },
-      tool
-    );
+    manager.registerTool(tool);
 
     const onPolicyCheck = vi.fn().mockResolvedValue({
       allowed: true,
@@ -281,14 +253,7 @@ describe('DefaultToolManager', () => {
 
   it('returns ToolDeniedError when user rejects confirmation', async () => {
     const manager = new DefaultToolManager();
-    manager.registerTool(
-      {
-        name: 'echo',
-        description: 'echo',
-        parameters: {},
-      },
-      new ConfirmEchoTool()
-    );
+    manager.registerTool(new ConfirmEchoTool());
 
     const onConfirm = vi.fn().mockResolvedValue({ approved: false, message: 'deny' });
     const result = await manager.execute(
@@ -296,7 +261,7 @@ describe('DefaultToolManager', () => {
         id: 't5',
         type: 'function',
         index: 0,
-        function: { name: 'echo', arguments: '{"input":"abc"}' },
+        function: { name: 'confirm-echo', arguments: '{"input":"abc"}' },
       },
       createContext({ onConfirm })
     );
@@ -304,21 +269,14 @@ describe('DefaultToolManager', () => {
     expect(onConfirm).toHaveBeenCalledOnce();
     expect(result.success).toBe(false);
     expect(result.error).toBeInstanceOf(ToolDeniedError);
-    expect(result.output).toBe('Tool echo denied: deny');
+    expect(result.output).toBe('Tool confirm-echo denied: deny');
   });
 
   it('executes after confirmation approval', async () => {
     const manager = new DefaultToolManager();
     const tool = new ConfirmEchoTool();
     const execSpy = vi.spyOn(tool, 'execute');
-    manager.registerTool(
-      {
-        name: 'echo',
-        description: 'echo',
-        parameters: {},
-      },
-      tool
-    );
+    manager.registerTool(tool);
 
     const onConfirm = vi.fn().mockResolvedValue({ approved: true });
     const result = await manager.execute(
@@ -326,7 +284,7 @@ describe('DefaultToolManager', () => {
         id: 't6',
         type: 'function',
         index: 0,
-        function: { name: 'echo', arguments: '{"input":"abc"}' },
+        function: { name: 'confirm-echo', arguments: '{"input":"abc"}' },
       },
       createContext({ onConfirm })
     );
@@ -341,21 +299,14 @@ describe('DefaultToolManager', () => {
     const manager = new DefaultToolManager();
     const tool = new ConfirmEchoTool();
     const execSpy = vi.spyOn(tool, 'execute');
-    manager.registerTool(
-      {
-        name: 'echo',
-        description: 'echo',
-        parameters: {},
-      },
-      tool
-    );
+    manager.registerTool(tool);
 
     const result = await manager.execute(
       {
         id: 't7',
         type: 'function',
         index: 0,
-        function: { name: 'echo', arguments: '{"input":"no-confirm"}' },
+        function: { name: 'confirm-echo', arguments: '{"input":"no-confirm"}' },
       },
       createContext()
     );
@@ -367,14 +318,7 @@ describe('DefaultToolManager', () => {
 
   it('wraps handler execution error with ToolExecutionError and emits stderr chunk', async () => {
     const manager = new DefaultToolManager();
-    manager.registerTool(
-      {
-        name: 'echo',
-        description: 'echo',
-        parameters: {},
-      },
-      new ThrowingTool()
-    );
+    manager.registerTool(new ThrowingTool());
 
     const onChunk = vi.fn();
     const result = await manager.execute(
@@ -395,22 +339,8 @@ describe('DefaultToolManager', () => {
 
   it('registerTool and getTools returns all tools', () => {
     const manager = new DefaultToolManager();
-    manager.registerTool(
-      {
-        name: 'echo',
-        description: 'echo',
-        parameters: { type: 'object' },
-      },
-      new EchoTool()
-    );
-    manager.registerTool(
-      {
-        name: 'confirm-echo',
-        description: 'confirm echo',
-        parameters: { type: 'object' },
-      },
-      new ConfirmEchoTool()
-    );
+    manager.registerTool(new EchoTool());
+    manager.registerTool(new ConfirmEchoTool());
 
     const tools = manager.getTools();
     expect(tools).toHaveLength(2);
@@ -419,14 +349,7 @@ describe('DefaultToolManager', () => {
 
   it('toToolsSchema maps registered handlers to LLM tool schemas', () => {
     const manager = new DefaultToolManager();
-    manager.registerTool(
-      {
-        name: 'echo',
-        description: 'echo',
-        parameters: { type: 'object' },
-      },
-      new EchoTool()
-    );
+    manager.registerTool(new EchoTool());
 
     const schemas = manager.toToolsSchema();
     expect(schemas).toHaveLength(1);
@@ -450,14 +373,7 @@ describe('DefaultToolManager', () => {
 
   it('getConcurrencyPolicy reads mode and lockKey from tool handler', () => {
     const manager = new DefaultToolManager();
-    manager.registerTool(
-      {
-        name: 'parallel-echo',
-        description: 'parallel echo',
-        parameters: {},
-      },
-      new ParallelReadTool()
-    );
+    manager.registerTool(new ParallelReadTool());
 
     const policy = manager.getConcurrencyPolicy({
       id: 'c2',
@@ -474,14 +390,7 @@ describe('DefaultToolManager', () => {
 
   it('getConcurrencyPolicy returns mode-only when handler has no lock key', () => {
     const manager = new DefaultToolManager();
-    manager.registerTool(
-      {
-        name: 'parallel-no-lock',
-        description: 'parallel no lock',
-        parameters: {},
-      },
-      new ParallelNoLockTool()
-    );
+    manager.registerTool(new ParallelNoLockTool());
 
     const policy = manager.getConcurrencyPolicy({
       id: 'c5',
@@ -495,14 +404,7 @@ describe('DefaultToolManager', () => {
 
   it('getConcurrencyPolicy falls back to exclusive for invalid json args', () => {
     const manager = new DefaultToolManager();
-    manager.registerTool(
-      {
-        name: 'parallel-echo',
-        description: 'parallel echo',
-        parameters: {},
-      },
-      new ParallelReadTool()
-    );
+    manager.registerTool(new ParallelReadTool());
 
     const policy = manager.getConcurrencyPolicy({
       id: 'c3',
@@ -516,14 +418,7 @@ describe('DefaultToolManager', () => {
 
   it('getConcurrencyPolicy falls back to exclusive for validation failure', () => {
     const manager = new DefaultToolManager();
-    manager.registerTool(
-      {
-        name: 'parallel-echo',
-        description: 'parallel echo',
-        parameters: {},
-      },
-      new ParallelReadTool()
-    );
+    manager.registerTool(new ParallelReadTool());
 
     const policy = manager.getConcurrencyPolicy({
       id: 'c4',

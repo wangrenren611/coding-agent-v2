@@ -8,11 +8,7 @@ import {
   ToolDecision,
 } from '../types';
 import { ToolManager } from '../tool/tool-manager';
-import {
-  LLMProvider,
-  Tool,
-  ToolCall,
-} from '../../providers';
+import { LLMProvider, Tool, ToolCall } from '../../providers';
 import { EventEmitter } from 'events';
 import {
   AgentAbortedError,
@@ -168,7 +164,9 @@ export class StatelessAgent extends EventEmitter {
       toolConcurrencyPolicyResolver: config.toolConcurrencyPolicyResolver,
       logger: this.logger,
       timeoutBudgetMs:
-        config.timeoutBudgetMs && Number.isFinite(config.timeoutBudgetMs) && config.timeoutBudgetMs > 0
+        config.timeoutBudgetMs &&
+        Number.isFinite(config.timeoutBudgetMs) &&
+        config.timeoutBudgetMs > 0
           ? Math.floor(config.timeoutBudgetMs)
           : undefined,
       llmTimeoutRatio: clampedLlmTimeoutRatio,
@@ -219,6 +217,7 @@ export class StatelessAgent extends EventEmitter {
     callbacks?: AgentCallbacks
   ): AsyncGenerator<StreamEvent, void, unknown> {
     const { messages: inputMessages, maxSteps = 100, abortSignal: inputAbortSignal } = input;
+    const effectiveTools = this.resolveLLMTools(input.tools);
     const messages = [...inputMessages];
     if (typeof input.systemPrompt === 'string' && input.systemPrompt.trim().length > 0) {
       const hasSystemMessage = messages.some((message) => message.role === 'system');
@@ -284,7 +283,7 @@ export class StatelessAgent extends EventEmitter {
         try {
           this.throwIfAborted(abortSignal);
           const messageCountBeforeCompaction = messages.length;
-          const removedMessageIds = await this.compactMessagesIfNeeded(messages, input.tools);
+          const removedMessageIds = await this.compactMessagesIfNeeded(messages, effectiveTools);
           if (removedMessageIds.length > 0) {
             const compactionInfo: CompactionInfo = {
               executionId: input.executionId,
@@ -303,11 +302,17 @@ export class StatelessAgent extends EventEmitter {
           this.throwIfAborted(abortSignal);
 
           yield* this.emitProgress(input.executionId, stepIndex, 'llm', messages.length);
-          const llmSpan = await this.startSpan(callbacks, traceId, 'agent.llm.step', runSpan.spanId, {
-            executionId: input.executionId,
-            stepIndex,
-            messageCount: messages.length,
-          });
+          const llmSpan = await this.startSpan(
+            callbacks,
+            traceId,
+            'agent.llm.step',
+            runSpan.spanId,
+            {
+              executionId: input.executionId,
+              stepIndex,
+              messageCount: messages.length,
+            }
+          );
           const llmScope = this.createStageAbortScope(abortSignal, timeoutBudget, 'llm');
           let llmResult:
             | {
@@ -320,7 +325,7 @@ export class StatelessAgent extends EventEmitter {
           try {
             const llmGen = this.callLLMAndProcessStream(
               messages,
-              this.mergeLLMConfig(input.config, llmScope.signal),
+              this.mergeLLMConfig(input.config, effectiveTools, llmScope.signal),
               llmScope.signal,
               input.executionId,
               stepIndex,
@@ -580,7 +585,9 @@ export class StatelessAgent extends EventEmitter {
     callback: ((arg: T) => void | Promise<void>) | undefined,
     arg: T
   ): Promise<void> {
-    await invokeSafeCallback(callback, arg, (error) => this.logError('[Agent] Callback error:', error));
+    await invokeSafeCallback(callback, arg, (error) =>
+      this.logError('[Agent] Callback error:', error)
+    );
   }
 
   private async safeErrorCallback(
@@ -616,7 +623,8 @@ export class StatelessAgent extends EventEmitter {
           messageId: chunkMessageId,
           sessionKey,
           sessions: writeBufferSessions,
-          onError: (error) => this.logError('[Agent] Failed to buffer write_file tool chunk:', error),
+          onError: (error) =>
+            this.logError('[Agent] Failed to buffer write_file tool chunk:', error),
         });
       },
     });
@@ -725,12 +733,18 @@ export class StatelessAgent extends EventEmitter {
   ): AsyncGenerator<StreamEvent, Message, unknown> {
     this.throwIfAborted(abortSignal);
     const effectiveTraceId = traceId || executionId || generateId('trace_');
-    const toolSpan = await this.startSpan(callbacks, effectiveTraceId, 'agent.tool.execute', parentSpanId, {
-      executionId,
-      stepIndex,
-      toolCallId: toolCall.id,
-      toolName: toolCall.function.name,
-    });
+    const toolSpan = await this.startSpan(
+      callbacks,
+      effectiveTraceId,
+      'agent.tool.execute',
+      parentSpanId,
+      {
+        executionId,
+        stepIndex,
+        toolCallId: toolCall.id,
+        toolName: toolCall.function.name,
+      }
+    );
     let toolErrorCode: string | undefined;
     let cachedHit = false;
     let toolSucceeded = false;
@@ -822,7 +836,9 @@ export class StatelessAgent extends EventEmitter {
                 toolOutput = toolExecResult.output;
               } else if (needEnrichWriteFileFailure(toolExecResult.error, toolExecResult.output)) {
                 const errorContent =
-                  toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
+                  toolExecResult.error?.message ||
+                  toolExecResult.output ||
+                  new UnknownError().message;
                 toolOutput = await buildWriteFileToolErrorPayload(
                   toolCall,
                   errorContent,
@@ -831,11 +847,15 @@ export class StatelessAgent extends EventEmitter {
                 );
               } else {
                 toolOutput =
-                  toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
+                  toolExecResult.error?.message ||
+                  toolExecResult.output ||
+                  new UnknownError().message;
               }
             } else {
               toolOutput =
-                toolExecResult.error?.message || toolExecResult.output || new UnknownError().message;
+                toolExecResult.error?.message ||
+                toolExecResult.output ||
+                new UnknownError().message;
             }
             errorCode = this.extractErrorCode(toolExecResult.error) || 'TOOL_EXECUTION_FAILED';
           }
@@ -862,7 +882,10 @@ export class StatelessAgent extends EventEmitter {
       toolSucceeded = ledgerResult.record.success;
       toolErrorCode = ledgerResult.record.errorCode;
 
-      const replayResult = this.createToolResultMessageFromLedger(toolCall.id, ledgerResult.record.output);
+      const replayResult = this.createToolResultMessageFromLedger(
+        toolCall.id,
+        ledgerResult.record.output
+      );
       await this.safeCallback(callbacks?.onMessage, replayResult);
 
       yield {
@@ -1150,9 +1173,41 @@ export class StatelessAgent extends EventEmitter {
 
   private mergeLLMConfig(
     config: AgentInput['config'],
+    tools?: AgentInput['tools'],
     abortSignal?: AbortSignal
   ): AgentInput['config'] {
-    return mergeLLMRequestConfig(config, abortSignal);
+    return mergeLLMRequestConfig(config, tools, abortSignal);
+  }
+
+  private resolveLLMTools(inputTools?: Tool[]): Tool[] | undefined {
+    if (typeof inputTools !== 'undefined') {
+      return inputTools;
+    }
+
+    const manager = this.toolExecutor as ToolManager & {
+      getTools?: () => Array<{ toToolSchema?: () => unknown }>;
+    };
+    if (typeof manager.getTools !== 'function') {
+      return undefined;
+    }
+
+    const schemas: Tool[] = [];
+    for (const tool of manager.getTools()) {
+      if (typeof tool.toToolSchema !== 'function') {
+        continue;
+      }
+      const schema = tool.toToolSchema();
+      schemas.push({
+        type: schema.type,
+        function: {
+          name: schema.function.name,
+          description: schema.function.description,
+          parameters: (schema.function.parameters as Record<string, unknown> | undefined) || {},
+        },
+      });
+    }
+
+    return schemas.length > 0 ? schemas : undefined;
   }
 
   private async emitMetric(
@@ -1232,7 +1287,9 @@ export class StatelessAgent extends EventEmitter {
     return createStageBudgetScope(baseSignal, timeoutBudget, stage);
   }
 
-  private timeoutBudgetErrorFromSignal(signal: AbortSignal | undefined): TimeoutBudgetExceededError | undefined {
+  private timeoutBudgetErrorFromSignal(
+    signal: AbortSignal | undefined
+  ): TimeoutBudgetExceededError | undefined {
     return timeoutErrorFromAbortSignal(signal);
   }
 

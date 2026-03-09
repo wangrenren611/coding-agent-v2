@@ -1,4 +1,5 @@
-﻿import { useEffect, useState } from "react";
+import { TextAttributes } from "@opentui/core";
+import { useEffect, useState } from "react";
 
 import { uiTheme } from "../ui/theme";
 
@@ -32,20 +33,24 @@ export const FooterHints = ({ isThinking }: FooterHintsProps) => {
       width="100%"
       justifyContent="space-between"
       paddingTop={0}
-      paddingRight={1}
+      paddingRight={uiTheme.layout.footerPaddingRight}
       backgroundColor={uiTheme.bg}
       flexDirection="row"
-      marginTop={1}
+      marginTop={uiTheme.layout.footerMarginTop}
     >
       {isThinking ? (
         <box flexDirection="row" gap={1}>
-          <text fg={uiTheme.accent}>{SPINNER_FRAMES[frameIndex]}</text>
-          <text fg={uiTheme.muted}>thinking</text>
+          <text fg={uiTheme.accent} attributes={TextAttributes.BOLD}>
+            {SPINNER_FRAMES[frameIndex]}
+          </text>
+          <text fg={uiTheme.text} attributes={TextAttributes.BOLD}>
+            thinking...
+          </text>
         </box>
       ) : (
         <text />
       )}
-      <text fg={uiTheme.muted}>
+      <text fg={uiTheme.muted} attributes={TextAttributes.BOLD}>
         <strong>tab</strong> agents  <strong>ctrl+p</strong> commands
       </text>
     </box>

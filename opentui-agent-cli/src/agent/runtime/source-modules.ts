@@ -1,17 +1,5 @@
-﻿import { basename, resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-
-type AgentRunOutput = {
-  text: string;
-  completionReason: string;
-  completionMessage?: string;
-};
-
-type AgentLike = {
-  run: (prompt: string) => Promise<AgentRunOutput>;
-};
-
-export type AgentCtor = new (config: Record<string, unknown>) => AgentLike;
 
 type ProviderModelConfig = {
   name: string;
@@ -25,38 +13,103 @@ export type ProviderRegistryLike = {
   createFromEnv: (modelId: string, options?: Record<string, unknown>) => unknown;
 };
 
-export type LoggerLike = {
-  child: (name: string) => unknown;
-  close: () => void;
+export type ToolDecisionLike = {
+  approved: boolean;
+  message?: string;
 };
 
-export type MemoryManagerLike = {
-  close: () => Promise<void>;
+export type ToolConfirmEventLike = {
+  toolCallId: string;
+  toolName: string;
+  arguments: string;
+  resolve: (decision: ToolDecisionLike) => void;
+};
+
+export type AgentV4MessageLike = {
+  messageId: string;
+  role: "system" | "user" | "assistant" | "tool";
+  type: string;
+  content: unknown;
+  tool_call_id?: string;
+};
+
+export type CliEventEnvelopeLike = {
+  conversationId: string;
+  executionId: string;
+  seq: number;
+  eventType: string;
+  data: unknown;
+  createdAt: number;
+};
+
+export type AgentAppRunResultLike = {
+  executionId: string;
+  conversationId: string;
+  messages: AgentV4MessageLike[];
+  finishReason: "stop" | "max_steps" | "error";
+  steps: number;
+  run: {
+    errorMessage?: string;
+  };
+};
+
+type AgentAppRunRequestLike = {
+  conversationId: string;
+  userInput: string;
+  historyMessages?: AgentV4MessageLike[];
+  systemPrompt?: string;
+  maxSteps?: number;
+};
+
+type AgentAppRunCallbacksLike = {
+  onEvent?: (event: CliEventEnvelopeLike) => void | Promise<void>;
+};
+
+export type AgentAppServiceLike = {
+  runForeground: (
+    request: AgentAppRunRequestLike,
+    callbacks?: AgentAppRunCallbacksLike
+  ) => Promise<AgentAppRunResultLike>;
+  listContextMessages: (conversationId: string) => Promise<AgentV4MessageLike[]>;
+};
+
+export type StatelessAgentLike = {
+  on: (eventName: "tool_confirm", listener: (event: ToolConfirmEventLike) => void) => void;
+  off: (eventName: "tool_confirm", listener: (event: ToolConfirmEventLike) => void) => void;
 };
 
 export type ToolManagerLike = {
-  register: (tools: unknown[]) => unknown;
+  registerTool: (tool: unknown) => void;
 };
 
-type ToolManagerCtor = new () => ToolManagerLike;
+export type AgentAppStoreLike = {
+  close: () => Promise<void>;
+};
+
+type StatelessAgentCtor = new (
+  provider: unknown,
+  toolExecutor: ToolManagerLike,
+  config: Record<string, unknown>
+) => StatelessAgentLike;
+type AgentAppServiceCtor = new (deps: {
+  agent: StatelessAgentLike;
+  executionStore: AgentAppStoreLike;
+  eventStore: AgentAppStoreLike;
+  messageStore: AgentAppStoreLike;
+}) => AgentAppServiceLike;
+type ToolManagerCtor = new (config?: Record<string, unknown>) => ToolManagerLike;
 type ToolCtor = new (options?: Record<string, unknown>) => unknown;
 
 export type SourceModules = {
   repoRoot: string;
-  Agent: AgentCtor;
   ProviderRegistry: ProviderRegistryLike;
-  createLoggerFromEnv: (env?: NodeJS.ProcessEnv, cwd?: string) => LoggerLike;
-  createMemoryManagerFromEnv: (env?: NodeJS.ProcessEnv, cwd?: string) => MemoryManagerLike;
   loadEnvFiles: (cwd?: string) => Promise<string[]>;
-  ToolManager: ToolManagerCtor;
+  StatelessAgent: StatelessAgentCtor;
+  AgentAppService: AgentAppServiceCtor;
+  createSqliteAgentAppStore: (dbPath: string) => AgentAppStoreLike;
+  DefaultToolManager: ToolManagerCtor;
   BashTool: ToolCtor;
-  FileReadTool: ToolCtor;
-  FileWriteTool: ToolCtor;
-  FileEditTool: ToolCtor;
-  FileStatTool: ToolCtor;
-  GlobTool: ToolCtor;
-  GrepTool: ToolCtor;
-  SkillTool: ToolCtor;
+  WriteFileTool: ToolCtor;
 };
 
 let modulesPromise: Promise<SourceModules> | null = null;
@@ -90,29 +143,29 @@ const getRequiredExport = <T>(moduleObj: Record<string, unknown>, name: string):
 const loadSourceModules = async (): Promise<SourceModules> => {
   const repoRoot = resolveRepoRoot();
 
-  const [agentMod, providerMod, configMod, toolMod] = await Promise.all([
-    import(toModuleUrl(resolve(repoRoot, "src/agent/index.ts"))),
-    import(toModuleUrl(resolve(repoRoot, "src/providers/index.ts"))),
-    import(toModuleUrl(resolve(repoRoot, "src/config/index.ts"))),
-    import(toModuleUrl(resolve(repoRoot, "src/tool/index.ts"))),
-  ]);
+  const [providerMod, configMod, appMod, agentV4Mod, toolManagerMod, bashToolMod, writeToolMod] =
+    await Promise.all([
+      import(toModuleUrl(resolve(repoRoot, "src/providers/index.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/config/index.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/app/index.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/agent/index.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/tool-manager.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/bash.ts"))),
+      import(toModuleUrl(resolve(repoRoot, "src/agent-v4/tool/write-file.ts"))),
+    ]);
 
   return {
     repoRoot,
-    Agent: getRequiredExport<AgentCtor>(agentMod, "Agent"),
     ProviderRegistry: getRequiredExport<ProviderRegistryLike>(providerMod, "ProviderRegistry"),
-    createLoggerFromEnv: getRequiredExport(configMod, "createLoggerFromEnv"),
-    createMemoryManagerFromEnv: getRequiredExport(configMod, "createMemoryManagerFromEnv"),
     loadEnvFiles: getRequiredExport(configMod, "loadEnvFiles"),
-    ToolManager: getRequiredExport<ToolManagerCtor>(toolMod, "ToolManager"),
-    BashTool: getRequiredExport<ToolCtor>(toolMod, "BashTool"),
-    FileReadTool: getRequiredExport<ToolCtor>(toolMod, "FileReadTool"),
-    FileWriteTool: getRequiredExport<ToolCtor>(toolMod, "FileWriteTool"),
-    FileEditTool: getRequiredExport<ToolCtor>(toolMod, "FileEditTool"),
-    FileStatTool: getRequiredExport<ToolCtor>(toolMod, "FileStatTool"),
-    GlobTool: getRequiredExport<ToolCtor>(toolMod, "GlobTool"),
-    GrepTool: getRequiredExport<ToolCtor>(toolMod, "GrepTool"),
-    SkillTool: getRequiredExport<ToolCtor>(toolMod, "SkillTool"),
+    StatelessAgent: getRequiredExport<StatelessAgentCtor>(agentV4Mod, "StatelessAgent"),
+    AgentAppService: getRequiredExport<AgentAppServiceCtor>(appMod, "AgentAppService"),
+    createSqliteAgentAppStore: getRequiredExport<
+      (dbPath: string) => AgentAppStoreLike
+    >(appMod, "createSqliteAgentAppStore"),
+    DefaultToolManager: getRequiredExport<ToolManagerCtor>(toolManagerMod, "DefaultToolManager"),
+    BashTool: getRequiredExport<ToolCtor>(bashToolMod, "BashTool"),
+    WriteFileTool: getRequiredExport<ToolCtor>(writeToolMod, "WriteFileTool"),
   };
 };
 

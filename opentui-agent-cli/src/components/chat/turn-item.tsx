@@ -5,6 +5,7 @@ import { PromptCard } from "./prompt-card";
 
 type TurnItemProps = {
   turn: ChatTurn;
+  index: number;
   isPending?: boolean;
 };
 
@@ -13,7 +14,7 @@ const PendingReply = () => {
     <box flexDirection="row" gap={1}>
       <box width={1} backgroundColor={uiTheme.divider} />
       <box flexGrow={1}>
-        <text>
+        <text attributes={uiTheme.typography.body}>
           <i fg={uiTheme.thinking}>Thinking:</i>
           <span fg={uiTheme.muted}> preparing response...</span>
         </text>
@@ -22,10 +23,10 @@ const PendingReply = () => {
   );
 };
 
-export const TurnItem = ({ turn, isPending = false }: TurnItemProps) => {
+export const TurnItem = ({ turn, index, isPending = false }: TurnItemProps) => {
   return (
-    <box flexDirection="column" gap={1}>
-      <PromptCard prompt={turn.prompt} />
+    <box flexDirection="column">
+      <PromptCard prompt={turn.prompt} createdAtMs={turn.createdAtMs} isFirst={index === 0} />
       {turn.reply ? <AssistantReply reply={turn.reply} /> : null}
       {isPending && !turn.reply ? <PendingReply /> : null}
     </box>

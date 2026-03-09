@@ -10,6 +10,7 @@ import {
   appendNoteLine,
   appendToSegment,
   createStreamingReply,
+  orderReplySegments,
   patchTurn,
   setReplyStatus,
 } from "./turn-updater";
@@ -69,7 +70,7 @@ export const useAgentChat = (): UseAgentChatResult => {
             ...turn,
             reply: {
               ...turn.reply,
-              segments: appendToSegment(turn.reply.segments, segmentId, type, chunk),
+              segments: orderReplySegments(appendToSegment(turn.reply.segments, segmentId, type, chunk)),
             },
           };
         }),
@@ -88,7 +89,7 @@ export const useAgentChat = (): UseAgentChatResult => {
           ...turn,
           reply: {
             ...turn.reply,
-            segments: appendNoteLine(turn.reply.segments, `${turnId}:events`, text),
+            segments: orderReplySegments(appendNoteLine(turn.reply.segments, `${turnId}:events`, text)),
           },
         };
       }),
@@ -103,6 +104,7 @@ export const useAgentChat = (): UseAgentChatResult => {
         {
           id: turnId,
           prompt,
+          createdAtMs: Date.now(),
           reply: withStreamingReply ? createStreamingReply(modelLabel) : undefined,
         },
       ]);
@@ -209,7 +211,9 @@ export const useAgentChat = (): UseAgentChatResult => {
               ...turn,
               reply: {
                 ...turn.reply,
-                segments: appendToSegment(turn.reply.segments, `${turnId}:text`, "text", result.text),
+                segments: orderReplySegments(
+                  appendToSegment(turn.reply.segments, `${turnId}:text`, "text", result.text),
+                ),
               },
             };
           });

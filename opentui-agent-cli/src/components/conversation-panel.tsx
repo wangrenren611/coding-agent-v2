@@ -16,14 +16,20 @@ export const ConversationPanel = ({ turns, isThinking }: ConversationPanelProps)
       scrollY
       stickyScroll
       stickyStart="bottom"
-      paddingX={1}
-      paddingY={0}
+      paddingX={uiTheme.layout.conversationPaddingX}
+      paddingY={uiTheme.layout.conversationPaddingY}
       viewportOptions={{ backgroundColor: uiTheme.bg }}
       contentOptions={{ backgroundColor: uiTheme.bg }}
     >
-      <box flexDirection="column" gap={1} paddingX={1} paddingY={1} backgroundColor={uiTheme.bg}>
-        {turns.map((turn) => (
-          <TurnItem key={turn.id} turn={turn} isPending={isThinking && turn.id === pendingTurnId} />
+      <box
+        flexDirection="column"
+        gap={0}
+        paddingX={uiTheme.layout.conversationContentPaddingX}
+        paddingY={uiTheme.layout.conversationContentPaddingY}
+        backgroundColor={uiTheme.bg}
+      >
+        {turns.map((turn, index) => (
+          <TurnItem key={turn.id} turn={turn} index={index} isPending={isThinking && turn.id === pendingTurnId} />
         ))}
       </box>
     </scrollbox>

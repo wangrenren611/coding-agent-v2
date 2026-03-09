@@ -1,6 +1,5 @@
-import { TextAttributes } from "@opentui/core";
-
 import type { ReplySegment } from "../../types/chat";
+import { opencodeMarkdownSyntax, opencodeSubtleMarkdownSyntax } from "../../ui/opencode-markdown";
 import { uiTheme } from "../../ui/theme";
 
 type AssistantSegmentProps = {
@@ -8,14 +7,24 @@ type AssistantSegmentProps = {
 };
 
 const ThinkingSegment = ({ content }: { content: string }) => {
+  const normalized = content.trim();
+  if (!normalized) {
+    return null;
+  }
+
   return (
-    <box flexDirection="row" gap={1}>
+    <box flexDirection="row" gap={1} marginTop={1}>
       <box width={1} backgroundColor={uiTheme.divider} />
       <box flexGrow={1}>
-        <text wrapMode="word">
-          <i fg={uiTheme.thinking}>Thinking:</i>
-          <span fg={uiTheme.subtle}> {content}</span>
-        </text>
+        <code
+          filetype="markdown"
+          drawUnstyledText={false}
+          streaming={true}
+          syntaxStyle={opencodeSubtleMarkdownSyntax}
+          content={`_Thinking:_ ${normalized}`}
+          conceal={false}
+          fg={uiTheme.muted}
+        />
       </box>
     </box>
   );
@@ -23,8 +32,8 @@ const ThinkingSegment = ({ content }: { content: string }) => {
 
 const CodeSegment = ({ content }: { content: string }) => {
   return (
-    <box backgroundColor={uiTheme.surface} paddingX={2} paddingY={1}>
-      <text fg={uiTheme.text} wrapMode="word">
+    <box backgroundColor={uiTheme.surface} paddingX={2} paddingY={1} marginTop={1}>
+      <text fg={uiTheme.text} attributes={uiTheme.typography.code} wrapMode="word">
         {content}
       </text>
     </box>
@@ -33,17 +42,32 @@ const CodeSegment = ({ content }: { content: string }) => {
 
 const NoteSegment = ({ content }: { content: string }) => {
   return (
-    <text fg={uiTheme.muted} attributes={TextAttributes.DIM} wrapMode="word">
-      {content}
-    </text>
+    <box paddingLeft={3} marginTop={1}>
+      <text fg={uiTheme.muted} attributes={uiTheme.typography.note} wrapMode="word">
+        {content}
+      </text>
+    </box>
   );
 };
 
 const TextSegment = ({ content }: { content: string }) => {
+  const normalized = content.trim();
+  if (!normalized) {
+    return null;
+  }
+
   return (
-    <text fg={uiTheme.text} attributes={TextAttributes.BOLD} wrapMode="word">
-      {content}
-    </text>
+    <box paddingLeft={3} marginTop={1}>
+      <code
+        filetype="markdown"
+        drawUnstyledText={false}
+        streaming={true}
+        syntaxStyle={opencodeMarkdownSyntax}
+        content={normalized}
+        conceal={false}
+        fg={uiTheme.text}
+      />
+    </box>
   );
 };
 
@@ -62,4 +86,3 @@ export const AssistantSegment = ({ segment }: AssistantSegmentProps) => {
 
   return <TextSegment content={segment.content} />;
 };
-

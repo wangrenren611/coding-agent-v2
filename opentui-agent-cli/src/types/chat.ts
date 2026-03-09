@@ -12,6 +12,7 @@ export type AssistantReply = {
   segments: ReplySegment[];
   modelLabel: string;
   agentLabel: string;
+  startedAtMs?: number;
   durationSeconds: number;
   status: ReplyStatus;
   completionReason?: string;
@@ -21,5 +22,6 @@ export type AssistantReply = {
 export type ChatTurn = {
   id: number;
   prompt: string;
+  createdAtMs: number;
   reply?: AssistantReply;
 };

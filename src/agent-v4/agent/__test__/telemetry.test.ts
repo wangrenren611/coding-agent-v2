@@ -27,7 +27,10 @@ describe('telemetry', () => {
       onMetric,
       onTrace,
     };
-    const safeCallback = vi.fn(async (cb: ((arg: unknown) => Promise<void>) | undefined, arg: unknown) => {
+    const safeCallback: <T>(
+      cb: ((arg: T) => void | Promise<void>) | undefined,
+      arg: T
+    ) => Promise<void> = vi.fn(async (cb, arg) => {
       await cb?.(arg);
     });
 

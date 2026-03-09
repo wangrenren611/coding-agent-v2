@@ -14,6 +14,7 @@ import type {
 } from '../../types';
 import type { ToolManager } from '../../tool/tool-manager';
 import { DefaultToolManager } from '../../tool/tool-manager';
+import { BashTool } from '../../tool/bash';
 import { WriteFileTool } from '../../tool/write-file';
 import type { Chunk, LLMProvider, ToolCall } from '../../../providers';
 import { AgentError } from '../error';
@@ -35,7 +36,8 @@ type AgentPrivate = {
         info: ToolPolicyCheckInfo
       ) => ToolPolicyDecision | Promise<ToolPolicyDecision>;
     },
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    executionId?: string
   ) => AsyncGenerator<StreamEvent>;
   processToolCalls: (
     calls: ToolCall[],
@@ -53,10 +55,12 @@ type AgentPrivate = {
     existing: Array<{ id: string; function: { arguments: string } }>,
     incoming: Array<{ id: string; function: { arguments: string } }>,
     messageId: string
-  ) => Promise<Array<{
-    id: string;
-    function: { arguments: string };
-  }>>;
+  ) => Promise<
+    Array<{
+      id: string;
+      function: { arguments: string };
+    }>
+  >;
   yieldCheckpoint: (
     executionId: string | undefined,
     step: number,
@@ -173,7 +177,9 @@ describe('StatelessAgent', () => {
       toolExecutionLedger: new InMemoryToolExecutionLedger(),
     });
     const onMessage = vi.fn();
-    const events = await collectEvents(agent.runStream(createInput(), { onMessage, onCheckpoint: vi.fn() }));
+    const events = await collectEvents(
+      agent.runStream(createInput(), { onMessage, onCheckpoint: vi.fn() })
+    );
 
     expect(events.map((e) => e.type)).toEqual(['progress', 'chunk', 'reasoning_chunk', 'done']);
     expect(events[3]?.data).toMatchObject({ finishReason: 'stop', steps: 1 });
@@ -222,12 +228,111 @@ describe('StatelessAgent', () => {
       )
     );
 
-    const generateStreamCalls = (provider.generateStream as unknown as { mock: { calls: unknown[][] } })
-      .mock.calls;
+    const generateStreamCalls = (
+      provider.generateStream as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
     expect(generateStreamCalls).toHaveLength(1);
-    const callConfig = generateStreamCalls[0]?.[1] as { temperature?: number; abortSignal?: AbortSignal };
+    const callConfig = generateStreamCalls[0]?.[1] as {
+      temperature?: number;
+      abortSignal?: AbortSignal;
+    };
     expect(callConfig.temperature).toBe(0.1);
     expect(callConfig.abortSignal).toBe(controller.signal);
+  });
+
+  it('passes top-level tools into llm generateStream config', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi.fn().mockReturnValue(
+      toStream([
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { content: 'ok' } }],
+        },
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+        },
+      ])
+    );
+
+    const tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'bash',
+          description: 'Execute shell command',
+          parameters: {
+            type: 'object',
+            properties: {
+              command: { type: 'string' },
+            },
+            required: ['command'],
+          },
+        },
+      },
+    ];
+
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
+    await collectEvents(
+      agent.runStream(
+        {
+          ...createInput(),
+          tools,
+        },
+        { onMessage: vi.fn(), onCheckpoint: vi.fn() }
+      )
+    );
+
+    const generateStreamCalls = (
+      provider.generateStream as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    expect(generateStreamCalls).toHaveLength(1);
+    const callConfig = generateStreamCalls[0]?.[1] as { tools?: unknown[] };
+    expect(callConfig.tools).toEqual(tools);
+  });
+
+  it('uses toolManager schemas when input.tools is omitted', async () => {
+    const provider = createProvider();
+    const manager = new DefaultToolManager();
+    manager.registerTool(new BashTool());
+    provider.generateStream = vi.fn().mockReturnValue(
+      toStream([
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { content: 'ok' } }],
+        },
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+        },
+      ])
+    );
+
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
+    await collectEvents(
+      agent.runStream(
+        {
+          ...createInput(),
+        },
+        { onMessage: vi.fn(), onCheckpoint: vi.fn() }
+      )
+    );
+
+    const generateStreamCalls = (
+      provider.generateStream as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    expect(generateStreamCalls).toHaveLength(1);
+    const callConfig = generateStreamCalls[0]?.[1] as {
+      tools?: Array<{ function?: { name?: string } }>;
+    };
+    expect(callConfig.tools?.some((tool) => tool.function?.name === 'bash')).toBe(true);
   });
 
   it('injects systemPrompt as system message when input has no system role message', async () => {
@@ -260,8 +365,9 @@ describe('StatelessAgent', () => {
       )
     );
 
-    const generateStreamCalls = (provider.generateStream as unknown as { mock: { calls: unknown[][] } })
-      .mock.calls;
+    const generateStreamCalls = (
+      provider.generateStream as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
     const llmMessages = generateStreamCalls[0]?.[0] as Array<{ role: string; content: unknown }>;
     expect(llmMessages[0]).toMatchObject({
       role: 'system',
@@ -391,13 +497,91 @@ describe('StatelessAgent', () => {
     }
   });
 
+  it('merges tool call fragments by index when follow-up chunk omits id/name', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+
+    provider.generateStream = vi
+      .fn()
+      .mockReturnValueOnce(
+        toStream([
+          {
+            index: 0,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      id: 'call_fragment_1',
+                      type: 'function',
+                      index: 0,
+                      function: { name: 'bash', arguments: '{' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          {
+            index: 0,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      function: { arguments: '"command":"ls -la"}' },
+                    },
+                  ],
+                  finish_reason: 'tool_calls',
+                } as unknown as ChunkDelta,
+              },
+            ],
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        toStream([
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { content: 'done' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+          },
+        ])
+      );
+    manager.execute = vi.fn().mockResolvedValue({ success: true, output: 'ok' });
+
+    const agent = new StatelessAgent(provider, manager, { maxRetryCount: 3 });
+    const events = await collectEvents(
+      agent.runStream(createInput(), { onMessage: vi.fn(), onCheckpoint: vi.fn() })
+    );
+
+    expect(manager.execute).toHaveBeenCalledTimes(1);
+    expect(
+      (manager.execute as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]?.[0]
+    ).toMatchObject({
+      id: 'call_fragment_1',
+      function: {
+        name: 'bash',
+        arguments: '{"command":"ls -la"}',
+      },
+    });
+    expect(events.filter((event) => event.type === 'tool_result')).toHaveLength(1);
+  });
+
   it('enforces llm timeout budget and emits timeout error event', async () => {
     vi.useFakeTimers();
     const provider = createProvider();
     const manager = createToolManager();
 
-    provider.generateStream = vi.fn().mockImplementation(
-      (_messages: unknown, _options?: { abortSignal?: AbortSignal }) =>
+    provider.generateStream = vi
+      .fn()
+      .mockImplementation((_messages: unknown, _options?: { abortSignal?: AbortSignal }) =>
         (async function* () {
           await new Promise<void>((resolve) => setTimeout(resolve, 30));
           yield {
@@ -409,7 +593,7 @@ describe('StatelessAgent', () => {
             choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
           } as Chunk;
         })()
-    );
+      );
 
     const agent = new StatelessAgent(provider, manager, {
       maxRetryCount: 1,
@@ -437,8 +621,9 @@ describe('StatelessAgent', () => {
       },
     });
 
-    const generateStreamCalls = (provider.generateStream as unknown as { mock: { calls: unknown[][] } })
-      .mock.calls;
+    const generateStreamCalls = (
+      provider.generateStream as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
     const callConfig = generateStreamCalls[0]?.[1] as { abortSignal?: AbortSignal };
     expect(callConfig.abortSignal).toBeDefined();
   });
@@ -582,10 +767,13 @@ describe('StatelessAgent', () => {
     const traceEvents = onTrace.mock.calls.map((call) => call[0] as AgentTraceEvent);
     expect(
       traceEvents.some(
-        (event) => event.name === 'agent.run' && event.phase === 'start' && event.traceId === 'exec_1'
+        (event) =>
+          event.name === 'agent.run' && event.phase === 'start' && event.traceId === 'exec_1'
       )
     ).toBe(true);
-    expect(traceEvents.some((event) => event.name === 'agent.run' && event.phase === 'end')).toBe(true);
+    expect(traceEvents.some((event) => event.name === 'agent.run' && event.phase === 'end')).toBe(
+      true
+    );
 
     const infoCalls = logger.info.mock.calls as Array<[string, Record<string, unknown>]>;
     expect(
@@ -783,10 +971,10 @@ describe('StatelessAgent', () => {
     ]);
 
     const calledUserContents = (
-      (provider.generateStream as unknown as { mock: { calls: unknown[][] } }).mock.calls.map(
-        (call) => ((call[0] as Array<{ content: string }>)?.[0]?.content ?? '')
-      )
-    ).sort();
+      provider.generateStream as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls
+      .map((call) => (call[0] as Array<{ content: string }>)?.[0]?.content ?? '')
+      .sort();
     expect(calledUserContents).toEqual(['A', 'B']);
     expect(onMessageA.mock.calls[0]?.[0]).toMatchObject({ content: 'reply:A' });
     expect(onMessageB.mock.calls[0]?.[0]).toMatchObject({ content: 'reply:B' });
@@ -832,7 +1020,8 @@ describe('StatelessAgent', () => {
     );
 
     expect(compactSpy).toHaveBeenCalledOnce();
-    const firstCallArgs = (provider.generateStream as unknown as { mock: { calls: unknown[][] } }).mock.calls[0];
+    const firstCallArgs = (provider.generateStream as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls[0];
     const llmMessages = firstCallArgs?.[0] as Array<{ content: string }>;
     expect(llmMessages[0]?.content).toBe('compacted input');
     expect(events.some((event) => event.type === 'compaction')).toBe(true);
@@ -863,7 +1052,9 @@ describe('StatelessAgent', () => {
       ])
     );
 
-    const compactSpy = vi.spyOn(compactionModule, 'compact').mockRejectedValue(new Error('compact failed'));
+    const compactSpy = vi
+      .spyOn(compactionModule, 'compact')
+      .mockRejectedValue(new Error('compact failed'));
     const logger = { error: vi.fn() };
 
     const agent = new StatelessAgent(provider, manager, {
@@ -871,7 +1062,9 @@ describe('StatelessAgent', () => {
       compactionTriggerRatio: 0,
       logger,
     });
-    const events = await collectEvents(agent.runStream(createInput(), { onMessage: vi.fn(), onCheckpoint: vi.fn() }));
+    const events = await collectEvents(
+      agent.runStream(createInput(), { onMessage: vi.fn(), onCheckpoint: vi.fn() })
+    );
 
     expect(compactSpy).toHaveBeenCalledOnce();
     expect(events.at(-1)).toMatchObject({
@@ -957,9 +1150,12 @@ describe('StatelessAgent', () => {
     const onCheckpoint = vi.fn();
     const toolChunkSpy = vi.fn();
     agent.on('tool_chunk', toolChunkSpy);
-    agent.on('tool_confirm', (info: { resolve: (decision: { approved: boolean; message?: string }) => void }) => {
-      info.resolve({ approved: true, message: 'ok' });
-    });
+    agent.on(
+      'tool_confirm',
+      (info: { resolve: (decision: { approved: boolean; message?: string }) => void }) => {
+        info.resolve({ approved: true, message: 'ok' });
+      }
+    );
 
     const events = await collectEvents(agent.runStream(createInput(), { onMessage, onCheckpoint }));
 
@@ -992,7 +1188,10 @@ describe('StatelessAgent', () => {
                     id: 'wf_call_1',
                     type: 'function',
                     index: 0,
-                    function: { name: 'write_file', arguments: '{"path":"a.txt","content":"partial' },
+                    function: {
+                      name: 'write_file',
+                      arguments: '{"path":"a.txt","content":"partial',
+                    },
                   },
                 ],
                 finish_reason: 'tool_calls',
@@ -1058,11 +1257,6 @@ describe('StatelessAgent', () => {
     try {
       const manager = new DefaultToolManager();
       manager.registerTool(
-        {
-          name: 'write_file',
-          description: 'write file',
-          parameters: {},
-        },
         new WriteFileTool({
           allowedDirectories: [allowedDir],
           bufferBaseDir: bufferDir,
@@ -1070,49 +1264,49 @@ describe('StatelessAgent', () => {
         })
       );
 
-    const buildToolCallStream = (toolCallId: string, args: Record<string, unknown>) => {
-      const raw = JSON.stringify(args);
-      const cut = Math.max(1, Math.floor(raw.length / 2));
-      return toStream([
-        {
-          index: 0,
-          choices: [
-            {
-              index: 0,
-              delta: {
-                tool_calls: [
-                  {
-                    id: toolCallId,
-                    type: 'function',
-                    index: 0,
-                    function: { name: 'write_file', arguments: raw.slice(0, cut) },
-                  },
-                ],
+      const buildToolCallStream = (toolCallId: string, args: Record<string, unknown>) => {
+        const raw = JSON.stringify(args);
+        const cut = Math.max(1, Math.floor(raw.length / 2));
+        return toStream([
+          {
+            index: 0,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      id: toolCallId,
+                      type: 'function',
+                      index: 0,
+                      function: { name: 'write_file', arguments: raw.slice(0, cut) },
+                    },
+                  ],
+                },
               },
-            },
-          ],
-        },
-        {
-          index: 0,
-          choices: [
-            {
-              index: 0,
-              delta: {
-                tool_calls: [
-                  {
-                    id: toolCallId,
-                    type: 'function',
-                    index: 0,
-                    function: { name: 'write_file', arguments: raw.slice(cut) },
-                  },
-                ],
-                finish_reason: 'tool_calls',
-              } as unknown as ChunkDelta,
-            },
-          ],
-        },
-      ]);
-    };
+            ],
+          },
+          {
+            index: 0,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      id: toolCallId,
+                      type: 'function',
+                      index: 0,
+                      function: { name: 'write_file', arguments: raw.slice(cut) },
+                    },
+                  ],
+                  finish_reason: 'tool_calls',
+                } as unknown as ChunkDelta,
+              },
+            ],
+          },
+        ]);
+      };
 
       provider.generateStream = vi
         .fn()
@@ -1165,11 +1359,12 @@ describe('StatelessAgent', () => {
       const toolResults = events.filter((event) => event.type === 'tool_result');
       expect(toolResults).toHaveLength(3);
 
-      const payloads = toolResults.map((event) =>
-        JSON.parse((event.data as Message).content as string) as {
-          code: string;
-          nextAction: string;
-        }
+      const payloads = toolResults.map(
+        (event) =>
+          JSON.parse((event.data as Message).content as string) as {
+            code: string;
+            nextAction: string;
+          }
       );
       expect(payloads.map((payload) => payload.code)).toEqual([
         'WRITE_FILE_PARTIAL_BUFFERED',
@@ -1306,9 +1501,12 @@ describe('StatelessAgent', () => {
     const onMessage = vi.fn();
     const toolChunkSpy = vi.fn();
     agent.on('tool_chunk', toolChunkSpy);
-    agent.on('tool_confirm', (info: { resolve: (decision: { approved: boolean; message?: string }) => void }) => {
-      info.resolve({ approved: true, message: 'approved' });
-    });
+    agent.on(
+      'tool_confirm',
+      (info: { resolve: (decision: { approved: boolean; message?: string }) => void }) => {
+        info.resolve({ approved: true, message: 'approved' });
+      }
+    );
 
     const toolEvents = await collectEvents(
       (agent as unknown as AgentPrivate).executeTool(
@@ -1504,6 +1702,7 @@ describe('StatelessAgent', () => {
       maxRetryCount: 3,
       toolExecutionLedger: new InMemoryToolExecutionLedger(),
     });
+    const agentPrivate = agent as unknown as AgentPrivate;
     const toolCall: ToolCall = {
       id: toolCallId,
       type: 'function',
@@ -1513,7 +1712,7 @@ describe('StatelessAgent', () => {
 
     const [eventsA, eventsB] = await Promise.all([
       collectEvents(
-        (agent as any).executeTool(
+        agentPrivate.executeTool(
           toolCall,
           1,
           { onMessage: vi.fn() },
@@ -1522,7 +1721,7 @@ describe('StatelessAgent', () => {
         )
       ),
       collectEvents(
-        (agent as any).executeTool(
+        agentPrivate.executeTool(
           toolCall,
           1,
           { onMessage: vi.fn() },
@@ -1551,6 +1750,7 @@ describe('StatelessAgent', () => {
     manager.execute = vi.fn().mockResolvedValue({ success: true, output: 'tool-no-cache' });
 
     const agent = new StatelessAgent(provider, manager, { maxRetryCount: 3 });
+    const agentPrivate = agent as unknown as AgentPrivate;
     const toolCall: ToolCall = {
       id: 'tool_no_cache_1',
       type: 'function',
@@ -1559,10 +1759,10 @@ describe('StatelessAgent', () => {
     };
 
     await collectEvents(
-      (agent as any).executeTool(toolCall, 1, { onMessage: vi.fn() }, undefined, 'exec_no_cache_1')
+      agentPrivate.executeTool(toolCall, 1, { onMessage: vi.fn() }, undefined, 'exec_no_cache_1')
     );
     await collectEvents(
-      (agent as any).executeTool(toolCall, 1, { onMessage: vi.fn() }, undefined, 'exec_no_cache_1')
+      agentPrivate.executeTool(toolCall, 1, { onMessage: vi.fn() }, undefined, 'exec_no_cache_1')
     );
 
     expect(manager.execute).toHaveBeenCalledTimes(2);
@@ -1572,8 +1772,9 @@ describe('StatelessAgent', () => {
     vi.useFakeTimers();
     const provider = createProvider();
     const manager = createToolManager();
-    (manager as unknown as { getConcurrencyPolicy: (toolCall: ToolCall) => ToolConcurrencyPolicy }).getConcurrencyPolicy =
-      vi.fn(() => ({ mode: 'parallel-safe' }));
+    (
+      manager as unknown as { getConcurrencyPolicy: (toolCall: ToolCall) => ToolConcurrencyPolicy }
+    ).getConcurrencyPolicy = vi.fn(() => ({ mode: 'parallel-safe' }));
     let inFlight = 0;
     let maxInFlight = 0;
     manager.execute = vi.fn().mockImplementation(async (toolCall: ToolCall) => {
@@ -1583,7 +1784,10 @@ describe('StatelessAgent', () => {
       inFlight -= 1;
       return { success: true, output: `ok-${toolCall.id}` };
     });
-    const agent = new StatelessAgent(provider, manager, { maxRetryCount: 3, maxConcurrentToolCalls: 2 });
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      maxConcurrentToolCalls: 2,
+    });
     const messages: Message[] = [
       {
         messageId: 'm0',
@@ -1620,7 +1824,12 @@ describe('StatelessAgent', () => {
     const events = await eventsPromise;
 
     expect(maxInFlight).toBe(2);
-    expect(events.map((e) => e.type)).toEqual(['progress', 'progress', 'tool_result', 'tool_result']);
+    expect(events.map((e) => e.type)).toEqual([
+      'progress',
+      'progress',
+      'tool_result',
+      'tool_result',
+    ]);
     expect(messages.at(-2)).toMatchObject({ tool_call_id: 'tool_1' });
     expect(messages.at(-1)).toMatchObject({ tool_call_id: 'tool_2' });
   });
@@ -1629,11 +1838,12 @@ describe('StatelessAgent', () => {
     vi.useFakeTimers();
     const provider = createProvider();
     const manager = createToolManager();
-    (manager as unknown as { getConcurrencyPolicy: (toolCall: ToolCall) => ToolConcurrencyPolicy }).getConcurrencyPolicy =
-      vi.fn((toolCall: ToolCall) => ({
-        mode: 'parallel-safe',
-        lockKey: toolCall.id === 'tool_3' ? 'other-file' : 'same-file',
-      }));
+    (
+      manager as unknown as { getConcurrencyPolicy: (toolCall: ToolCall) => ToolConcurrencyPolicy }
+    ).getConcurrencyPolicy = vi.fn((toolCall: ToolCall) => ({
+      mode: 'parallel-safe',
+      lockKey: toolCall.id === 'tool_3' ? 'other-file' : 'same-file',
+    }));
 
     let inFlight = 0;
     let maxInFlight = 0;
@@ -1645,7 +1855,10 @@ describe('StatelessAgent', () => {
       return { success: true, output: 'ok' };
     });
 
-    const agent = new StatelessAgent(provider, manager, { maxRetryCount: 3, maxConcurrentToolCalls: 3 });
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      maxConcurrentToolCalls: 3,
+    });
     const messages: Message[] = [
       {
         messageId: 'm0',
@@ -1703,9 +1916,7 @@ describe('StatelessAgent', () => {
       maxRetryCount: 3,
       maxConcurrentToolCalls: 3,
       toolConcurrencyPolicyResolver: (toolCall: ToolCall) =>
-        toolCall.id === 'tool_exclusive'
-          ? { mode: 'exclusive' }
-          : { mode: 'parallel-safe' },
+        toolCall.id === 'tool_exclusive' ? { mode: 'exclusive' } : { mode: 'parallel-safe' },
     });
 
     const messages: Message[] = [
@@ -1740,7 +1951,12 @@ describe('StatelessAgent', () => {
       )
     );
 
-    expect(events.map((e) => e.type)).toEqual(['progress', 'progress', 'tool_result', 'tool_result']);
+    expect(events.map((e) => e.type)).toEqual([
+      'progress',
+      'progress',
+      'tool_result',
+      'tool_result',
+    ]);
     expect(messages.at(-2)).toMatchObject({ tool_call_id: 'tool_exclusive' });
     expect(messages.at(-1)).toMatchObject({ tool_call_id: 'tool_parallel' });
   });
@@ -1815,7 +2031,7 @@ describe('StatelessAgent', () => {
           function: { name: 'bash', arguments: '{}' },
         },
         1,
-        { onMessage: vi.fn(), onMetric },
+        { onMessage: vi.fn(), onMetric }
       )
     );
 
@@ -1848,7 +2064,7 @@ describe('StatelessAgent', () => {
             function: { name: 'bash', arguments: '{}' },
           },
           1,
-          { onMessage: vi.fn(), onMetric },
+          { onMessage: vi.fn(), onMetric }
         )
       )
     ).rejects.toThrow('chaos tool crash');
@@ -1874,7 +2090,9 @@ describe('StatelessAgent', () => {
 
     const onError = vi.fn().mockResolvedValue({ retry: false });
     const agent = new StatelessAgent(provider, manager, { maxRetryCount: 3 });
-    const events = await collectEvents(agent.runStream(createInput(), { onMessage: vi.fn(), onCheckpoint: vi.fn(), onError }));
+    const events = await collectEvents(
+      agent.runStream(createInput(), { onMessage: vi.fn(), onCheckpoint: vi.fn(), onError })
+    );
 
     expect(onError).toHaveBeenCalledOnce();
     expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(AgentError);
@@ -1924,7 +2142,9 @@ describe('StatelessAgent', () => {
       maxRetryCount: 3,
       backoffConfig: { initialDelayMs: 1, maxDelayMs: 1, base: 2, jitter: false },
     });
-    const events = await collectEvents(agent.runStream(createInput(), { onMessage: vi.fn(), onCheckpoint: vi.fn(), onError }));
+    const events = await collectEvents(
+      agent.runStream(createInput(), { onMessage: vi.fn(), onCheckpoint: vi.fn(), onError })
+    );
 
     expect(onError).toHaveBeenCalledOnce();
     expect(events.map((e) => e.type)).toEqual(['progress', 'error', 'progress', 'chunk', 'done']);
@@ -2071,7 +2291,11 @@ describe('StatelessAgent', () => {
 
     const agent = new StatelessAgent(provider, manager, { maxRetryCount: 3 });
     const events = await collectEvents(
-      agent.runStream(createInput(), { onMessage: vi.fn(), onCheckpoint: vi.fn(), onError: vi.fn() })
+      agent.runStream(createInput(), {
+        onMessage: vi.fn(),
+        onCheckpoint: vi.fn(),
+        onError: vi.fn(),
+      })
     );
 
     expect(events.map((event) => event.type)).toEqual(['progress', 'error']);
@@ -2181,12 +2405,9 @@ describe('StatelessAgent', () => {
       tool_call_id: 'tool-1',
     });
 
-    await agentPrivate.safeCallback(
-      async () => {
-        throw new Error('callback failed');
-      },
-      'x'
-    );
+    await agentPrivate.safeCallback(async () => {
+      throw new Error('callback failed');
+    }, 'x');
     await agentPrivate.safeCallback(undefined, 'x');
 
     const okDecision = await agentPrivate.safeErrorCallback(
@@ -2195,15 +2416,15 @@ describe('StatelessAgent', () => {
     );
     expect(okDecision).toEqual({ retry: true });
 
-    const undefinedDecision = await agentPrivate.safeErrorCallback(undefined, new Error('no callback'));
+    const undefinedDecision = await agentPrivate.safeErrorCallback(
+      undefined,
+      new Error('no callback')
+    );
     expect(undefinedDecision).toBeUndefined();
 
-    const errorDecision = await agentPrivate.safeErrorCallback(
-      () => {
-        throw new Error('error callback failed');
-      },
-      new Error('e2')
-    );
+    const errorDecision = await agentPrivate.safeErrorCallback(() => {
+      throw new Error('error callback failed');
+    }, new Error('e2'));
     expect(errorDecision).toBeUndefined();
 
     const merged = await agentPrivate.mergeToolCalls(
@@ -2220,16 +2441,11 @@ describe('StatelessAgent', () => {
     ]);
 
     const checkpointEvents = await collectEvents(
-      agentPrivate.yieldCheckpoint(
-        undefined,
-        3,
-        undefined,
-        {
-          onCheckpoint: () => {
-            throw new Error('checkpoint failed');
-          },
-        } as { onCheckpoint: (cp: unknown) => void },
-      )
+      agentPrivate.yieldCheckpoint(undefined, 3, undefined, {
+        onCheckpoint: () => {
+          throw new Error('checkpoint failed');
+        },
+      } as { onCheckpoint: (cp: unknown) => void })
     );
     expect(checkpointEvents[0]).toMatchObject({
       type: 'checkpoint',

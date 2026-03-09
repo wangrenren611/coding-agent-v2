@@ -75,8 +75,10 @@ export const App = () => {
       height={dimensions.height}
       flexDirection="column"
       backgroundColor={uiTheme.bg}
-      paddingTop={1}
-      paddingBottom={0}
+      paddingTop={uiTheme.layout.appPaddingTop}
+      paddingBottom={uiTheme.layout.appPaddingBottom}
+      paddingLeft={uiTheme.layout.appPaddingX}
+      paddingRight={uiTheme.layout.appPaddingX}
     >
       <ConversationPanel turns={turns} isThinking={isThinking} />
       <Prompt

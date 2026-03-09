@@ -128,7 +128,19 @@ const formatToolUseAsCode = (toolCall: ToolCallLike): string => {
   return [`# Tool: ${toolName} (${callId})`, stringifyPretty(args)].join("\n");
 };
 
-const formatToolResultAsCode = (event: AgentToolResultEvent): string => {
+const omitOutputField = (value: Record<string, unknown>): Record<string, unknown> => {
+  if (!("output" in value)) {
+    return value;
+  }
+  const cloned = { ...value };
+  delete cloned.output;
+  return cloned;
+};
+
+const formatToolResultAsCode = (
+  event: AgentToolResultEvent,
+  opts?: { suppressOutput?: boolean },
+): string => {
   const toolCall = toToolCall(event.toolCall);
   const toolName = toolCall.function?.name ?? "tool";
   const callId = toolCall.id ?? "unknown";
@@ -142,13 +154,18 @@ const formatToolResultAsCode = (event: AgentToolResultEvent): string => {
   }
 
   const output = pickString(data.output);
-  if (output) {
+  if (output && !opts?.suppressOutput) {
     lines.push(output);
     return limitText(lines.join("\n"));
   }
 
-  if (Object.keys(data).length > 0) {
-    lines.push(stringifyPretty(data));
+  const normalizedData = opts?.suppressOutput ? omitOutputField(data) : data;
+  if (Object.keys(normalizedData).length > 0) {
+    lines.push(stringifyPretty(normalizedData));
+    return limitText(lines.join("\n"));
+  }
+
+  if (opts?.suppressOutput && output) {
     return limitText(lines.join("\n"));
   }
 
@@ -178,8 +195,11 @@ export const formatToolResultEvent = (event: AgentToolResultEvent): string => {
   return `[tool-result] ${stringify(event)}`;
 };
 
-export const formatToolResultEventCode = (event: AgentToolResultEvent): string => {
-  return formatToolResultAsCode(event);
+export const formatToolResultEventCode = (
+  event: AgentToolResultEvent,
+  opts?: { suppressOutput?: boolean },
+): string => {
+  return formatToolResultAsCode(event, opts);
 };
 
 export const formatStepEvent = (event: AgentStepEvent): string => {

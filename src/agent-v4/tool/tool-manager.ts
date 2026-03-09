@@ -5,7 +5,6 @@
 
 import {
   LLMTool,
-  Tool,
   ToolCall,
   ToolConcurrencyPolicy,
   ToolConfirmInfo,
@@ -56,12 +55,18 @@ const DEFAULT_DANGEROUS_BASH_RULES: BashRule[] = [
   },
 ];
 
-const DEFAULT_RESTRICTED_WRITE_PREFIXES = ['/etc', '/bin', '/sbin', '/usr', '/System', '/private/etc'];
-
+const DEFAULT_RESTRICTED_WRITE_PREFIXES = [
+  '/etc',
+  '/bin',
+  '/sbin',
+  '/usr',
+  '/System',
+  '/private/etc',
+];
 
 export interface ToolManager {
   execute(toolCall: ToolCall, options?: ToolExecutionContext): Promise<ToolResult>;
-  registerTool(tool: Tool, handler: BaseTool): void;
+  registerTool(tool: BaseTool): void;
   getTools(): BaseTool[];
   getConcurrencyPolicy?(toolCall: ToolCall): ToolConcurrencyPolicy;
 }
@@ -70,8 +75,7 @@ export interface ToolManager {
  * 默认工具管理器实现
  */
 export class DefaultToolManager implements ToolManager {
-  private tools: Map<string, Tool> = new Map();
-  private handlers: Map<string, BaseTool> = new Map();
+  private tools: Map<string, BaseTool> = new Map();
   private readonly enableBuiltInPolicy: boolean;
   private readonly dangerousBashRules: BashRule[];
   private readonly restrictedWritePathPrefixes: string[];
@@ -83,17 +87,17 @@ export class DefaultToolManager implements ToolManager {
       config.restrictedWritePathPrefixes ?? DEFAULT_RESTRICTED_WRITE_PREFIXES
     ).map((prefix) => path.resolve(prefix));
   }
-  
+
   async execute(toolCall: ToolCall, options: ToolExecutionContext): Promise<ToolResult> {
     const toolName = toolCall.function.name;
 
-    if(!toolName){
+    if (!toolName) {
       const err = new EmptyToolNameError();
       return {
         success: false,
         error: err,
-        output: err.message
-      }
+        output: err.message,
+      };
     }
 
     let args: Record<string, unknown>;
@@ -104,19 +108,19 @@ export class DefaultToolManager implements ToolManager {
       return {
         success: false,
         error: err,
-        output: err.message
+        output: err.message,
       };
     }
-  
-    const handler = this.handlers.get(toolName);
 
-    if(!handler){
+    const handler = this.tools.get(toolName);
+
+    if (!handler) {
       const err = new ToolNotFoundError(toolName);
       return {
         success: false,
         error: err,
-        output: err.message
-      }
+        output: err.message,
+      };
     }
 
     const validationResult = handler.safeValidateArgs(args);
@@ -126,7 +130,7 @@ export class DefaultToolManager implements ToolManager {
       return {
         success: false,
         error: err,
-        output: err.message
+        output: err.message,
       };
     }
 
@@ -148,28 +152,28 @@ export class DefaultToolManager implements ToolManager {
     if (!builtInDecision.allowed) {
       return this.buildPolicyDeniedResult(toolName, toolCall.id, builtInDecision, 'builtin');
     }
-    
+
     const needsConfirm = handler.shouldConfirm(validationResult.data);
-    
+
     if (needsConfirm && options?.onConfirm) {
       const confirmInfo: ToolConfirmInfo = {
         toolCallId: toolCall.id,
         toolName,
-        arguments: toolCall.function.arguments
+        arguments: toolCall.function.arguments,
       };
-      
+
       const decision = await options.onConfirm(confirmInfo);
-      
+
       if (!decision.approved) {
         const err = new ToolDeniedError(toolName, decision.message);
         return {
           success: false,
           error: err,
-          output: err.message
+          output: err.message,
         };
       }
     }
-    
+
     try {
       const result = await handler.execute(validationResult.data, options);
       return result;
@@ -179,30 +183,26 @@ export class DefaultToolManager implements ToolManager {
       return {
         success: false,
         error: err,
-        output: err.message
+        output: err.message,
       };
     }
   }
 
-
-  
-  registerTool(tool: Tool, handler: BaseTool): void {
+  registerTool(tool: BaseTool): void {
     this.tools.set(tool.name, tool);
-    this.handlers.set(tool.name, handler);
   }
 
   toToolsSchema(): LLMTool[] {
-      return this.getTools()
-        .map((tool) => tool.toToolSchema());
-    }
-  
+    return this.getTools().map((tool) => tool.toToolSchema());
+  }
+
   getTools(): BaseTool[] {
-    return Array.from(this.handlers.values());
+    return Array.from(this.tools.values());
   }
 
   getConcurrencyPolicy(toolCall: ToolCall): ToolConcurrencyPolicy {
     const toolName = toolCall.function.name;
-    const handler = this.handlers.get(toolName);
+    const handler = this.tools.get(toolName);
     if (!handler) {
       return { mode: 'exclusive' };
     }

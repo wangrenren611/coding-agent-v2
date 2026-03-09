@@ -1,5 +1,4 @@
 ﻿import type { KeyEvent, PasteEvent, TextareaRenderable } from "@opentui/core";
-import { TextAttributes } from "@opentui/core";
 import { useCallback, useEffect, useRef } from "react";
 
 import { FooterHints } from "./footer-hints";
@@ -105,7 +104,13 @@ export const Prompt = ({
   }, []);
 
   return (
-    <box flexDirection="column" flexShrink={0} gap={0} paddingX={1} paddingBottom={1}>
+    <box
+      flexDirection="column"
+      flexShrink={0}
+      gap={0}
+      paddingX={uiTheme.layout.promptPaddingX}
+      paddingBottom={uiTheme.layout.promptPaddingBottom}
+    >
       <SlashCommandMenu
         visible={slashMenu.visible}
         options={slashMenu.options}
@@ -133,10 +138,12 @@ export const Prompt = ({
             onPaste={handlePaste}
           />
           <box flexDirection="row" gap={1} paddingTop={1} paddingBottom={1}>
-            <text fg={uiTheme.text} attributes={TextAttributes.BOLD}>
+            <text fg={uiTheme.text} attributes={uiTheme.typography.heading}>
               {modelLabel}
             </text>
-            <text fg={uiTheme.muted}>Coding Agent</text>
+            <text fg={uiTheme.muted} attributes={uiTheme.typography.muted}>
+              Coding Agent
+            </text>
           </box>
         </box>
       </box>
