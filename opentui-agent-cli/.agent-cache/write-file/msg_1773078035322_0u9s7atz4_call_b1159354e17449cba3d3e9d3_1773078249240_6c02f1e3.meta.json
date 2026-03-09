@@ -1,0 +1,14 @@
+{
+  "bufferId": "call_b1159354e17449cba3d3e9d3",
+  "messageId": "msg_1773078035322_0u9s7atz4",
+  "toolCallId": "call_b1159354e17449cba3d3e9d3",
+  "baseDir": "D:\\work\\coding-agent-v2\\opentui-agent-cli\\.agent-cache\\write-file",
+  "rawArgsPath": "D:\\work\\coding-agent-v2\\opentui-agent-cli\\.agent-cache\\write-file\\msg_1773078035322_0u9s7atz4_call_b1159354e17449cba3d3e9d3_1773078249240_6c02f1e3.args.tmp",
+  "contentPath": "D:\\work\\coding-agent-v2\\opentui-agent-cli\\.agent-cache\\write-file\\msg_1773078035322_0u9s7atz4_call_b1159354e17449cba3d3e9d3_1773078249240_6c02f1e3.content.tmp",
+  "metaPath": "D:\\work\\coding-agent-v2\\opentui-agent-cli\\.agent-cache\\write-file\\msg_1773078035322_0u9s7atz4_call_b1159354e17449cba3d3e9d3_1773078249240_6c02f1e3.meta.json",
+  "createdAt": 1773078249240,
+  "updatedAt": 1773078249264,
+  "rawArgsBytes": 42098,
+  "contentBytes": 40787,
+  "status": "active"
+}
