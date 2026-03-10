@@ -26,18 +26,22 @@ import {
 } from './runtime';
 
 describe('runtime', () => {
-  const mockResolveToolConfirmDecision = vi.mocked(require('./tool-confirmation').resolveToolConfirmDecision);
+  const mockResolveToolConfirmDecision = vi.mocked(
+    require('./tool-confirmation').resolveToolConfirmDecision
+  );
   const mockGetSourceModules = vi.mocked(require('./source-modules').getSourceModules);
   const mockResolveWorkspaceRoot = vi.mocked(require('./source-modules').resolveWorkspaceRoot);
-  const mockBuildSystemPrompt = vi.mocked(require('../../../../src/agent-v4/prompts/system').buildSystemPrompt);
+  const mockBuildSystemPrompt = vi.mocked(
+    require('../../../../src/agent-v4/prompts/system').buildSystemPrompt
+  );
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     // 默认模拟
     mockResolveWorkspaceRoot.mockReturnValue('/test/workspace');
     mockBuildSystemPrompt.mockReturnValue('Test system prompt');
-    
+
     // 模拟SourceModules
     const mockModules = {
       loadEnvFiles: vi.fn().mockResolvedValue(undefined),
@@ -60,7 +64,7 @@ describe('runtime', () => {
         close: vi.fn().mockResolvedValue(undefined),
       },
     };
-    
+
     mockGetSourceModules.mockResolvedValue(mockModules);
   });
 
@@ -249,7 +253,9 @@ describe('runtime', () => {
         onError: vi.fn(),
       };
 
-      await expect(runAgentPrompt('Test prompt', handlers)).rejects.toThrow('Failed to load modules');
+      await expect(runAgentPrompt('Test prompt', handlers)).rejects.toThrow(
+        'Failed to load modules'
+      );
     });
   });
 });

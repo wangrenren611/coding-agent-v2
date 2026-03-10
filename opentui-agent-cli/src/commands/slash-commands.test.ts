@@ -115,10 +115,16 @@ describe('slash-commands', () => {
     it('should filter commands by name prefix', () => {
       const result = filterSlashCommands('h');
       expect(result.length).toBeGreaterThan(0);
-      expect(result.every(cmd => cmd.name.includes('h') || cmd.aliases?.some(alias => alias.includes('h')))).toBe(true);
+      expect(
+        result.every(
+          cmd => cmd.name.includes('h') || cmd.aliases?.some(alias => alias.includes('h'))
+        )
+      ).toBe(true);
 
       const result2 = filterSlashCommands('he');
-      const helpCommands = result2.filter(cmd => cmd.name.startsWith('he') || cmd.aliases?.some(alias => alias.startsWith('he')));
+      const helpCommands = result2.filter(
+        cmd => cmd.name.startsWith('he') || cmd.aliases?.some(alias => alias.startsWith('he'))
+      );
       expect(helpCommands.length).toBeGreaterThan(0);
     });
 

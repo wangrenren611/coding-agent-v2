@@ -64,7 +64,7 @@ describe('theme module', () => {
     it('should have correct default values for dark theme', () => {
       // 确保是暗色主题
       applyUiThemeMode('dark');
-      
+
       expect(uiTheme.bg).toBe('#0a0a0a');
       expect(uiTheme.surface).toBe('#141414');
       expect(uiTheme.text).toBe('#eeeeee');
@@ -75,7 +75,7 @@ describe('theme module', () => {
   describe('applyUiThemeMode', () => {
     it('should switch to dark theme', () => {
       applyUiThemeMode('dark');
-      
+
       expect(uiTheme.bg).toBe('#0a0a0a');
       expect(uiTheme.surface).toBe('#141414');
       expect(uiTheme.text).toBe('#eeeeee');
@@ -84,7 +84,7 @@ describe('theme module', () => {
 
     it('should switch to light theme', () => {
       applyUiThemeMode('light');
-      
+
       expect(uiTheme.bg).toBe('#eceff3');
       expect(uiTheme.surface).toBe('#ffffff');
       expect(uiTheme.text).toBe('#1f2530');
@@ -95,14 +95,14 @@ describe('theme module', () => {
       // 应用暗色主题
       applyUiThemeMode('dark');
       const darkThemeRef = uiTheme;
-      
+
       // 应用亮色主题
       applyUiThemeMode('light');
       const lightThemeRef = uiTheme;
-      
+
       // 两个引用应该不同
       expect(darkThemeRef).not.toBe(lightThemeRef);
-      
+
       // 颜色值应该不同
       expect(darkThemeRef.bg).not.toBe(lightThemeRef.bg);
       expect(darkThemeRef.text).not.toBe(lightThemeRef.text);
@@ -114,16 +114,16 @@ describe('theme module', () => {
       applyUiThemeMode('dark');
       const darkThemeLayout = uiTheme.layout;
       const darkThemeTypography = uiTheme.typography;
-      
+
       // 应用亮色主题
       applyUiThemeMode('light');
       const lightThemeLayout = uiTheme.layout;
       const lightThemeTypography = uiTheme.typography;
-      
+
       // layout和typography对象应该是独立的副本
       expect(darkThemeLayout).not.toBe(lightThemeLayout);
       expect(darkThemeTypography).not.toBe(lightThemeTypography);
-      
+
       // 但它们的值应该相同（因为两个主题共享相同的布局和排版）
       expect(darkThemeLayout.appPaddingTop).toBe(lightThemeLayout.appPaddingTop);
       expect(darkThemeLayout.appPaddingBottom).toBe(lightThemeLayout.appPaddingBottom);
@@ -135,7 +135,7 @@ describe('theme module', () => {
       // 先设置为亮色主题
       applyUiThemeMode('light');
       expect(uiTheme.bg).toBe('#eceff3');
-      
+
       // 使用无效模式（TypeScript会阻止，但JavaScript可能允许）
       // 这里测试默认行为
       applyUiThemeMode('dark' as any); // 强制为暗色

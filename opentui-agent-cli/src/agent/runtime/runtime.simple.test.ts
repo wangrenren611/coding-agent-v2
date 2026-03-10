@@ -5,7 +5,7 @@ describe('runtime module exports', () => {
   it('should have expected exports', async () => {
     // 动态导入以避免全局模拟问题
     const runtimeModule = await import('./runtime');
-    
+
     expect(typeof runtimeModule.runAgentPrompt).toBe('function');
     expect(typeof runtimeModule.getAgentModelLabel).toBe('function');
     expect(typeof runtimeModule.getAgentModelId).toBe('function');

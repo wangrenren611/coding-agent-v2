@@ -70,7 +70,7 @@ vi.fn(() => ({
 describe('useAgentChat', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     // Default mocks
     mockGetAgentModelLabel.mockResolvedValue('glm-5');
     mockResolveSlashCommand.mockReturnValue(null);
@@ -81,7 +81,7 @@ describe('useAgentChat', () => {
       handlers.onTextComplete?.('');
       return { success: true };
     });
-    
+
     mockBuildAgentEventHandlers.mockReturnValue({
       onTextDelta: vi.fn(),
       onTextComplete: vi.fn(),

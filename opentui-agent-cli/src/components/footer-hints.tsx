@@ -8,7 +8,7 @@ type FooterHintsProps = {
   contextUsagePercent: number | null;
 };
 
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const SPINNER_INTERVAL_MS = 80;
 
 export const FooterHints = ({ isThinking, contextUsagePercent }: FooterHintsProps) => {

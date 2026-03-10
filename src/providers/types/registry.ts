@@ -39,7 +39,7 @@ export type ModelId =
   | 'wr-claude-4.6'
   | 'qwen3.5-max'
   | 'qwen-minimax-2.5'
-  | 'deepseek-reasoner'
+  | 'deepseek-reasoner';
 
 /**
  * 模型配置

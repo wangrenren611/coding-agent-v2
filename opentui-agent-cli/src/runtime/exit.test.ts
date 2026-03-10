@@ -42,7 +42,7 @@ describe('exit module', () => {
     mockProcess.once.mockClear();
     mockProcess.exit.mockClear();
     mockConsoleError.mockClear();
-    
+
     // 替换全局对象
     global.process = mockProcess as any;
     console.error = mockConsoleError as any;
@@ -70,7 +70,7 @@ describe('exit module', () => {
   describe('hardResetTerminal', () => {
     it('should reset terminal when stdout is TTY', () => {
       hardResetTerminal();
-      
+
       expect(mockProcess.stdout.write).toHaveBeenCalled();
       expect(mockProcess.stdin.setRawMode).toHaveBeenCalledWith(false);
     });
@@ -78,9 +78,9 @@ describe('exit module', () => {
     it('should not reset terminal when stdout is not TTY', () => {
       mockProcess.stdout.isTTY = false;
       mockProcess.stdin.isTTY = false;
-      
+
       hardResetTerminal();
-      
+
       expect(mockProcess.stdout.write).not.toHaveBeenCalled();
       expect(mockProcess.stdin.setRawMode).not.toHaveBeenCalled();
     });
@@ -88,9 +88,9 @@ describe('exit module', () => {
     it('should call registered restore function', () => {
       const restoreFn = mock(() => {});
       registerTerminalBackgroundRestore(restoreFn);
-      
+
       hardResetTerminal();
-      
+
       expect(restoreFn).toHaveBeenCalled();
     });
 
@@ -98,7 +98,7 @@ describe('exit module', () => {
       mockProcess.stdout.write.mockImplementation(() => {
         throw new Error('Write error');
       });
-      
+
       // 不应该抛出错误
       expect(() => hardResetTerminal()).not.toThrow();
     });
@@ -108,7 +108,7 @@ describe('exit module', () => {
     it('should store renderer reference', () => {
       const mockRenderer = {} as CliRenderer;
       initExitRuntime(mockRenderer);
-      
+
       // 函数内部只是存储引用，没有返回值
       expect(() => initExitRuntime(mockRenderer)).not.toThrow();
     });
@@ -122,10 +122,10 @@ describe('exit module', () => {
         disableKittyKeyboard: mock(() => {}),
         destroy: mock(() => {}),
       } as any;
-      
+
       initExitRuntime(mockRenderer);
       requestExit();
-      
+
       expect(mockRenderer.destroy).toHaveBeenCalled();
       expect(mockProcess.exit).toHaveBeenCalledWith(0);
     });
@@ -139,10 +139,10 @@ describe('exit module', () => {
       // 第一次调用
       requestExit(0);
       expect(mockProcess.exit).toHaveBeenCalledTimes(1);
-      
+
       // 重置模拟
       mockProcess.exit.mockClear();
-      
+
       // 第二次调用，应该已经清理过了
       requestExit(0);
       expect(mockProcess.exit).not.toHaveBeenCalled();
@@ -156,13 +156,19 @@ describe('exit module', () => {
     it('should handle renderer errors gracefully', () => {
       const mockRenderer = {
         useMouse: false,
-        setTerminalTitle: mock(() => { throw new Error('Title error'); }),
-        disableKittyKeyboard: mock(() => { throw new Error('Keyboard error'); }),
-        destroy: mock(() => { throw new Error('Destroy error'); }),
+        setTerminalTitle: mock(() => {
+          throw new Error('Title error');
+        }),
+        disableKittyKeyboard: mock(() => {
+          throw new Error('Keyboard error');
+        }),
+        destroy: mock(() => {
+          throw new Error('Destroy error');
+        }),
       } as any;
-      
+
       initExitRuntime(mockRenderer);
-      
+
       // 不应该抛出错误
       expect(() => requestExit(0)).not.toThrow();
       expect(mockProcess.exit).toHaveBeenCalledWith(0);
@@ -172,7 +178,7 @@ describe('exit module', () => {
   describe('bindExitGuards', () => {
     it('should bind exit handlers', () => {
       bindExitGuards();
-      
+
       expect(mockProcess.once).toHaveBeenCalledWith('SIGINT', expect.any(Function));
       expect(mockProcess.once).toHaveBeenCalledWith('SIGTERM', expect.any(Function));
       expect(mockProcess.once).toHaveBeenCalledWith('exit', expect.any(Function));
