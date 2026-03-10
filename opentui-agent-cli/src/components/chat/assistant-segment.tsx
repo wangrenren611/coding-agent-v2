@@ -1,6 +1,6 @@
-import type { ReplySegment } from "../../types/chat";
-import { opencodeMarkdownSyntax, opencodeSubtleMarkdownSyntax } from "../../ui/opencode-markdown";
-import { uiTheme } from "../../ui/theme";
+import type { ReplySegment } from '../../types/chat';
+import { opencodeMarkdownSyntax, opencodeSubtleMarkdownSyntax } from '../../ui/opencode-markdown';
+import { uiTheme } from '../../ui/theme';
 
 type AssistantSegmentProps = {
   segment: ReplySegment;
@@ -8,8 +8,8 @@ type AssistantSegmentProps = {
 };
 
 const markdownTableOptions = {
-  widthMode: "full" as const,
-  wrapMode: "word" as const,
+  widthMode: 'full' as const,
+  wrapMode: 'word' as const,
   selectable: false,
 };
 
@@ -75,15 +75,15 @@ const TextSegment = ({ content, streaming }: { content: string; streaming: boole
 };
 
 export const AssistantSegment = ({ segment, streaming }: AssistantSegmentProps) => {
-  if (segment.type === "thinking") {
+  if (segment.type === 'thinking') {
     return <ThinkingSegment content={segment.content} streaming={streaming} />;
   }
 
-  if (segment.type === "code") {
+  if (segment.type === 'code') {
     return <CodeSegment content={segment.content} />;
   }
 
-  if (segment.type === "note") {
+  if (segment.type === 'note') {
     return <NoteSegment content={segment.content} />;
   }
 

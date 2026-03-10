@@ -1,14 +1,15 @@
-import { useKeyboard, useTerminalDimensions } from "@opentui/react";
+import { useKeyboard, useTerminalDimensions } from '@opentui/react';
+import { useState } from 'react';
 
-import { resolveSlashCommand, type SlashCommandDefinition } from "./commands/slash-commands";
-import { ConversationPanel } from "./components/conversation-panel";
-import { ModelPickerDialog } from "./components/model-picker-dialog";
-import { Prompt } from "./components/prompt";
-import { ToolConfirmDialog } from "./components/tool-confirm-dialog";
-import { useAgentChat } from "./hooks/use-agent-chat";
-import { useModelPicker } from "./hooks/use-model-picker";
-import { requestExit } from "./runtime/exit";
-import { uiTheme } from "./ui/theme";
+import { resolveSlashCommand, type SlashCommandDefinition } from './commands/slash-commands';
+import { ConversationPanel } from './components/conversation-panel';
+import { ModelPickerDialog } from './components/model-picker-dialog';
+import { Prompt } from './components/prompt';
+import { ToolConfirmDialog } from './components/tool-confirm-dialog';
+import { useAgentChat } from './hooks/use-agent-chat';
+import { useModelPicker } from './hooks/use-model-picker';
+import { requestExit } from './runtime/exit';
+import { uiTheme } from './ui/theme';
 
 export const App = () => {
   const {
@@ -20,6 +21,7 @@ export const App = () => {
     pendingToolConfirm,
     setInputValue,
     submitInput,
+    stopActiveReply,
     clearInput,
     resetConversation,
     setModelLabelDisplay,
@@ -27,6 +29,7 @@ export const App = () => {
     submitToolConfirmSelection,
     rejectPendingToolConfirm,
   } = useAgentChat();
+  const [slashMenuVisible, setSlashMenuVisible] = useState(false);
   const modelPicker = useModelPicker({
     onModelChanged: setModelLabelDisplay,
   });
@@ -34,8 +37,8 @@ export const App = () => {
 
   const submitWithCommands = () => {
     const command = resolveSlashCommand(inputValue);
-    if (command?.action === "models") {
-      setInputValue("");
+    if (command?.action === 'models') {
+      setInputValue('');
       modelPicker.open();
       return;
     }
@@ -44,55 +47,62 @@ export const App = () => {
   };
 
   const handleSlashCommandSelect = (command: SlashCommandDefinition) => {
-    if (command.action === "models") {
-      setInputValue("");
+    if (command.action === 'models') {
+      setInputValue('');
       modelPicker.open();
       return true;
     }
     return false;
   };
 
-  useKeyboard((key) => {
-    if (key.ctrl && key.name === "c") {
+  useKeyboard(key => {
+    if (key.ctrl && key.name === 'c') {
       requestExit(0);
       return;
     }
 
     if (modelPicker.visible) {
-      if (key.name === "escape") {
+      if (key.name === 'escape') {
         modelPicker.close();
       }
       return;
     }
 
     if (pendingToolConfirm) {
-      if (key.name === "left" || key.name === "h") {
-        setToolConfirmSelection("approve");
+      if (key.name === 'left' || key.name === 'h') {
+        setToolConfirmSelection('approve');
         return;
       }
 
-      if (key.name === "right" || key.name === "l") {
-        setToolConfirmSelection("deny");
+      if (key.name === 'right' || key.name === 'l') {
+        setToolConfirmSelection('deny');
         return;
       }
 
-      if (key.name === "return" || key.name === "enter") {
+      if (key.name === 'return' || key.name === 'enter') {
         submitToolConfirmSelection();
         return;
       }
 
-      if (key.name === "escape") {
+      if (key.name === 'escape') {
         rejectPendingToolConfirm();
       }
       return;
     }
 
-    if (key.ctrl && key.name === "l") {
+    if (key.ctrl && key.name === 'l') {
       resetConversation();
       return;
     }
 
-    if (key.name === "escape") {
+    if (key.name === 'escape') {
+      if (slashMenuVisible) {
+        return;
+      }
+      if (isThinking) {
+        stopActiveReply();
+        return;
+      }
       clearInput();
     }
   });
@@ -117,6 +127,7 @@ export const App = () => {
         value={inputValue}
         onValueChange={setInputValue}
         onSlashCommandSelect={handleSlashCommandSelect}
+        onSlashMenuVisibilityChange={setSlashMenuVisible}
         onSubmit={submitWithCommands}
       />
       <ToolConfirmDialog

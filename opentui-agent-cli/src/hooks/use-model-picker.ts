@@ -1,11 +1,8 @@
-import type { KeyEvent } from "@opentui/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { KeyEvent } from '@opentui/core';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import {
-  listAgentModels,
-  switchAgentModel,
-} from "../agent/runtime/runtime";
-import type { AgentModelOption } from "../agent/runtime/model-types";
+import { listAgentModels, switchAgentModel } from '../agent/runtime/runtime';
+import type { AgentModelOption } from '../agent/runtime/model-types';
 
 type UseModelPickerParams = {
   onModelChanged: (label: string) => void;
@@ -34,7 +31,7 @@ export const useModelPicker = ({ onModelChanged }: UseModelPickerParams): UseMod
   const [loading, setLoading] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [allOptions, setAllOptions] = useState<AgentModelOption[]>([]);
   const requestIdRef = useRef(0);
@@ -45,7 +42,7 @@ export const useModelPicker = ({ onModelChanged }: UseModelPickerParams): UseMod
       return allOptions;
     }
 
-    return allOptions.filter((item) => {
+    return allOptions.filter(item => {
       const provider = item.provider.toLowerCase();
       const id = item.id.toLowerCase();
       const name = item.name.toLowerCase();
@@ -70,7 +67,7 @@ export const useModelPicker = ({ onModelChanged }: UseModelPickerParams): UseMod
     setLoading(false);
     setSwitching(false);
     setError(null);
-    setSearch("");
+    setSearch('');
     setSelectedIndex(0);
   }, []);
 
@@ -78,20 +75,20 @@ export const useModelPicker = ({ onModelChanged }: UseModelPickerParams): UseMod
     setVisible(true);
     setLoading(true);
     setError(null);
-    setSearch("");
+    setSearch('');
     setSelectedIndex(0);
     setAllOptions([]);
     requestIdRef.current += 1;
     const requestId = requestIdRef.current;
 
     void listAgentModels()
-      .then((models) => {
+      .then(models => {
         if (requestId !== requestIdRef.current) {
           return;
         }
         setAllOptions(models);
       })
-      .catch((loadError) => {
+      .catch(loadError => {
         if (requestId !== requestIdRef.current) {
           return;
         }
@@ -120,11 +117,11 @@ export const useModelPicker = ({ onModelChanged }: UseModelPickerParams): UseMod
       setSwitching(true);
       setError(null);
       const changed = await switchAgentModel(selected.id);
-      setAllOptions((prev) =>
-        prev.map((item) => ({
+      setAllOptions(prev =>
+        prev.map(item => ({
           ...item,
           current: item.id === changed.modelId,
-        })),
+        }))
       );
       onModelChanged(changed.modelLabel);
       close();
@@ -143,14 +140,14 @@ export const useModelPicker = ({ onModelChanged }: UseModelPickerParams): UseMod
         return false;
       }
 
-      const name = (event.name ?? "").toLowerCase();
+      const name = (event.name ?? '').toLowerCase();
       const ctrlOnly = !!event.ctrl && !event.shift && !event.meta;
-      const isUp = name === "up" || (ctrlOnly && name === "p");
-      const isDown = name === "down" || (ctrlOnly && name === "n");
+      const isUp = name === 'up' || (ctrlOnly && name === 'p');
+      const isDown = name === 'down' || (ctrlOnly && name === 'n');
 
       if (isUp) {
         if (options.length > 0) {
-          setSelectedIndex((current) => (current - 1 + options.length) % options.length);
+          setSelectedIndex(current => (current - 1 + options.length) % options.length);
         }
         event.preventDefault();
         return true;
@@ -158,19 +155,19 @@ export const useModelPicker = ({ onModelChanged }: UseModelPickerParams): UseMod
 
       if (isDown) {
         if (options.length > 0) {
-          setSelectedIndex((current) => (current + 1) % options.length);
+          setSelectedIndex(current => (current + 1) % options.length);
         }
         event.preventDefault();
         return true;
       }
 
-      if (name === "escape") {
+      if (name === 'escape') {
         close();
         event.preventDefault();
         return true;
       }
 
-      if (name === "return" || name === "enter") {
+      if (name === 'return' || name === 'enter') {
         void confirmSelected();
         event.preventDefault();
         return true;
@@ -178,7 +175,7 @@ export const useModelPicker = ({ onModelChanged }: UseModelPickerParams): UseMod
 
       return false;
     },
-    [close, confirmSelected, options.length, visible],
+    [close, confirmSelected, options.length, visible]
   );
 
   return {

@@ -29,7 +29,7 @@ export type ModelId =
   // Kimi 系列
   | 'kimi-k2.5'
   // DeepSeek 系列
-  | 'deepseek-chat'
+  // | 'deepseek-chat'
   // GLM 5.0 系列
   | 'glm-5'
   // Qwen 系列
@@ -38,7 +38,8 @@ export type ModelId =
   | 'qwen-glm-5'
   | 'wr-claude-4.6'
   | 'qwen3.5-max'
-  | 'qwen-minimax-2.5';
+  | 'qwen-minimax-2.5'
+  | 'deepseek-reasoner'
 
 /**
  * 模型配置

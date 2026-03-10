@@ -70,7 +70,7 @@ export type AgentEventHandlers = {
   onToolStream?: (event: AgentToolStreamEvent) => void;
   onToolConfirm?: (event: AgentToolConfirmEvent) => void;
   onToolConfirmRequest?: (
-    event: AgentToolConfirmEvent,
+    event: AgentToolConfirmEvent
   ) => AgentToolConfirmDecision | Promise<AgentToolConfirmDecision>;
   onToolUse?: (event: AgentToolUseEvent) => void;
   onToolResult?: (event: AgentToolResultEvent) => void;

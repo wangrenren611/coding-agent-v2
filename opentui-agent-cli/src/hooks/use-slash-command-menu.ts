@@ -1,7 +1,7 @@
-﻿import type { KeyEvent, TextareaRenderable } from "@opentui/core";
-import { useCallback, useEffect, useMemo, useState, type RefObject } from "react";
+﻿import type { KeyEvent, TextareaRenderable } from '@opentui/core';
+import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react';
 
-import { filterSlashCommands, type SlashCommandDefinition } from "../commands/slash-commands";
+import { filterSlashCommands, type SlashCommandDefinition } from '../commands/slash-commands';
 
 type UseSlashCommandMenuParams = {
   value: string;
@@ -86,7 +86,7 @@ export const useSlashCommandMenu = ({
 
       return true;
     },
-    [onCommandSelected, onValueChange, options, textareaRef],
+    [onCommandSelected, onValueChange, options, textareaRef]
   );
 
   const moveSelection = useCallback(
@@ -94,13 +94,13 @@ export const useSlashCommandMenu = ({
       if (!visible || options.length === 0) {
         return;
       }
-      setSelectedIndex((current) => {
+      setSelectedIndex(current => {
         const total = options.length;
         const next = (current + step + total) % total;
         return next;
       });
     },
-    [options.length, visible],
+    [options.length, visible]
   );
 
   const handleKeyDown = useCallback(
@@ -109,10 +109,10 @@ export const useSlashCommandMenu = ({
         return false;
       }
 
-      const name = (event.name ?? "").toLowerCase();
+      const name = (event.name ?? '').toLowerCase();
       const ctrlOnly = !!event.ctrl && !event.shift && !event.meta;
-      const isUp = name === "up" || (ctrlOnly && name === "p");
-      const isDown = name === "down" || (ctrlOnly && name === "n");
+      const isUp = name === 'up' || (ctrlOnly && name === 'p');
+      const isDown = name === 'down' || (ctrlOnly && name === 'n');
 
       if (isUp) {
         moveSelection(-1);
@@ -126,13 +126,13 @@ export const useSlashCommandMenu = ({
         return true;
       }
 
-      if (name === "escape") {
+      if (name === 'escape') {
         setDismissedQuery(query);
         event.preventDefault();
         return true;
       }
 
-      if (name === "return" || name === "enter" || name === "tab") {
+      if (name === 'return' || name === 'enter' || name === 'tab') {
         const applied = applySelection(selectedIndex);
         if (applied) {
           event.preventDefault();
@@ -142,7 +142,7 @@ export const useSlashCommandMenu = ({
 
       return false;
     },
-    [applySelection, moveSelection, query, selectedIndex, visible],
+    [applySelection, moveSelection, query, selectedIndex, visible]
   );
 
   return {

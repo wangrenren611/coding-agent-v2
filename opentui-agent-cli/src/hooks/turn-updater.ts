@@ -1,6 +1,12 @@
-﻿import type { AssistantReply, ChatTurn, ReplySegment, ReplySegmentType, ReplyStatus } from "../types/chat";
+﻿import type {
+  AssistantReply,
+  ChatTurn,
+  ReplySegment,
+  ReplySegmentType,
+  ReplyStatus,
+} from '../types/chat';
 
-const DEFAULT_AGENT_LABEL = "";
+const DEFAULT_AGENT_LABEL = '';
 
 export const createStreamingReply = (modelLabel: string): AssistantReply => ({
   agentLabel: DEFAULT_AGENT_LABEL,
@@ -8,27 +14,30 @@ export const createStreamingReply = (modelLabel: string): AssistantReply => ({
   startedAtMs: Date.now(),
   durationSeconds: 0,
   segments: [],
-  status: "streaming",
+  status: 'streaming',
 });
 
 export const patchTurn = (
   turns: ChatTurn[],
   turnId: number,
-  patch: (turn: ChatTurn) => ChatTurn,
+  patch: (turn: ChatTurn) => ChatTurn
 ): ChatTurn[] => {
-  return turns.map((turn) => (turn.id === turnId ? patch(turn) : turn));
+  return turns.map(turn => (turn.id === turnId ? patch(turn) : turn));
 };
 
 export const ensureSegment = (
   segments: ReplySegment[],
   segmentId: string,
   type: ReplySegmentType,
-  data?: unknown,
+  data?: unknown
 ): ReplySegment[] => {
-  if (segments.some((segment) => segment.id === segmentId)) {
+  if (segments.some(segment => segment.id === segmentId)) {
     return segments;
   }
-  return [...segments, { id: segmentId, type, content: "", ...(data !== undefined ? { data } : {}) }];
+  return [
+    ...segments,
+    { id: segmentId, type, content: '', ...(data !== undefined ? { data } : {}) },
+  ];
 };
 
 export const appendToSegment = (
@@ -36,41 +45,41 @@ export const appendToSegment = (
   segmentId: string,
   type: ReplySegmentType,
   chunk: string,
-  data?: unknown,
+  data?: unknown
 ): ReplySegment[] => {
   const base = ensureSegment(segments, segmentId, type, data);
-  return base.map((segment) =>
+  return base.map(segment =>
     segment.id === segmentId
       ? {
           ...segment,
           content: `${segment.content}${chunk}`,
           ...(data !== undefined ? { data } : {}),
         }
-      : segment,
+      : segment
   );
 };
 
-type ToolSegmentKind = "use" | "stream" | "result";
+type ToolSegmentKind = 'use' | 'stream' | 'result';
 
 const parseToolSegment = (
-  segmentId: string,
+  segmentId: string
 ): {
   toolCallId: string;
   kind: ToolSegmentKind;
 } | null => {
   const toolUseMatch = segmentId.match(/^\d+:tool-use:(.+)$/);
   if (toolUseMatch && toolUseMatch[1]) {
-    return { toolCallId: toolUseMatch[1], kind: "use" };
+    return { toolCallId: toolUseMatch[1], kind: 'use' };
   }
 
   const toolResultMatch = segmentId.match(/^\d+:tool-result:(.+)$/);
   if (toolResultMatch && toolResultMatch[1]) {
-    return { toolCallId: toolResultMatch[1], kind: "result" };
+    return { toolCallId: toolResultMatch[1], kind: 'result' };
   }
 
   const toolStreamMatch = segmentId.match(/^\d+:tool:([^:]+):/);
   if (toolStreamMatch && toolStreamMatch[1]) {
-    return { toolCallId: toolStreamMatch[1], kind: "stream" };
+    return { toolCallId: toolStreamMatch[1], kind: 'stream' };
   }
 
   return null;
@@ -110,7 +119,7 @@ export const orderReplySegments = (segments: ReplySegment[]): ReplySegment[] => 
 
   const normalized: ReplySegment[] = [];
   for (const item of ordered) {
-    if ("id" in item) {
+    if ('id' in item) {
       normalized.push(item);
       continue;
     }
@@ -125,18 +134,22 @@ export const orderReplySegments = (segments: ReplySegment[]): ReplySegment[] => 
   return normalized;
 };
 
-export const appendNoteLine = (segments: ReplySegment[], segmentId: string, text: string): ReplySegment[] => {
-  const line = text.endsWith("\n") ? text : `${text}\n`;
-  return appendToSegment(segments, segmentId, "note", line);
+export const appendNoteLine = (
+  segments: ReplySegment[],
+  segmentId: string,
+  text: string
+): ReplySegment[] => {
+  const line = text.endsWith('\n') ? text : `${text}\n`;
+  return appendToSegment(segments, segmentId, 'note', line);
 };
 
 export const setReplyStatus = (
   turns: ChatTurn[],
   turnId: number,
   status: ReplyStatus,
-  extras?: Partial<AssistantReply>,
+  extras?: Partial<AssistantReply>
 ): ChatTurn[] => {
-  return patchTurn(turns, turnId, (turn) => {
+  return patchTurn(turns, turnId, turn => {
     const reply = turn.reply;
     if (!reply) {
       return turn;

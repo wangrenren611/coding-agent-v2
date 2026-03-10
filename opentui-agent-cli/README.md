@@ -28,7 +28,7 @@ bun run dev:watch
 
 - Agent-style CLI chat layout (header, conversation panel, prompt input)
 - Built-in commands: `/help`, `/clear`, `/exit`
-- Keyboard shortcuts: `Esc` (clear input), `Ctrl+L` (clear conversation)
+- Keyboard shortcuts: `Esc` (stop current response when thinking, otherwise clear input), `Ctrl+L` (clear conversation)
 - Simulated async agent reply flow
 
 ## Main file

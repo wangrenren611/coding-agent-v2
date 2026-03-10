@@ -1,6 +1,7 @@
 /**
- * System prompt builder.
- * Combines kimi-cli prompt structure with coding-agent constraints.
+ * 系统提示词构建
+ *
+ * 融合 kimi-cli 的简洁结构和 coding-agent 的严格约束
  */
 
 import * as path from 'path';
@@ -101,26 +102,8 @@ Treat work as COMPLEX when it needs multi-source research, multiple deliverables
 - Task status must progress: pending -> in_progress -> completed.
 
 ## Skill Usage
-Confirmed-skill-first policy:
-- Prefer skills over ad-hoc answers when a suitable skill is confirmed.
-- You MUST use a skill when any of the following is true:
-  - the user explicitly names a skill;
-  - a suitable local skill is already known and readable;
-  - tool or subagent output confirms that a matching skill exists.
-- Do not claim, infer, or invent skill availability or skill behavior without confirmation from tools or subagent output.
-
-Required workflow:
-1. Check whether the user named a skill or whether a suitable skill is already confirmed in the current environment.
-2. If a suitable skill is confirmed, load it and follow its instructions to complete the task.
-3. If the task appears skill-suitable but no skill is yet confirmed, use the skill-discovery path exposed by the runtime (for example the \`find-skills\` subagent when available) to discover the correct skill.
-4. If discovery finds or installs a matching skill, load that skill and use it to complete the task.
-5. If tool results show that no suitable skill exists, or the runtime does not expose a skill-discovery path, proceed with direct execution using normal tools.
-
-Rules:
-- Only rely on observed tool results and subagent outputs.
-- Treat loaded skill instructions as the source of truth for that task.
-- Do not force skill routing for ordinary coding, editing, explanation, or debugging work unless a relevant skill is actually confirmed.
-- Keep the objective pragmatic: use skills when they materially improve correctness, reuse, or task coverage.
+Use skill when user names a skill or the request clearly matches a known skill workflow.
+Workflow: load skill -> follow instructions -> execute with tools.
 
 ## File Modification Best Practices
   - Use the file_edit tool to edit files 
@@ -174,22 +157,22 @@ Do not declare completion if constraints/artifacts are unmet.
 }
 
 type SystemPromptOptions = {
-  /** Working directory */
+  /** 工作目录 */
   directory: string;
-  /** Response language */
+  /** 响应语言 */
   language?: string;
-  /** Current datetime */
+  /** 当前日期时间 */
   currentDateTime?: string;
-  /** Sandbox mode */
+  /** 运行时沙箱模式（可选） */
   sandboxMode?: string;
-  /** Network policy */
+  /** 运行时网络策略（可选） */
   networkPolicy?: string;
-  /** Runtime tool names */
+  /** 运行时可用工具名（可选） */
   runtimeToolNames?: string[];
 };
 
 /**
- * Build the complete system prompt.
+ * 构建完整的系统提示词
  */
 export function buildSystemPrompt({
   directory = process.cwd(),
@@ -199,10 +182,10 @@ export function buildSystemPrompt({
   networkPolicy,
   runtimeToolNames,
 }: SystemPromptOptions): string {
-  // 1. Identity
+  // 1. 身份定义
   const identity = `You are coding agent, an interactive CLI coding agent focused on software engineering tasks.`;
 
-  // 3. Environment information
+  // 3. 环境信息
   const environmentInfo = [
     'Here is some useful information about the environment you are running in:',
     '<env>',

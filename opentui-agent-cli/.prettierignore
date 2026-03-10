@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+*.log
+coverage
+.agent-cache
+.agent-v4
+PROJECT_ANALYSIS_REPORT.md
+bun.lock
+*.db
+*.db-*

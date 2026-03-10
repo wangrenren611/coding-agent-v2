@@ -1,7 +1,7 @@
-﻿import { TextAttributes } from "@opentui/core";
+﻿import { TextAttributes } from '@opentui/core';
 
-import type { SlashCommandDefinition } from "../commands/slash-commands";
-import { uiTheme } from "../ui/theme";
+import type { SlashCommandDefinition } from '../commands/slash-commands';
+import { uiTheme } from '../ui/theme';
 
 type SlashCommandMenuProps = {
   visible: boolean;
@@ -9,8 +9,8 @@ type SlashCommandMenuProps = {
   selectedIndex: number;
 };
 
-const selectedBackground = "#f4b183";
-const selectedForeground = "#050608";
+const selectedBackground = '#f4b183';
+const selectedForeground = '#050608';
 
 export const SlashCommandMenu = ({ visible, options, selectedIndex }: SlashCommandMenuProps) => {
   if (!visible) {
@@ -27,7 +27,7 @@ export const SlashCommandMenu = ({ visible, options, selectedIndex }: SlashComma
       width="100%"
       flexShrink={0}
       backgroundColor={uiTheme.panel}
-      border={["top", "bottom", "left", "right"]}
+      border={['top', 'bottom', 'left', 'right']}
       borderColor={uiTheme.divider}
       marginBottom={0}
       height={Math.min(11, options.length + 2)}
@@ -36,7 +36,7 @@ export const SlashCommandMenu = ({ visible, options, selectedIndex }: SlashComma
         <box flexDirection="column" backgroundColor={uiTheme.panel}>
           {options.map((option, index) => {
             const isSelected = index === selectedIndex;
-            const commandText = `/${option.name}`.padEnd(labelWidth + 2, " ");
+            const commandText = `/${option.name}`.padEnd(labelWidth + 2, ' ');
 
             return (
               <box

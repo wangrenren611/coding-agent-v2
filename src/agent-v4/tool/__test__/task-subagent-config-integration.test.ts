@@ -132,8 +132,8 @@ describe('task subagent config integration', () => {
       throw new Error('expected captured task config');
     }
     expect(firstCapture.allowedTools).toEqual(['skill', 'bash']);
-    expect(firstCapture.systemPrompt).toContain('skill discovery and installation specialist');
-    expect(firstCapture.systemPrompt).toContain('Always try the skill tool first');
-    expect(firstCapture.systemPrompt).toContain('load the "find-skills" skill');
+    expect(firstCapture.systemPrompt).toContain('Skill Discovery and Installation Specialist');
+    expect(firstCapture.systemPrompt).toContain('Check local skills first');
+    expect(firstCapture.systemPrompt).toContain('load the **`find-skills`** skill');
   });
 });

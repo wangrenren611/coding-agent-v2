@@ -1,8 +1,8 @@
-import type { AgentToolUseEvent } from "./types";
+import type { AgentToolUseEvent } from './types';
 
 const readToolCallId = (event: AgentToolUseEvent): string | undefined => {
   const maybeId = (event as { id?: unknown }).id;
-  return typeof maybeId === "string" && maybeId.length > 0 ? maybeId : undefined;
+  return typeof maybeId === 'string' && maybeId.length > 0 ? maybeId : undefined;
 };
 
 export class ToolCallBuffer {
@@ -11,7 +11,11 @@ export class ToolCallBuffer {
   private readonly toolCallsById = new Map<string, AgentToolUseEvent>();
   private readonly emittedIds = new Set<string>();
 
-  register(toolCall: AgentToolUseEvent, emit: (event: AgentToolUseEvent) => void, executing = false) {
+  register(
+    toolCall: AgentToolUseEvent,
+    emit: (event: AgentToolUseEvent) => void,
+    executing = false
+  ) {
     const toolCallId = readToolCallId(toolCall);
     if (!toolCallId) {
       emit(toolCall);

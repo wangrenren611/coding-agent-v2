@@ -1,11 +1,11 @@
-﻿import type { KeyEvent, PasteEvent, TextareaRenderable } from "@opentui/core";
-import { useCallback, useEffect, useRef } from "react";
+import type { KeyEvent, PasteEvent, TextareaRenderable } from '@opentui/core';
+import { useCallback, useEffect, useRef } from 'react';
 
-import { FooterHints } from "./footer-hints";
-import { SlashCommandMenu } from "./slash-command-menu";
-import type { SlashCommandDefinition } from "../commands/slash-commands";
-import { useSlashCommandMenu } from "../hooks/use-slash-command-menu";
-import { uiTheme } from "../ui/theme";
+import { FooterHints } from './footer-hints';
+import { SlashCommandMenu } from './slash-command-menu';
+import type { SlashCommandDefinition } from '../commands/slash-commands';
+import { useSlashCommandMenu } from '../hooks/use-slash-command-menu';
+import { uiTheme } from '../ui/theme';
 
 type PromptProps = {
   isThinking: boolean;
@@ -15,6 +15,7 @@ type PromptProps = {
   value: string;
   onValueChange: (value: string) => void;
   onSlashCommandSelect?: (command: SlashCommandDefinition) => boolean;
+  onSlashMenuVisibilityChange?: (visible: boolean) => void;
   onSubmit: () => void;
 };
 
@@ -26,12 +27,15 @@ export const Prompt = ({
   value,
   onValueChange,
   onSlashCommandSelect,
+  onSlashMenuVisibilityChange,
   onSubmit,
 }: PromptProps) => {
   const textareaRef = useRef<TextareaRenderable | null>(null);
   const inputLocked = isThinking || disabled;
   const promptAlignPaddingX =
-    uiTheme.layout.conversationPaddingX + uiTheme.layout.conversationContentPaddingX + uiTheme.layout.promptPaddingX;
+    uiTheme.layout.conversationPaddingX +
+    uiTheme.layout.conversationContentPaddingX +
+    uiTheme.layout.promptPaddingX;
   const slashMenu = useSlashCommandMenu({
     value,
     onValueChange,
@@ -39,6 +43,10 @@ export const Prompt = ({
     onCommandSelected: onSlashCommandSelect,
     disabled: inputLocked,
   });
+
+  useEffect(() => {
+    onSlashMenuVisibilityChange?.(slashMenu.visible);
+  }, [onSlashMenuVisibilityChange, slashMenu.visible]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -74,7 +82,7 @@ export const Prompt = ({
   }, [inputLocked, onSubmit]);
 
   const handleContentChange = useCallback(() => {
-    onValueChange(textareaRef.current?.plainText ?? "");
+    onValueChange(textareaRef.current?.plainText ?? '');
   }, [onValueChange]);
 
   const handleKeyDown = useCallback(
@@ -88,17 +96,17 @@ export const Prompt = ({
         return;
       }
 
-      const isEnter = event.name === "return" || event.name === "enter";
+      const isEnter = event.name === 'return' || event.name === 'enter';
       if (isEnter && !event.shift) {
         event.preventDefault();
         submit();
       }
     },
-    [inputLocked, slashMenu, submit],
+    [inputLocked, slashMenu, submit]
   );
 
   const handlePaste = useCallback((event: PasteEvent) => {
-    const normalized = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const normalized = event.text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     if (normalized === event.text) {
       return;
     }
@@ -108,7 +116,12 @@ export const Prompt = ({
   }, []);
 
   return (
-    <box flexDirection="column" flexShrink={0} gap={0} paddingBottom={uiTheme.layout.promptPaddingBottom}>
+    <box
+      flexDirection="column"
+      flexShrink={0}
+      gap={0}
+      paddingBottom={uiTheme.layout.promptPaddingBottom}
+    >
       <box flexDirection="column" gap={0} paddingX={promptAlignPaddingX}>
         <SlashCommandMenu
           visible={slashMenu.visible}
@@ -117,7 +130,13 @@ export const Prompt = ({
         />
         <box flexDirection="row" backgroundColor={uiTheme.panel}>
           <box width={1} backgroundColor={uiTheme.accent} />
-          <box flexGrow={1} paddingX={2} paddingTop={1} paddingBottom={0} backgroundColor={uiTheme.panel}>
+          <box
+            flexGrow={1}
+            paddingX={2}
+            paddingTop={1}
+            paddingBottom={0}
+            backgroundColor={uiTheme.panel}
+          >
             <textarea
               ref={textareaRef}
               width="100%"
@@ -133,10 +152,10 @@ export const Prompt = ({
               selectionFg={uiTheme.inputSelectionText}
               placeholder={
                 isThinking
-                  ? "waiting for agent response..."
+                  ? 'waiting for agent response...'
                   : disabled
-                    ? "command dialog active..."
-                    : "Type your message..."
+                    ? 'command dialog active...'
+                    : 'Type your message...'
               }
               placeholderColor={uiTheme.muted}
               onContentChange={handleContentChange}

@@ -1,17 +1,17 @@
-import { TextAttributes } from "@opentui/core";
+import { TextAttributes } from '@opentui/core';
 
-import type { AgentToolConfirmEvent } from "../agent/runtime/types";
-import { uiTheme } from "../ui/theme";
-import { buildToolConfirmDialogContent } from "./tool-confirm-dialog-content";
+import type { AgentToolConfirmEvent } from '../agent/runtime/types';
+import { uiTheme } from '../ui/theme';
+import { buildToolConfirmDialogContent } from './tool-confirm-dialog-content';
 
 type ToolConfirmDialogProps = {
   visible: boolean;
   viewportWidth: number;
   viewportHeight: number;
-  request: (AgentToolConfirmEvent & { selectedAction: "approve" | "deny" }) | null;
+  request: (AgentToolConfirmEvent & { selectedAction: 'approve' | 'deny' }) | null;
 };
 
-const selectedForeground = "#050608";
+const selectedForeground = '#050608';
 
 const renderButton = (label: string, selected: boolean) => {
   return (
@@ -19,7 +19,7 @@ const renderButton = (label: string, selected: boolean) => {
       paddingLeft={1}
       paddingRight={1}
       backgroundColor={selected ? uiTheme.accent : uiTheme.surface}
-      border={["top", "bottom", "left", "right"]}
+      border={['top', 'bottom', 'left', 'right']}
       borderColor={selected ? uiTheme.accent : uiTheme.divider}
     >
       <text fg={selected ? selectedForeground : uiTheme.text} attributes={TextAttributes.BOLD}>
@@ -47,19 +47,33 @@ export const ToolConfirmDialog = ({
   const selectedAction = request.selectedAction;
 
   return (
-    <box position="absolute" top={top} left={left} width={panelWidth} height={panelHeight} zIndex={150}>
+    <box
+      position="absolute"
+      top={top}
+      left={left}
+      width={panelWidth}
+      height={panelHeight}
+      zIndex={150}
+    >
       <box
         width="100%"
         height="100%"
         flexDirection="column"
         backgroundColor={uiTheme.surface}
-        border={["top", "bottom", "left", "right"]}
+        border={['top', 'bottom', 'left', 'right']}
         borderColor={uiTheme.divider}
       >
-        <box gap={1} paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} flexDirection="column">
+        <box
+          gap={1}
+          paddingLeft={2}
+          paddingRight={2}
+          paddingTop={1}
+          paddingBottom={1}
+          flexDirection="column"
+        >
           <box flexDirection="row" gap={1}>
             <text fg={uiTheme.accent} attributes={TextAttributes.BOLD}>
-              {"△"}
+              {'△'}
             </text>
             <text fg={uiTheme.text} attributes={TextAttributes.BOLD}>
               Permission required
@@ -99,7 +113,7 @@ export const ToolConfirmDialog = ({
           {content.allowedDirectories.length > 0 ? (
             <box paddingLeft={1} flexDirection="column">
               <text fg={uiTheme.muted}>Allowed directories</text>
-              {content.allowedDirectories.map((directory) => (
+              {content.allowedDirectories.map(directory => (
                 <text key={directory} fg={uiTheme.text} wrapMode="word">
                   {directory}
                 </text>
@@ -137,13 +151,20 @@ export const ToolConfirmDialog = ({
           backgroundColor={uiTheme.panel}
         >
           <box flexDirection="row" gap={1}>
-            {renderButton("Allow once", selectedAction === "approve")}
-            {renderButton("Reject", selectedAction === "deny")}
+            {renderButton('Allow once', selectedAction === 'approve')}
+            {renderButton('Reject', selectedAction === 'deny')}
           </box>
-          <text fg={uiTheme.muted}>left/right select  enter confirm  esc reject</text>
+          <text fg={uiTheme.muted}>left/right select enter confirm esc reject</text>
         </box>
 
-        <box position="absolute" top={0} left={0} width={1} height="100%" backgroundColor={uiTheme.accent} />
+        <box
+          position="absolute"
+          top={0}
+          left={0}
+          width={1}
+          height="100%"
+          backgroundColor={uiTheme.accent}
+        />
       </box>
     </box>
   );

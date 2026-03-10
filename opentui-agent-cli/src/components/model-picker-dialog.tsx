@@ -1,9 +1,9 @@
-import type { KeyEvent, TextareaRenderable } from "@opentui/core";
-import { TextAttributes } from "@opentui/core";
-import { useEffect, useMemo, useRef } from "react";
+import type { KeyEvent, TextareaRenderable } from '@opentui/core';
+import { TextAttributes } from '@opentui/core';
+import { useEffect, useMemo, useRef } from 'react';
 
-import type { AgentModelOption } from "../agent/runtime/model-types";
-import { uiTheme } from "../ui/theme";
+import type { AgentModelOption } from '../agent/runtime/model-types';
+import { uiTheme } from '../ui/theme';
 
 type ModelPickerDialogProps = {
   visible: boolean;
@@ -21,12 +21,12 @@ type ModelPickerDialogProps = {
   onListKeyDown: (event: KeyEvent) => boolean;
 };
 
-const selectedBackground = "#f4b183";
-const selectedForeground = "#050608";
+const selectedBackground = '#f4b183';
+const selectedForeground = '#050608';
 
 const toProviderLabel = (provider: string) => {
   if (!provider) {
-    return "Other";
+    return 'Other';
   }
   return provider.slice(0, 1).toUpperCase() + provider.slice(1);
 };
@@ -69,21 +69,25 @@ export const ModelPickerDialog = ({
   }, [search, visible]);
 
   const rows = useMemo(() => {
-    const result: Array<{ type: "section" | "option"; label?: string; option?: AgentModelOption; index?: number }> =
-      [];
-    let lastProvider = "";
+    const result: Array<{
+      type: 'section' | 'option';
+      label?: string;
+      option?: AgentModelOption;
+      index?: number;
+    }> = [];
+    let lastProvider = '';
 
     options.forEach((option, index) => {
       if (option.provider !== lastProvider) {
         lastProvider = option.provider;
         result.push({
-          type: "section",
+          type: 'section',
           label: toProviderLabel(option.provider),
         });
       }
 
       result.push({
-        type: "option",
+        type: 'option',
         option,
         index,
       });
@@ -97,13 +101,20 @@ export const ModelPickerDialog = ({
   }
 
   return (
-    <box position="absolute" top={top} left={left} width={panelWidth} height={panelHeight} zIndex={140}>
+    <box
+      position="absolute"
+      top={top}
+      left={left}
+      width={panelWidth}
+      height={panelHeight}
+      zIndex={140}
+    >
       <box
         width="100%"
         height="100%"
         flexDirection="column"
         backgroundColor={uiTheme.surface}
-        border={["top", "bottom", "left", "right"]}
+        border={['top', 'bottom', 'left', 'right']}
         borderColor={uiTheme.divider}
       >
         <box justifyContent="space-between" paddingX={2} paddingTop={1} paddingBottom={0}>
@@ -128,8 +139,8 @@ export const ModelPickerDialog = ({
               focusedTextColor={uiTheme.text}
               backgroundColor={uiTheme.panel}
               focusedBackgroundColor={uiTheme.panel}
-              onContentChange={() => onSearchChange(searchRef.current?.plainText ?? "")}
-              onKeyDown={(event) => {
+              onContentChange={() => onSearchChange(searchRef.current?.plainText ?? '')}
+              onKeyDown={event => {
                 if (onListKeyDown(event)) {
                   return;
                 }
@@ -159,9 +170,13 @@ export const ModelPickerDialog = ({
                 </box>
               ) : (
                 rows.map((row, idx) => {
-                  if (row.type === "section") {
+                  if (row.type === 'section') {
                     return (
-                      <box key={`section:${row.label}:${idx}`} paddingX={1} paddingTop={idx === 0 ? 0 : 1}>
+                      <box
+                        key={`section:${row.label}:${idx}`}
+                        paddingX={1}
+                        paddingTop={idx === 0 ? 0 : 1}
+                      >
                         <text fg="#b294ff" attributes={TextAttributes.BOLD}>
                           {row.label}
                         </text>
@@ -172,7 +187,11 @@ export const ModelPickerDialog = ({
                   const option = row.option!;
                   const optionIndex = row.index ?? 0;
                   const isSelected = optionIndex === selectedIndex;
-                  const suffix = option.current ? "Current" : option.configured ? "Ready" : "No key";
+                  const suffix = option.current
+                    ? 'Current'
+                    : option.configured
+                      ? 'Ready'
+                      : 'No key';
 
                   return (
                     <box
@@ -202,7 +221,7 @@ export const ModelPickerDialog = ({
 
         <box paddingX={2} paddingY={1} justifyContent="space-between">
           <text fg={switching ? uiTheme.accent : uiTheme.muted}>
-            {switching ? "Switching model..." : "enter select  up/down navigate"}
+            {switching ? 'Switching model...' : 'enter select  up/down navigate'}
           </text>
           <text fg={uiTheme.muted}>
             <strong>esc</strong> close
@@ -215,7 +234,14 @@ export const ModelPickerDialog = ({
           </box>
         ) : null}
 
-        <box position="absolute" top={0} left={0} width={1} height="100%" backgroundColor={uiTheme.accent} />
+        <box
+          position="absolute"
+          top={0}
+          left={0}
+          width={1}
+          height="100%"
+          backgroundColor={uiTheme.accent}
+        />
       </box>
     </box>
   );

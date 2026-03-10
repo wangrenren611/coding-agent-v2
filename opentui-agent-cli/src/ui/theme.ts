@@ -1,6 +1,6 @@
-import { TextAttributes } from "@opentui/core";
+import { TextAttributes } from '@opentui/core';
 
-export type UiThemeMode = "dark" | "light";
+export type UiThemeMode = 'dark' | 'light';
 type TextAttributeValue = (typeof TextAttributes)[keyof typeof TextAttributes];
 
 export type UiTheme = {
@@ -38,7 +38,7 @@ export type UiTheme = {
   };
 };
 
-const baseLayout: UiTheme["layout"] = {
+const baseLayout: UiTheme['layout'] = {
   appPaddingTop: 0,
   appPaddingBottom: 1,
   appPaddingX: 0,
@@ -52,7 +52,7 @@ const baseLayout: UiTheme["layout"] = {
   footerPaddingRight: 0,
 };
 
-const baseTypography: UiTheme["typography"] = {
+const baseTypography: UiTheme['typography'] = {
   body: TextAttributes.BOLD,
   code: TextAttributes.BOLD,
   muted: TextAttributes.BOLD,
@@ -61,35 +61,35 @@ const baseTypography: UiTheme["typography"] = {
 };
 
 const DARK_THEME: UiTheme = {
-  bg: "#0a0a0a",
-  surface: "#141414",
-  panel: "#141414",
-  text: "#eeeeee",
-  muted: "#808080",
-  subtle: "#808080",
-  accent: "#fab283",
-  thinking: "#808080",
-  divider: "#1e1e1e",
-  inputCursor: "#fab283",
-  inputSelectionBg: "#3c3c3c",
-  inputSelectionText: "#eeeeee",
+  bg: '#0a0a0a',
+  surface: '#141414',
+  panel: '#141414',
+  text: '#eeeeee',
+  muted: '#808080',
+  subtle: '#808080',
+  accent: '#fab283',
+  thinking: '#808080',
+  divider: '#1e1e1e',
+  inputCursor: '#fab283',
+  inputSelectionBg: '#3c3c3c',
+  inputSelectionText: '#eeeeee',
   layout: baseLayout,
   typography: baseTypography,
 };
 
 const LIGHT_THEME: UiTheme = {
-  bg: "#eceff3",
-  surface: "#ffffff",
-  panel: "#eceff3",
-  text: "#1f2530",
-  muted: "#596273",
-  subtle: "#738094",
-  accent: "#0b67d7",
-  thinking: "#8f6a1f",
-  divider: "#cfd5de",
-  inputCursor: "#0b67d7",
-  inputSelectionBg: "#b9d2f6",
-  inputSelectionText: "#1f2530",
+  bg: '#eceff3',
+  surface: '#ffffff',
+  panel: '#eceff3',
+  text: '#1f2530',
+  muted: '#596273',
+  subtle: '#738094',
+  accent: '#0b67d7',
+  thinking: '#8f6a1f',
+  divider: '#cfd5de',
+  inputCursor: '#0b67d7',
+  inputSelectionBg: '#b9d2f6',
+  inputSelectionText: '#1f2530',
   layout: baseLayout,
   typography: baseTypography,
 };
@@ -103,5 +103,5 @@ const cloneTheme = (theme: UiTheme): UiTheme => ({
 export let uiTheme: UiTheme = cloneTheme(DARK_THEME);
 
 export const applyUiThemeMode = (mode: UiThemeMode) => {
-  uiTheme = cloneTheme(mode === "light" ? LIGHT_THEME : DARK_THEME);
+  uiTheme = cloneTheme(mode === 'light' ? LIGHT_THEME : DARK_THEME);
 };

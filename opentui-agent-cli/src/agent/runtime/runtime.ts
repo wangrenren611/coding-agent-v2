@@ -1,4 +1,4 @@
-import { isAbsolute, resolve as resolvePath } from "node:path";
+import { isAbsolute, resolve as resolvePath } from 'node:path';
 import type {
   AgentEventHandlers,
   AgentLoopEvent,
@@ -11,9 +11,9 @@ import type {
   AgentToolStreamEvent,
   AgentToolUseEvent,
   AgentUsageEvent,
-} from "./types";
-import type { AgentModelOption, AgentModelSwitchResult } from "./model-types";
-import { resolveToolConfirmDecision } from "./tool-confirmation";
+} from './types';
+import type { AgentModelOption, AgentModelSwitchResult } from './model-types';
+import { resolveToolConfirmDecision } from './tool-confirmation';
 import {
   type AgentAppUsageLike,
   type AgentAppRunResultLike,
@@ -26,9 +26,9 @@ import {
   type SourceModules,
   type StatelessAgentLike,
   type ToolConfirmEventLike,
-} from "./source-modules";
-import { ToolCallBuffer } from "./tool-call-buffer";
-import { buildSystemPrompt } from "../../../../src/agent-v4/prompts/system";
+} from './source-modules';
+import { ToolCallBuffer } from './tool-call-buffer';
+import { buildSystemPrompt } from '../../../../src/agent-v4/prompts/system';
 
 type RuntimeCore = {
   modelId: string;
@@ -42,13 +42,18 @@ type RuntimeCore = {
   modules: SourceModules;
 };
 
+type RunAgentPromptOptions = {
+  abortSignal?: AbortSignal;
+};
+
 let runtimePromise: Promise<RuntimeCore> | null = null;
+let initializing = false;
 let preferredModelId = process.env.AGENT_MODEL?.trim() || undefined;
 
-const DEFAULT_MODEL = "glm-5";
+const DEFAULT_MODEL = 'glm-5';
 const DEFAULT_MAX_STEPS = 200;
 const DEFAULT_MAX_RETRY_COUNT = 2;
-const DEFAULT_DB_PATH = ".agent-v4/agent.db";
+const DEFAULT_DB_PATH = '.agent-v4/agent.db';
 
 const parsePositiveInt = (raw: string | undefined, fallback: number): number => {
   if (!raw || raw.trim().length === 0) {
@@ -72,7 +77,7 @@ const resolveModelId = (modules: SourceModules, requested?: string): string => {
   }
   const fallback = ids[0];
   if (!fallback) {
-    throw new Error("No models are registered in ProviderRegistry.");
+    throw new Error('No models are registered in ProviderRegistry.');
   }
   return fallback;
 };
@@ -110,23 +115,25 @@ const safeInvoke = (fn: (() => void) | undefined): void => {
   }
   try {
     fn();
-  } catch {}
+  } catch {
+    // Intentionally empty
+  }
 };
 
 const asRecord = (value: unknown): Record<string, unknown> => {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
 };
 
 const readString = (value: unknown): string | undefined => {
-  return typeof value === "string" ? value : undefined;
+  return typeof value === 'string' ? value : undefined;
 };
 
 const readNumber = (value: unknown): number | undefined => {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 };
 
 const readBoolean = (value: unknown): boolean | undefined => {
-  return typeof value === "boolean" ? value : undefined;
+  return typeof value === 'boolean' ? value : undefined;
 };
 
 const toUsageEventFromApp = (usage: AgentAppUsageLike): AgentUsageEvent => {
@@ -138,19 +145,19 @@ const toUsageEventFromApp = (usage: AgentAppUsageLike): AgentUsageEvent => {
     cumulativeCompletionTokens: usage.cumulativeUsage.completion_tokens,
     cumulativeTotalTokens: usage.cumulativeUsage.total_tokens,
     contextTokens:
-      typeof usage.contextTokens === "number" && Number.isFinite(usage.contextTokens)
+      typeof usage.contextTokens === 'number' && Number.isFinite(usage.contextTokens)
         ? Math.max(0, usage.contextTokens)
         : undefined,
     contextLimit: usage.contextLimitTokens,
     contextUsagePercent:
-      typeof usage.contextUsagePercent === "number" && Number.isFinite(usage.contextUsagePercent)
+      typeof usage.contextUsagePercent === 'number' && Number.isFinite(usage.contextUsagePercent)
         ? Math.max(0, usage.contextUsagePercent)
         : undefined,
   };
 };
 
 const toJsonString = (value: unknown): string => {
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     return value;
   }
   try {
@@ -163,7 +170,7 @@ const toJsonString = (value: unknown): string => {
 const parseJsonObject = (raw: string): Record<string, unknown> => {
   try {
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") {
+    if (parsed && typeof parsed === 'object') {
       return parsed as Record<string, unknown>;
     }
     return { value: parsed };
@@ -172,9 +179,12 @@ const parseJsonObject = (raw: string): Record<string, unknown> => {
   }
 };
 
-const toTextDeltaEvent = (payload: Record<string, unknown>, isReasoning: boolean): AgentTextDeltaEvent => {
+const toTextDeltaEvent = (
+  payload: Record<string, unknown>,
+  isReasoning: boolean
+): AgentTextDeltaEvent => {
   return {
-    text: readString(payload.content) ?? readString(payload.reasoningContent) ?? "",
+    text: readString(payload.content) ?? readString(payload.reasoningContent) ?? '',
     isReasoning,
   };
 };
@@ -203,15 +213,15 @@ const toToolStreamEvent = (
   sequenceByToolCallId: Map<string, number>
 ): AgentToolStreamEvent => {
   const payload = asRecord(envelope.data);
-  const toolCallId = readString(payload.toolCallId) ?? "unknown";
+  const toolCallId = readString(payload.toolCallId) ?? 'unknown';
   const previousSequence = sequenceByToolCallId.get(toolCallId) ?? 0;
   const sequence = previousSequence + 1;
   sequenceByToolCallId.set(toolCallId, sequence);
 
   return {
     toolCallId,
-    toolName: readString(payload.toolName) ?? "tool",
-    type: readString(payload.chunkType) ?? readString(payload.type) ?? "stdout",
+    toolName: readString(payload.toolName) ?? 'tool',
+    type: readString(payload.chunkType) ?? readString(payload.type) ?? 'stdout',
     sequence,
     timestamp: envelope.createdAt,
     content: readString(payload.chunk) ?? readString(payload.content),
@@ -223,7 +233,8 @@ const toToolResultEvent = (
   payload: Record<string, unknown>,
   toolCallsById: Map<string, AgentToolUseEvent>
 ): AgentToolResultEvent => {
-  const toolCallId = readString(payload.tool_call_id) ?? readString(payload.toolCallId) ?? "unknown";
+  const toolCallId =
+    readString(payload.tool_call_id) ?? readString(payload.toolCallId) ?? 'unknown';
   const metadata = asRecord(payload.metadata);
   const toolResult = asRecord(metadata.toolResult);
   const error = asRecord(toolResult.error);
@@ -236,7 +247,7 @@ const toToolResultEvent = (
     toolCallsById.get(toolCallId) ??
     ({
       id: toolCallId,
-      function: { name: "tool", arguments: "{}" },
+      function: { name: 'tool', arguments: '{}' },
     } as AgentToolUseEvent);
 
   return {
@@ -261,15 +272,15 @@ const extractAssistantText = (result: AgentAppRunResultLike): string => {
     if (!message) {
       continue;
     }
-    if (message.role !== "assistant") {
+    if (message.role !== 'assistant') {
       continue;
     }
-    if (typeof message.content === "string") {
+    if (typeof message.content === 'string') {
       return message.content;
     }
     return toJsonString(message.content);
   }
-  return "";
+  return '';
 };
 
 const createRuntime = async (): Promise<RuntimeCore> => {
@@ -285,7 +296,7 @@ const createRuntime = async (): Promise<RuntimeCore> => {
   const provider = modules.ProviderRegistry.createFromEnv(modelId);
   const toolManager = new modules.DefaultToolManager();
   const taskStore = new modules.TaskStore({
-    baseDir: resolvePath(workspaceRoot, ".agent-cache", "task-system-v1"),
+    baseDir: resolvePath(workspaceRoot, '.agent-cache', 'task-system-v1'),
   });
   toolManager.registerTool(new modules.BashTool());
   toolManager.registerTool(
@@ -330,7 +341,7 @@ const createRuntime = async (): Promise<RuntimeCore> => {
   const preparableStore = appStore as AgentAppStoreLike & {
     prepare?: () => Promise<void>;
   };
-  if (typeof preparableStore.prepare === "function") {
+  if (typeof preparableStore.prepare === 'function') {
     await preparableStore.prepare();
   }
 
@@ -344,9 +355,9 @@ const createRuntime = async (): Promise<RuntimeCore> => {
   const resolveSubagentToolSchemas = (allowedTools?: string[]) => {
     const allSchemas = toolManager
       .getTools()
-      .map((tool) => {
+      .map(tool => {
         const schema = tool?.toToolSchema?.();
-        if (!schema || typeof schema !== "object") {
+        if (!schema || typeof schema !== 'object') {
           return null;
         }
         return schema;
@@ -358,9 +369,9 @@ const createRuntime = async (): Promise<RuntimeCore> => {
     }
 
     const allowed = new Set(allowedTools);
-    return allSchemas.filter((schema) => {
+    return allSchemas.filter(schema => {
       const name = schema.function?.name;
-      return typeof name === "string" && allowed.has(name);
+      return typeof name === 'string' && allowed.has(name);
     });
   };
 
@@ -432,12 +443,38 @@ const createRuntime = async (): Promise<RuntimeCore> => {
   };
 };
 
-const getRuntime = async () => {
-  runtimePromise ??= createRuntime().catch((error) => {
-    runtimePromise = null;
-    throw error;
-  });
-  return runtimePromise;
+const getRuntime = async (): Promise<RuntimeCore> => {
+  // 双重检查锁定模式
+  if (runtimePromise) {
+    return runtimePromise;
+  }
+
+  if (initializing) {
+    // 等待初始化完成
+    while (initializing) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    // 初始化完成后，runtimePromise应该已经设置
+    if (runtimePromise) {
+      return runtimePromise;
+    }
+  }
+
+  // 开始初始化
+  initializing = true;
+  try {
+    const promise = createRuntime();
+    runtimePromise = promise;
+
+    // 如果初始化失败，允许重新尝试
+    promise.catch(() => {
+      runtimePromise = null;
+    });
+
+    return promise;
+  } finally {
+    initializing = false;
+  }
 };
 
 const disposeRuntimeInstance = async () => {
@@ -449,11 +486,15 @@ const disposeRuntimeInstance = async () => {
   await runtime.appStore.close();
 };
 
-export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandlers): Promise<AgentRunResult> => {
+export const runAgentPrompt = async (
+  prompt: string,
+  handlers: AgentEventHandlers,
+  options: RunAgentPromptOptions = {}
+): Promise<AgentRunResult> => {
   const runtime = await getRuntime();
   const startedAt = Date.now();
   const streamedState = {
-    text: "",
+    text: '',
     latestErrorMessage: undefined as string | undefined,
     stopEmitted: false,
     lastLoopStep: 0,
@@ -462,7 +503,7 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
   const toolCallsById = new Map<string, AgentToolUseEvent>();
   const toolCallBuffer = new ToolCallBuffer();
   let latestUsageEvent: AgentUsageEvent | undefined;
-  let currentAction = "llm";
+  let currentAction = 'llm';
 
   const onToolConfirm = (event: ToolConfirmEventLike): void => {
     const rawArgs = parseJsonObject(event.arguments);
@@ -477,19 +518,19 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
     safeInvoke(() => handlers.onToolConfirm?.(toolConfirmEvent));
 
     void resolveToolConfirmDecision(toolConfirmEvent, handlers)
-      .then((decision) => {
+      .then(decision => {
         event.resolve(decision);
       })
-      .catch((error) => {
+      .catch(error => {
         const message = error instanceof Error ? error.message : String(error);
         event.resolve({
           approved: false,
-          message: message || "Tool confirmation failed.",
+          message: message || 'Tool confirmation failed.',
         });
       });
   };
 
-  runtime.agent.on("tool_confirm", onToolConfirm);
+  runtime.agent.on('tool_confirm', onToolConfirm);
 
   let result: AgentAppRunResultLike;
   try {
@@ -499,19 +540,20 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
         conversationId: runtime.conversationId,
         userInput: prompt,
         historyMessages: historyMessages as AgentV4MessageLike[],
-        systemPrompt: buildSystemPrompt({directory: runtime.workspaceRoot}),
+        systemPrompt: buildSystemPrompt({ directory: runtime.workspaceRoot }),
         maxSteps: runtime.maxSteps,
+        abortSignal: options.abortSignal,
       },
       {
-        onUsage: (usage) => {
+        onUsage: usage => {
           const usageEvent = toUsageEventFromApp(usage);
           latestUsageEvent = usageEvent;
           safeInvoke(() => handlers.onUsage?.(usageEvent));
         },
-        onEvent: async (envelope) => {
+        onEvent: async envelope => {
           const payload = asRecord(envelope.data);
           switch (envelope.eventType) {
-            case "chunk": {
+            case 'chunk': {
               const event = toTextDeltaEvent(payload, false);
               if (event.text.length > 0) {
                 streamedState.text += event.text;
@@ -519,22 +561,22 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
               }
               break;
             }
-            case "reasoning_chunk": {
+            case 'reasoning_chunk': {
               const event = toTextDeltaEvent(payload, true);
               if (event.text.length > 0) {
                 safeInvoke(() => handlers.onTextDelta?.(event));
               }
               break;
             }
-            case "tool_stream": {
+            case 'tool_stream': {
               const toolStreamEvent = toToolStreamEvent(envelope, toolStreamSequenceById);
-              toolCallBuffer.ensureEmitted(toolStreamEvent.toolCallId, (toolCall) => {
+              toolCallBuffer.ensureEmitted(toolStreamEvent.toolCallId, toolCall => {
                 safeInvoke(() => handlers.onToolUse?.(toolCall));
               });
               safeInvoke(() => handlers.onToolStream?.(toolStreamEvent));
               break;
             }
-            case "tool_call": {
+            case 'tool_call': {
               const rawToolCalls = payload.toolCalls;
               if (Array.isArray(rawToolCalls) && rawToolCalls.length > 0) {
                 for (const item of rawToolCalls) {
@@ -545,10 +587,10 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
                   }
                   toolCallBuffer.register(
                     toolCall,
-                    (event) => {
+                    event => {
                       safeInvoke(() => handlers.onToolUse?.(event));
                     },
-                    currentAction === "tool"
+                    currentAction === 'tool'
                   );
                 }
               } else {
@@ -559,61 +601,61 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
                 }
                 toolCallBuffer.register(
                   toolCall,
-                  (event) => {
+                  event => {
                     safeInvoke(() => handlers.onToolUse?.(event));
                   },
-                  currentAction === "tool"
+                  currentAction === 'tool'
                 );
               }
               break;
             }
-            case "tool_result": {
+            case 'tool_result': {
               const toolCallId = readString(payload.tool_call_id) ?? readString(payload.toolCallId);
-              toolCallBuffer.ensureEmitted(toolCallId, (toolCall) => {
+              toolCallBuffer.ensureEmitted(toolCallId, toolCall => {
                 safeInvoke(() => handlers.onToolUse?.(toolCall));
               });
               const toolResultEvent = toToolResultEvent(payload, toolCallsById);
               safeInvoke(() => handlers.onToolResult?.(toolResultEvent));
               break;
             }
-            case "progress": {
-              const nextAction = readString(payload.currentAction) ?? "progress";
+            case 'progress': {
+              const nextAction = readString(payload.currentAction) ?? 'progress';
               currentAction = nextAction;
               const stepEvent = toStepEvent(payload, nextAction, 0);
               safeInvoke(() => handlers.onStep?.(stepEvent));
 
-              if (nextAction === "tool") {
-                toolCallBuffer.flush((toolCall) => {
+              if (nextAction === 'tool') {
+                toolCallBuffer.flush(toolCall => {
                   safeInvoke(() => handlers.onToolUse?.(toolCall));
                 });
               }
 
-              if (nextAction === "llm" && stepEvent.stepIndex > streamedState.lastLoopStep) {
+              if (nextAction === 'llm' && stepEvent.stepIndex > streamedState.lastLoopStep) {
                 streamedState.lastLoopStep = stepEvent.stepIndex;
                 const loopEvent = toLoopEvent(stepEvent.stepIndex);
                 safeInvoke(() => handlers.onLoop?.(loopEvent));
               }
               break;
             }
-            case "checkpoint": {
-              const stepEvent = toStepEvent(payload, "checkpoint", 0);
+            case 'checkpoint': {
+              const stepEvent = toStepEvent(payload, 'checkpoint', 0);
               safeInvoke(() => handlers.onStep?.(stepEvent));
               break;
             }
-            case "done": {
+            case 'done': {
               safeInvoke(() => handlers.onTextComplete?.(streamedState.text));
               const stopEvent: AgentStopEvent = {
-                reason: readString(payload.finishReason) ?? "stop",
+                reason: readString(payload.finishReason) ?? 'stop',
               };
               safeInvoke(() => handlers.onStop?.(stopEvent));
               streamedState.stopEmitted = true;
               break;
             }
-            case "error": {
+            case 'error': {
               const message = readString(payload.message);
               streamedState.latestErrorMessage = message;
               const stopEvent: AgentStopEvent = {
-                reason: "error",
+                reason: 'error',
                 message,
               };
               safeInvoke(() => handlers.onStop?.(stopEvent));
@@ -627,7 +669,7 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
       }
     );
   } finally {
-    runtime.agent.off("tool_confirm", onToolConfirm);
+    runtime.agent.off('tool_confirm', onToolConfirm);
   }
 
   if (!streamedState.stopEmitted) {
@@ -635,15 +677,15 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
     safeInvoke(() =>
       handlers.onStop?.({
         reason: result.finishReason,
-        message: result.finishReason === "error" ? result.run.errorMessage : undefined,
+        message: result.finishReason === 'error' ? result.run.errorMessage : undefined,
       })
     );
   }
 
   const finalText = streamedState.text || extractAssistantText(result);
   const completionMessage =
-    result.finishReason === "error"
-      ? streamedState.latestErrorMessage ?? result.run.errorMessage
+    result.finishReason === 'error'
+      ? (streamedState.latestErrorMessage ?? result.run.errorMessage)
       : undefined;
 
   return {
@@ -677,12 +719,12 @@ export const listAgentModels = async (): Promise<AgentModelOption[]> => {
   const currentModelId = await getAgentModelId();
 
   return modules.ProviderRegistry.getModelIds()
-    .map((id) => {
+    .map(id => {
       const config = modules.ProviderRegistry.getModelConfig(id);
       return {
         id,
         name: config.name,
-        provider: config.provider ?? "other",
+        provider: config.provider ?? 'other',
         apiKeyEnv: config.envApiKey,
         configured: Boolean(process.env[config.envApiKey]),
         current: id === currentModelId,

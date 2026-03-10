@@ -1,6 +1,6 @@
-import type { ChatTurn } from "../types/chat";
-import { uiTheme } from "../ui/theme";
-import { TurnItem } from "./chat/turn-item";
+import type { ChatTurn } from '../types/chat';
+import { uiTheme } from '../ui/theme';
+import { TurnItem } from './chat/turn-item';
 
 type ConversationPanelProps = {
   turns: ChatTurn[];
@@ -29,7 +29,12 @@ export const ConversationPanel = ({ turns, isThinking }: ConversationPanelProps)
         backgroundColor={uiTheme.bg}
       >
         {turns.map((turn, index) => (
-          <TurnItem key={turn.id} turn={turn} index={index} isPending={isThinking && turn.id === pendingTurnId} />
+          <TurnItem
+            key={turn.id}
+            turn={turn}
+            index={index}
+            isPending={isThinking && turn.id === pendingTurnId}
+          />
         ))}
       </box>
     </scrollbox>

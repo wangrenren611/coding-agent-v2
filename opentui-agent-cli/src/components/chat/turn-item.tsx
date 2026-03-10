@@ -1,7 +1,7 @@
-﻿import type { ChatTurn } from "../../types/chat";
-import { uiTheme } from "../../ui/theme";
-import { AssistantReply } from "./assistant-reply";
-import { PromptCard } from "./prompt-card";
+﻿import type { ChatTurn } from '../../types/chat';
+import { uiTheme } from '../../ui/theme';
+import { AssistantReply } from './assistant-reply';
+import { PromptCard } from './prompt-card';
 
 type TurnItemProps = {
   turn: ChatTurn;

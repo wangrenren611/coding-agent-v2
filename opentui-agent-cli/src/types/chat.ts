@@ -1,4 +1,4 @@
-﻿export type ReplySegmentType = "thinking" | "text" | "code" | "note";
+﻿export type ReplySegmentType = 'thinking' | 'text' | 'code' | 'note';
 
 export type ReplySegment = {
   id: string;
@@ -7,7 +7,7 @@ export type ReplySegment = {
   data?: unknown;
 };
 
-export type ReplyStatus = "streaming" | "done" | "error";
+export type ReplyStatus = 'streaming' | 'done' | 'error';
 
 export type AssistantReply = {
   segments: ReplySegment[];

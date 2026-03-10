@@ -45,9 +45,9 @@ describe('task-subagent-config', () => {
     const config = getTaskSubagentConfig('find-skills');
 
     expect(config.tools).toEqual(['skill', 'bash']);
-    expect(config.systemPrompt).toContain('Always try the skill tool first');
-    expect(config.systemPrompt).toContain('load the "find-skills" skill');
-    expect(config.systemPrompt).toContain('use bash only for the required install/update commands');
-    expect(config.systemPrompt).toContain('run the skill tool again');
+    expect(config.systemPrompt).toContain('Check local skills first');
+    expect(config.systemPrompt).toContain('load the **`find-skills`** skill');
+    expect(config.systemPrompt).toContain('Use `bash` only for the required installation command');
+    expect(config.systemPrompt).toContain('retry using the `skill` tool');
   });
 });

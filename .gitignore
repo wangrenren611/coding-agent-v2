@@ -24,7 +24,7 @@ coverage/
 .idea/
 *.swp
 *.swo
-
+*.bak*
 # OS
 .DS_Store
 Thumbs.db

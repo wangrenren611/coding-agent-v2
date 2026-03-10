@@ -8,13 +8,13 @@ import {
   formatToolStreamEvent,
   formatToolUseEvent,
   formatToolUseEventCode,
-} from "../agent/runtime/event-format";
+} from '../agent/runtime/event-format';
 import type {
   AgentEventHandlers,
   AgentToolResultEvent,
   AgentToolUseEvent,
-} from "../agent/runtime/types";
-import type { ReplySegmentType } from "../types/chat";
+} from '../agent/runtime/types';
+import type { ReplySegmentType } from '../types/chat';
 
 type BuildAgentEventHandlersParams = {
   turnId: number;
@@ -24,14 +24,14 @@ type BuildAgentEventHandlersParams = {
     segmentId: string,
     type: ReplySegmentType,
     chunk: string,
-    data?: unknown,
+    data?: unknown
   ) => void;
   appendEventLine: (turnId: number, text: string) => void;
 };
 
 const shouldShowEventLog = () => {
   const value = process.env.AGENT_SHOW_EVENTS?.trim().toLowerCase();
-  return value === "1" || value === "true" || value === "yes" || value === "on";
+  return value === '1' || value === 'true' || value === 'yes' || value === 'on';
 };
 
 export const buildAgentEventHandlers = ({
@@ -46,20 +46,18 @@ export const buildAgentEventHandlers = ({
   let anonymousToolUseCounter = 0;
   let anonymousToolResultCounter = 0;
   let streamSegmentCursor = 0;
-  let activeTextSegment:
-    | {
-        id: string;
-        type: "thinking" | "text";
-      }
-    | null = null;
+  let activeTextSegment: {
+    id: string;
+    type: 'thinking' | 'text';
+  } | null = null;
 
-  const createStreamSegmentId = (type: "thinking" | "text") => {
+  const createStreamSegmentId = (type: 'thinking' | 'text') => {
     streamSegmentCursor += 1;
     return `${turnId}:${type}:${streamSegmentCursor}`;
   };
 
   const appendTextDeltaInOrder = (text: string, isReasoning: boolean) => {
-    const type: "thinking" | "text" = isReasoning ? "thinking" : "text";
+    const type: 'thinking' | 'text' = isReasoning ? 'thinking' : 'text';
     if (!activeTextSegment || activeTextSegment.type !== type) {
       activeTextSegment = {
         id: createStreamSegmentId(type),
@@ -74,19 +72,19 @@ export const buildAgentEventHandlers = ({
   };
 
   const readToolCallIdFromResult = (event: AgentToolResultEvent): string | undefined => {
-    if (!event.toolCall || typeof event.toolCall !== "object") {
+    if (!event.toolCall || typeof event.toolCall !== 'object') {
       return undefined;
     }
     const maybeId = (event.toolCall as { id?: unknown }).id;
-    return typeof maybeId === "string" ? maybeId : undefined;
+    return typeof maybeId === 'string' ? maybeId : undefined;
   };
 
   const readToolCallIdFromUse = (event: AgentToolUseEvent): string | undefined => {
-    if (!event || typeof event !== "object") {
+    if (!event || typeof event !== 'object') {
       return undefined;
     }
     const maybeId = (event as { id?: unknown }).id;
-    return typeof maybeId === "string" ? maybeId : undefined;
+    return typeof maybeId === 'string' ? maybeId : undefined;
   };
 
   const logEvent = (text: string) => {
@@ -97,7 +95,7 @@ export const buildAgentEventHandlers = ({
   };
 
   return {
-    onTextDelta: (event) => {
+    onTextDelta: event => {
       if (!isCurrentRequest() || !event.text) {
         return;
       }
@@ -108,20 +106,20 @@ export const buildAgentEventHandlers = ({
         return;
       }
       breakTextDeltaContinuation();
-      logEvent("[text-complete]");
+      logEvent('[text-complete]');
     },
-    onToolStream: (event) => {
+    onToolStream: event => {
       if (!isCurrentRequest()) {
         return;
       }
       breakTextDeltaContinuation();
       const mapped = formatToolStreamEvent(event);
       if (mapped.codeChunk && mapped.segmentKey) {
-        appendSegment(turnId, `${turnId}:tool:${mapped.segmentKey}`, "code", mapped.codeChunk);
+        appendSegment(turnId, `${turnId}:tool:${mapped.segmentKey}`, 'code', mapped.codeChunk);
       }
       if (
-        (event.type === "stdout" || event.type === "stderr") &&
-        typeof event.toolCallId === "string" &&
+        (event.type === 'stdout' || event.type === 'stderr') &&
+        typeof event.toolCallId === 'string' &&
         event.toolCallId.length > 0
       ) {
         streamedToolCallIds.add(event.toolCallId);
@@ -130,13 +128,13 @@ export const buildAgentEventHandlers = ({
         logEvent(mapped.note);
       }
     },
-    onToolConfirm: (event) => {
+    onToolConfirm: event => {
       if (!isCurrentRequest()) {
         return;
       }
       logEvent(formatToolConfirmEvent(event));
     },
-    onToolUse: (event) => {
+    onToolUse: event => {
       if (!isCurrentRequest()) {
         return;
       }
@@ -152,13 +150,13 @@ export const buildAgentEventHandlers = ({
       appendSegment(
         turnId,
         `${turnId}:tool-use:${segmentSuffix}`,
-        "code",
+        'code',
         `${formatToolUseEventCode(event)}\n`,
-        event,
+        event
       );
       logEvent(formatToolUseEvent(event));
     },
-    onToolResult: (event) => {
+    onToolResult: event => {
       if (!isCurrentRequest()) {
         return;
       }
@@ -169,25 +167,25 @@ export const buildAgentEventHandlers = ({
       appendSegment(
         turnId,
         `${turnId}:tool-result:${segmentSuffix}`,
-        "code",
+        'code',
         `${formatToolResultEventCode(event, { suppressOutput })}\n`,
-        event,
+        event
       );
       logEvent(formatToolResultEvent(event));
     },
-    onStep: (event) => {
+    onStep: event => {
       if (!isCurrentRequest()) {
         return;
       }
       logEvent(formatStepEvent(event));
     },
-    onLoop: (event) => {
+    onLoop: event => {
       if (!isCurrentRequest()) {
         return;
       }
       logEvent(formatLoopEvent(event));
     },
-    onStop: (event) => {
+    onStop: event => {
       if (!isCurrentRequest()) {
         return;
       }

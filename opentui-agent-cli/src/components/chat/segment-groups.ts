@@ -1,11 +1,11 @@
-import type { ReplySegment } from "../../types/chat";
+import type { ReplySegment } from '../../types/chat';
 
-type ToolSegmentKind = "use" | "stream" | "result";
+type ToolSegmentKind = 'use' | 'stream' | 'result';
 
 export type ToolSegmentMeta = {
   kind: ToolSegmentKind;
   toolCallId: string;
-  channel?: "stdout" | "stderr";
+  channel?: 'stdout' | 'stderr';
 };
 
 export type ToolSegmentGroup = {
@@ -17,11 +17,11 @@ export type ToolSegmentGroup = {
 
 export type ReplyRenderItem =
   | {
-      type: "segment";
+      type: 'segment';
       segment: ReplySegment;
     }
   | {
-      type: "tool";
+      type: 'tool';
       group: ToolSegmentGroup;
     };
 
@@ -29,7 +29,7 @@ export const parseToolSegmentMeta = (segmentId: string): ToolSegmentMeta | null 
   const toolUseMatch = segmentId.match(/^\d+:tool-use:(.+)$/);
   if (toolUseMatch && toolUseMatch[1]) {
     return {
-      kind: "use",
+      kind: 'use',
       toolCallId: toolUseMatch[1],
     };
   }
@@ -37,7 +37,7 @@ export const parseToolSegmentMeta = (segmentId: string): ToolSegmentMeta | null 
   const toolResultMatch = segmentId.match(/^\d+:tool-result:(.+)$/);
   if (toolResultMatch && toolResultMatch[1]) {
     return {
-      kind: "result",
+      kind: 'result',
       toolCallId: toolResultMatch[1],
     };
   }
@@ -45,9 +45,9 @@ export const parseToolSegmentMeta = (segmentId: string): ToolSegmentMeta | null 
   const toolStreamMatch = segmentId.match(/^\d+:tool:([^:]+):(stdout|stderr)$/);
   if (toolStreamMatch && toolStreamMatch[1] && toolStreamMatch[2]) {
     return {
-      kind: "stream",
+      kind: 'stream',
       toolCallId: toolStreamMatch[1],
-      channel: toolStreamMatch[2] as "stdout" | "stderr",
+      channel: toolStreamMatch[2] as 'stdout' | 'stderr',
     };
   }
 
@@ -63,7 +63,7 @@ export const buildReplyRenderItems = (segments: ReplySegment[]): ReplyRenderItem
       return;
     }
     items.push({
-      type: "tool",
+      type: 'tool',
       group: activeGroup,
     });
     activeGroup = null;
@@ -74,7 +74,7 @@ export const buildReplyRenderItems = (segments: ReplySegment[]): ReplyRenderItem
     if (!meta) {
       flushActiveGroup();
       items.push({
-        type: "segment",
+        type: 'segment',
         segment,
       });
       continue;
@@ -88,12 +88,12 @@ export const buildReplyRenderItems = (segments: ReplySegment[]): ReplyRenderItem
       };
     }
 
-    if (meta.kind === "use") {
+    if (meta.kind === 'use') {
       activeGroup.use = segment;
       continue;
     }
 
-    if (meta.kind === "result") {
+    if (meta.kind === 'result') {
       activeGroup.result = segment;
       continue;
     }

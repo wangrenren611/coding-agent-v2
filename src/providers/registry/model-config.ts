@@ -83,16 +83,16 @@ export const MODEL_DEFINITIONS: Record<ModelId, Omit<ModelConfig, 'apiKey'>> = {
     thinking: false,
   },
   // DeepSeek 系列
-  'deepseek-chat': {
-    id: 'deepseek-chat',
+  'deepseek-reasoner': {
+    id: 'deepseek-reasoner',
     provider: 'deepseek',
-    name: 'DeepSeek Chat',
+    name: 'DeepSeek Reasoner',
     baseURL: 'https://api.deepseek.com/v1',
     endpointPath: '/chat/completions',
     envApiKey: 'DEEPSEEK_API_KEY',
     envBaseURL: 'DEEPSEEK_API_BASE',
-    model: 'deepseek-chat',
-    max_tokens: 10000,
+    model: 'deepseek-reasoner',
+    max_tokens: 8000,
     LLMMAX_TOKENS: 128 * 1000,
     features: ['streaming', 'function-calling'],
   },
