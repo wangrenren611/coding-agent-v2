@@ -31,3 +31,6 @@
 - 文档为“可实现级别”的设计稿。
 - 默认不改动 `agent-v4` 内核契约。
 - 应用层实现应以 Port + Adapter 方式扩展，避免反向侵入内核。
+## 补充文档
+
+- `15-openclaw-style-project-blueprint.md`：说明如何在 `agent-v4` 之上实现一个类似 OpenClaw 的网关化、多渠道、插件化系统。
