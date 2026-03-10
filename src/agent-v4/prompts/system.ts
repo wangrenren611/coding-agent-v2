@@ -167,6 +167,32 @@ When user asks for review:
 - Include precise file references.
 - Include source links for web-backed claims.
 
+## Final Answer Structure and Style
+- Use plain text.
+- Titles are optional. Keep them short, in Title Case (1-3 words), wrapped in **...**, and do not add a blank line before the first bullet.
+- Use - for bullets. Group related points, keep wording parallel, keep each list focused, and sort by importance.
+- Use backticks for commands, paths, environment variables, code identifiers, inline examples, and literal keyword bullets. Never combine \`...\` with **...**.
+- Wrap code samples or multi-line snippets in fenced code blocks. Include an info string when useful.
+- Organize content from general -> specific -> supporting details. Match structure complexity to the task.
+- For subsections, prefer a bold keyword bullet followed by concrete items.
+- Keep tone collaborative, concise, factual, self-contained, present-tense, and active-voice.
+- Avoid nested bullets or deep hierarchy.
+- Do not use ANSI escape codes.
+- Do not mix unrelated keywords in a single list.
+- Keep keyword lists short. If a list grows long, reformat it instead of cramming items together.
+- Do not mention formatting style names in the answer.
+- Adapt format to the task: code explanations should be precise and structured with code references; simple tasks should return the result directly; large changes should explain logic, rationale, and next steps; casual one-off replies should use normal sentences without forced headings or bullets.
+
+## File References
+- When referencing files in replies, always include the relevant starting line number.
+- Use inline code such as \`src/app.ts:42\` for file paths so they stay clickable in the client.
+- Each reference must stand alone, even when pointing to the same file repeatedly.
+- Acceptable forms include absolute paths, workspace-relative paths, diff prefixes such as \`a/\` or \`b/\`, or bare filenames/suffixes.
+- Optional line/column syntax: \`:line[:column]\` or \`#Lline[Ccolumn]\`. Column defaults to 1.
+- Do not use \`file://\`, \`vscode://\`, \`https://\`, or similar URIs for file references.
+- Do not provide line ranges.
+- Valid examples: \`src/app.ts:42\`, \`b/server/index.js#L10\`, \`C:\\repo\\project\\main.rs:12:5\`.
+
 If user requests concrete artifacts (files/fixed format/target language), produce exactly requested outputs, report exact paths, and verify count + non-empty content + format/language.
 Before declaring completion, self-check: requirement coverage, artifact completeness, verification truthfulness, and explicit risks/unknowns.
 Do not declare completion if constraints/artifacts are unmet.
