@@ -27,6 +27,7 @@ import {
   type StatelessAgentLike,
   type ToolConfirmEventLike,
 } from "./source-modules";
+import { ToolCallBuffer } from "./tool-call-buffer";
 import { buildSystemPrompt } from "../../../../src/agent-v4/prompts/system";
 
 type RuntimeCore = {
@@ -459,7 +460,9 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
   };
   const toolStreamSequenceById = new Map<string, number>();
   const toolCallsById = new Map<string, AgentToolUseEvent>();
+  const toolCallBuffer = new ToolCallBuffer();
   let latestUsageEvent: AgentUsageEvent | undefined;
+  let currentAction = "llm";
 
   const onToolConfirm = (event: ToolConfirmEventLike): void => {
     const rawArgs = parseJsonObject(event.arguments);
@@ -525,6 +528,9 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
             }
             case "tool_stream": {
               const toolStreamEvent = toToolStreamEvent(envelope, toolStreamSequenceById);
+              toolCallBuffer.ensureEmitted(toolStreamEvent.toolCallId, (toolCall) => {
+                safeInvoke(() => handlers.onToolUse?.(toolCall));
+              });
               safeInvoke(() => handlers.onToolStream?.(toolStreamEvent));
               break;
             }
@@ -537,24 +543,52 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
                   if (toolCallId) {
                     toolCallsById.set(toolCallId, toolCall);
                   }
-                  safeInvoke(() => handlers.onToolUse?.(toolCall));
+                  toolCallBuffer.register(
+                    toolCall,
+                    (event) => {
+                      safeInvoke(() => handlers.onToolUse?.(event));
+                    },
+                    currentAction === "tool"
+                  );
                 }
               } else {
-                safeInvoke(() => handlers.onToolUse?.(payload as AgentToolUseEvent));
+                const toolCall = payload as AgentToolUseEvent;
+                const toolCallId = readString(asRecord(toolCall).id);
+                if (toolCallId) {
+                  toolCallsById.set(toolCallId, toolCall);
+                }
+                toolCallBuffer.register(
+                  toolCall,
+                  (event) => {
+                    safeInvoke(() => handlers.onToolUse?.(event));
+                  },
+                  currentAction === "tool"
+                );
               }
               break;
             }
             case "tool_result": {
+              const toolCallId = readString(payload.tool_call_id) ?? readString(payload.toolCallId);
+              toolCallBuffer.ensureEmitted(toolCallId, (toolCall) => {
+                safeInvoke(() => handlers.onToolUse?.(toolCall));
+              });
               const toolResultEvent = toToolResultEvent(payload, toolCallsById);
               safeInvoke(() => handlers.onToolResult?.(toolResultEvent));
               break;
             }
             case "progress": {
-              const currentAction = readString(payload.currentAction) ?? "progress";
-              const stepEvent = toStepEvent(payload, currentAction, 0);
+              const nextAction = readString(payload.currentAction) ?? "progress";
+              currentAction = nextAction;
+              const stepEvent = toStepEvent(payload, nextAction, 0);
               safeInvoke(() => handlers.onStep?.(stepEvent));
 
-              if (currentAction === "llm" && stepEvent.stepIndex > streamedState.lastLoopStep) {
+              if (nextAction === "tool") {
+                toolCallBuffer.flush((toolCall) => {
+                  safeInvoke(() => handlers.onToolUse?.(toolCall));
+                });
+              }
+
+              if (nextAction === "llm" && stepEvent.stepIndex > streamedState.lastLoopStep) {
                 streamedState.lastLoopStep = stepEvent.stepIndex;
                 const loopEvent = toLoopEvent(stepEvent.stepIndex);
                 safeInvoke(() => handlers.onLoop?.(loopEvent));
