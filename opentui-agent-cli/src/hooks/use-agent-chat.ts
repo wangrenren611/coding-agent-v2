@@ -38,6 +38,14 @@ const normalizeTokenCount = (value: number | undefined): number | undefined => {
   return Math.max(0, Math.round(value));
 };
 
+/** Normalizes context usage percent, ensuring it's a finite non-negative number. */
+const normalizeContextUsagePercent = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, value);
+  }
+  return null;
+};
+
 const toReplyUsage = (
   usage?: AgentUsageEvent,
 ):
@@ -105,7 +113,7 @@ export const useAgentChat = (): UseAgentChatResult => {
   }, []);
 
   const appendSegment = useCallback(
-    (turnId: number, segmentId: string, type: ReplySegmentType, chunk: string) => {
+    (turnId: number, segmentId: string, type: ReplySegmentType, chunk: string, data?: unknown) => {
       setTurns((prev) =>
         patchTurn(prev, turnId, (turn) => {
           if (!turn.reply) {
@@ -115,7 +123,9 @@ export const useAgentChat = (): UseAgentChatResult => {
             ...turn,
             reply: {
               ...turn.reply,
-              segments: orderReplySegments(appendToSegment(turn.reply.segments, segmentId, type, chunk)),
+              segments: orderReplySegments(
+                appendToSegment(turn.reply.segments, segmentId, type, chunk, data),
+              ),
             },
           };
         }),
@@ -221,6 +231,7 @@ export const useAgentChat = (): UseAgentChatResult => {
     const currentRequestId = ++requestIdRef.current;
     const isCurrentRequest = () => currentRequestId === requestIdRef.current;
 
+    // Reset context usage at the start of each request to avoid showing stale data
     setContextUsagePercent(null);
     setIsThinking(true);
 
@@ -236,9 +247,10 @@ export const useAgentChat = (): UseAgentChatResult => {
         if (!isCurrentRequest()) {
           return;
         }
-        setContextUsagePercent(
-          typeof event.contextUsagePercent === "number" ? event.contextUsagePercent : null,
-        );
+        const normalized = normalizeContextUsagePercent(event.contextUsagePercent);
+        if (normalized !== null) {
+          setContextUsagePercent(normalized);
+        }
         const replyUsage = toReplyUsage(event);
         if (!replyUsage) {
           return;
@@ -268,9 +280,10 @@ export const useAgentChat = (): UseAgentChatResult => {
 
         setModelLabel(result.modelLabel);
         if (result.usage) {
-          setContextUsagePercent(
-            typeof result.usage.contextUsagePercent === "number" ? result.usage.contextUsagePercent : null,
-          );
+          const normalized = normalizeContextUsagePercent(result.usage.contextUsagePercent);
+          if (normalized !== null) {
+            setContextUsagePercent(normalized);
+          }
         }
         const replyUsage = toReplyUsage(result.usage);
         setTurns((prev) => {

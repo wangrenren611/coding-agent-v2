@@ -13,7 +13,7 @@ import { applyUiThemeMode, uiTheme } from "./ui/theme";
 
 bindExitGuards();
 const terminalBackground = await probeTerminalBackground();
-applyUiThemeMode("dark");
+applyUiThemeMode(terminalBackground.mode);
 
 if (terminalBackground.rawColor && terminalBackground.rawColor.toLowerCase() !== uiTheme.bg.toLowerCase()) {
   const originalBackground = terminalBackground.rawColor;

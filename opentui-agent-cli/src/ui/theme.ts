@@ -13,6 +13,9 @@ export type UiTheme = {
   accent: string;
   thinking: string;
   divider: string;
+  inputCursor: string;
+  inputSelectionBg: string;
+  inputSelectionText: string;
   layout: {
     appPaddingTop: number;
     appPaddingBottom: number;
@@ -67,6 +70,9 @@ const DARK_THEME: UiTheme = {
   accent: "#fab283",
   thinking: "#808080",
   divider: "#1e1e1e",
+  inputCursor: "#fab283",
+  inputSelectionBg: "#3c3c3c",
+  inputSelectionText: "#eeeeee",
   layout: baseLayout,
   typography: baseTypography,
 };
@@ -81,6 +87,9 @@ const LIGHT_THEME: UiTheme = {
   accent: "#0b67d7",
   thinking: "#8f6a1f",
   divider: "#cfd5de",
+  inputCursor: "#0b67d7",
+  inputSelectionBg: "#b9d2f6",
+  inputSelectionText: "#1f2530",
   layout: baseLayout,
   typography: baseTypography,
 };

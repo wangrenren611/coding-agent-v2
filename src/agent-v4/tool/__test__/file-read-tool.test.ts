@@ -38,7 +38,7 @@ describe('FileReadTool', () => {
       truncated: boolean;
     };
 
-    expect(metadata.path).toBe(targetPath);
+    expect(metadata.path).toBe(await fs.realpath(targetPath));
     expect(metadata.etag).toBeDefined();
     expect(metadata.truncated).toBe(false);
   });
@@ -116,11 +116,7 @@ describe('FileReadTool', () => {
   });
 
   it('exposes parallel-safe concurrency policy and lock key', () => {
-    expect(
-      tool.getConcurrencyMode({
-        path: 'a.txt',
-      })
-    ).toBe('parallel-safe');
+    expect(tool.getConcurrencyMode()).toBe('parallel-safe');
     expect(
       tool.getConcurrencyLockKey({
         path: 'a.txt',

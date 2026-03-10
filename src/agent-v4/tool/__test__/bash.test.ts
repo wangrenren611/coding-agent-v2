@@ -40,24 +40,24 @@ function createMockChildProcess(): NodeJS.EventEmitter & {
   stderr: PassThrough;
   killed: boolean;
   pid?: number;
-  kill: ReturnType<typeof vi.fn>;
+  kill: (signal?: string) => boolean;
 } {
   const child = new EventEmitter() as NodeJS.EventEmitter & {
     stdout: PassThrough;
     stderr: PassThrough;
     killed: boolean;
     pid?: number;
-    kill: ReturnType<typeof vi.fn>;
+    kill: (signal?: string) => boolean;
   };
 
   child.stdout = new PassThrough();
   child.stderr = new PassThrough();
   child.killed = false;
   child.pid = 12345;
-  child.kill = vi.fn(() => {
+  child.kill = vi.fn((): boolean => {
     child.killed = true;
     return true;
-  });
+  }) as unknown as (signal?: string) => boolean;
 
   return child;
 }
@@ -305,7 +305,7 @@ describe('BashTool', () => {
     helper.terminateChildProcess(withPidChild);
 
     expect(killSpy).toHaveBeenCalled();
-    expect(withPidChild.kill).toHaveBeenCalled();
+    expect(withPidChild.kill as unknown as ReturnType<typeof vi.fn>).toHaveBeenCalled();
   });
 
   it('supports zero timeout mode without scheduling timer', async () => {

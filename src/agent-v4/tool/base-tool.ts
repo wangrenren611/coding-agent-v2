@@ -288,6 +288,8 @@ function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
 export interface ToolResult {
   success: boolean;
   output?: string;
+  summary?: string;
+  payload?: unknown;
   error?: ToolExecutionError;
   metadata?: Record<string, unknown>;
 }

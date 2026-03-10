@@ -23,11 +23,12 @@ export const ensureSegment = (
   segments: ReplySegment[],
   segmentId: string,
   type: ReplySegmentType,
+  data?: unknown,
 ): ReplySegment[] => {
   if (segments.some((segment) => segment.id === segmentId)) {
     return segments;
   }
-  return [...segments, { id: segmentId, type, content: "" }];
+  return [...segments, { id: segmentId, type, content: "", ...(data !== undefined ? { data } : {}) }];
 };
 
 export const appendToSegment = (
@@ -35,13 +36,15 @@ export const appendToSegment = (
   segmentId: string,
   type: ReplySegmentType,
   chunk: string,
+  data?: unknown,
 ): ReplySegment[] => {
-  const base = ensureSegment(segments, segmentId, type);
+  const base = ensureSegment(segments, segmentId, type, data);
   return base.map((segment) =>
     segment.id === segmentId
       ? {
           ...segment,
           content: `${segment.content}${chunk}`,
+          ...(data !== undefined ? { data } : {}),
         }
       : segment,
   );

@@ -120,7 +120,7 @@ describe('task tool runtime edge branches', () => {
     expect(parsedFalse.success && parsedFalse.data.run_in_background).toBe(false);
     expect(parsedBoolean.success && parsedBoolean.data.run_in_background).toBe(true);
 
-    expect(taskTool.getConcurrencyMode({} as never)).toBe('exclusive');
+    expect(taskTool.getConcurrencyMode()).toBe('exclusive');
     expect(taskTool.getConcurrencyLockKey({} as never)).toBe('taskns:def');
     expect(taskTool.getConcurrencyLockKey({ namespace: 'n1' } as never)).toBe('taskns:n1');
 
@@ -373,7 +373,7 @@ describe('task_output edge branches', () => {
     expect(parsedFalse.success && parsedFalse.data.block).toBe(false);
     expect(parsedBoolean.success && parsedBoolean.data.block).toBe(true);
 
-    expect(tool.getConcurrencyMode({} as never)).toBe('parallel-safe');
+    expect(tool.getConcurrencyMode()).toBe('parallel-safe');
     expect(tool.getConcurrencyLockKey({} as never)).toBe('taskns:def-out:agent:unknown');
     expect(tool.getConcurrencyLockKey({ namespace: 'n1', agent_id: 'a1' } as never)).toBe(
       'taskns:n1:agent:a1'
@@ -579,7 +579,7 @@ describe('task_stop edge branches', () => {
     expect(parsedFalse.success && parsedFalse.data.cancel_linked_task).toBe(false);
     expect(parsedBoolean.success && parsedBoolean.data.cancel_linked_task).toBe(true);
 
-    expect(stopTool.getConcurrencyMode({} as never)).toBe('exclusive');
+    expect(stopTool.getConcurrencyMode()).toBe('exclusive');
     expect(stopTool.getConcurrencyLockKey({} as never)).toBe('taskns:def-stop');
     expect(stopTool.getConcurrencyLockKey({ namespace: 'n1' } as never)).toBe('taskns:n1');
   });

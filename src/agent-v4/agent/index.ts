@@ -2,6 +2,7 @@ import {
   Message,
   AgentInput,
   AgentCallbacks,
+  AgentContextUsage,
   CompactionInfo,
   StreamEvent,
   ErrorDecision,
@@ -64,6 +65,7 @@ import {
   NoopToolExecutionLedger,
   executeToolCallWithLedger as executeWithToolLedger,
   type ToolExecutionLedger,
+  type ToolExecutionLedgerRecord,
 } from './tool-execution-ledger';
 import {
   emitMetric as pushMetric,
@@ -81,6 +83,7 @@ import {
   safeErrorCallback as invokeSafeErrorCallback,
 } from './callback-safety';
 import { mergeToolCalls as mergeToolCallsWithBuffer } from './tool-call-merge';
+import type { ToolResult } from '../tool/base-tool';
 import {
   normalizeTimeoutBudgetError as normalizeAbortTimeoutBudgetError,
   sleepWithAbort,
@@ -90,6 +93,10 @@ import {
 
 function generateId(prefix: string): string {
   return `${prefix}${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+}
+
+function hasNonEmptyText(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
 }
 
 export interface AgentConfig {
@@ -173,22 +180,48 @@ export class StatelessAgent extends EventEmitter {
     };
   }
 
-  getContextLimitTokens(): number {
+  getContextLimitTokens(contextLimitTokens?: number): number {
+    if (
+      typeof contextLimitTokens === 'number' &&
+      Number.isFinite(contextLimitTokens) &&
+      contextLimitTokens > 0
+    ) {
+      return Math.max(1, Math.floor(contextLimitTokens));
+    }
     const maxTokens = this.llmProvider.getLLMMaxTokens();
     const maxOutputTokens = this.llmProvider.getMaxOutputTokens();
     return Math.max(1, maxTokens - maxOutputTokens);
+  }
+
+  estimateContextUsage(
+    messages: Message[],
+    tools?: Tool[],
+    contextLimitTokens?: number
+  ): Pick<AgentContextUsage, 'contextTokens' | 'contextLimitTokens' | 'contextUsagePercent'> {
+    const llmTools = tools as unknown as LLMTool[] | undefined;
+    const contextTokens = estimateMessagesTokens(messages, llmTools);
+    const resolvedContextLimitTokens = this.getContextLimitTokens(contextLimitTokens);
+    return {
+      contextTokens,
+      contextLimitTokens: resolvedContextLimitTokens,
+      contextUsagePercent: (contextTokens / resolvedContextLimitTokens) * 100,
+    };
   }
 
   private convertMessageToLLMMessage(message: Message) {
     return toLLMMessage(message);
   }
 
-  private needsCompaction(messages: Message[], tools?: Tool[]): boolean {
+  private needsCompaction(
+    messages: Message[],
+    tools?: Tool[],
+    contextLimitTokens?: number
+  ): boolean {
     if (!this.config.enableCompaction) {
       return false;
     }
 
-    const usableLimit = this.getContextLimitTokens();
+    const usableLimit = this.getContextLimitTokens(contextLimitTokens);
     const threshold = usableLimit * this.config.compactionTriggerRatio;
 
     const llmTools = tools as unknown as LLMTool[] | undefined;
@@ -197,8 +230,12 @@ export class StatelessAgent extends EventEmitter {
     return currentTokens >= threshold;
   }
 
-  private async compactMessagesIfNeeded(messages: Message[], tools?: Tool[]): Promise<string[]> {
-    if (!this.needsCompaction(messages, tools)) {
+  private async compactMessagesIfNeeded(
+    messages: Message[],
+    tools?: Tool[],
+    contextLimitTokens?: number
+  ): Promise<string[]> {
+    if (!this.needsCompaction(messages, tools, contextLimitTokens)) {
       return [];
     }
 
@@ -287,7 +324,11 @@ export class StatelessAgent extends EventEmitter {
         try {
           this.throwIfAborted(abortSignal);
           const messageCountBeforeCompaction = messages.length;
-          const removedMessageIds = await this.compactMessagesIfNeeded(messages, effectiveTools);
+          const removedMessageIds = await this.compactMessagesIfNeeded(
+            messages,
+            effectiveTools,
+            input.contextLimitTokens
+          );
           if (removedMessageIds.length > 0) {
             const compactionInfo: CompactionInfo = {
               executionId: input.executionId,
@@ -304,6 +345,17 @@ export class StatelessAgent extends EventEmitter {
           }
 
           this.throwIfAborted(abortSignal);
+
+          const contextUsage = this.estimateContextUsage(
+            messages,
+            effectiveTools,
+            input.contextLimitTokens
+          );
+          await this.safeCallback(callbacks?.onContextUsage, {
+            stepIndex,
+            messageCount: messages.length,
+            ...contextUsage,
+          });
 
           yield* this.emitProgress(input.executionId, stepIndex, 'llm', messages.length);
           const llmSpan = await this.startSpan(
@@ -830,6 +882,7 @@ export class StatelessAgent extends EventEmitter {
           });
 
           let toolOutput = '';
+          let toolSummary = '';
           let errorCode: string | undefined;
 
           if (toolExecResult.success) {
@@ -865,9 +918,14 @@ export class StatelessAgent extends EventEmitter {
             errorCode = this.extractErrorCode(toolExecResult.error) || 'TOOL_EXECUTION_FAILED';
           }
 
+          toolSummary = this.resolveToolResultSummary(toolCall, toolExecResult, toolOutput);
+
           return {
             success: toolExecResult.success,
             output: toolOutput,
+            summary: toolSummary,
+            payload: toolExecResult.payload,
+            metadata: toolExecResult.metadata,
             errorName: toolExecResult.error?.name,
             errorMessage: toolExecResult.error?.message,
             errorCode,
@@ -887,10 +945,7 @@ export class StatelessAgent extends EventEmitter {
       toolSucceeded = ledgerResult.record.success;
       toolErrorCode = ledgerResult.record.errorCode;
 
-      const replayResult = this.createToolResultMessageFromLedger(
-        toolCall.id,
-        ledgerResult.record.output
-      );
+      const replayResult = this.createToolResultMessageFromLedger(toolCall.id, ledgerResult.record);
       await this.safeCallback(callbacks?.onMessage, replayResult);
 
       yield {
@@ -1337,10 +1392,77 @@ export class StatelessAgent extends EventEmitter {
     writeWarnLog(this.logger, message, context, data);
   }
 
-  private createToolResultMessageFromLedger(toolCallId: string, content: string): Message {
+  private resolveToolResultSummary(
+    toolCall: ToolCall,
+    toolResult: ToolResult,
+    toolOutput: string
+  ): string {
+    if (hasNonEmptyText(toolResult.summary)) {
+      return toolResult.summary;
+    }
+
+    const toolName = toolCall.function.name;
+    const subject = toolName === 'bash' ? 'Command' : toolName;
+
+    if (toolResult.success) {
+      if (hasNonEmptyText(toolOutput)) {
+        return `${subject} completed successfully.`;
+      }
+      return `${subject} completed successfully with no output.`;
+    }
+
+    const errorMessage =
+      toolResult.error?.message || (hasNonEmptyText(toolOutput) ? toolOutput : undefined);
+    if (errorMessage) {
+      return `${subject} failed: ${errorMessage}`;
+    }
+    return `${subject} failed.`;
+  }
+
+  private buildToolResultMetadata(
+    record: ToolExecutionLedgerRecord
+  ): Record<string, unknown> | undefined {
+    const error: Record<string, unknown> = {};
+    if (record.errorName) {
+      error.name = record.errorName;
+    }
+    if (record.errorMessage) {
+      error.message = record.errorMessage;
+    }
+    if (record.errorCode) {
+      error.code = record.errorCode;
+    }
+
+    const toolResult: Record<string, unknown> = {
+      success: record.success,
+      summary: record.summary,
+    };
+    if (hasNonEmptyText(record.output)) {
+      toolResult.output = record.output;
+    }
+    if (record.payload !== undefined) {
+      toolResult.payload = record.payload;
+    }
+    if (record.metadata && Object.keys(record.metadata).length > 0) {
+      toolResult.metadata = record.metadata;
+    }
+    if (Object.keys(error).length > 0) {
+      toolResult.error = error;
+    }
+
+    return {
+      toolResult,
+    };
+  }
+
+  private createToolResultMessageFromLedger(
+    toolCallId: string,
+    record: ToolExecutionLedgerRecord
+  ): Message {
     return buildToolResultMessage({
       toolCallId,
-      content,
+      content: hasNonEmptyText(record.output) ? record.output : record.summary,
+      metadata: this.buildToolResultMetadata(record),
       createMessageId: () => generateId('msg_'),
     });
   }

@@ -147,6 +147,10 @@ const readNumber = (value: unknown): number | undefined => {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 };
 
+const readBoolean = (value: unknown): boolean | undefined => {
+  return typeof value === "boolean" ? value : undefined;
+};
+
 const toUsageEventFromApp = (usage: AgentAppUsageLike): AgentUsageEvent => {
   return {
     promptTokens: usage.usage.prompt_tokens,
@@ -155,6 +159,10 @@ const toUsageEventFromApp = (usage: AgentAppUsageLike): AgentUsageEvent => {
     cumulativePromptTokens: usage.cumulativeUsage.prompt_tokens,
     cumulativeCompletionTokens: usage.cumulativeUsage.completion_tokens,
     cumulativeTotalTokens: usage.cumulativeUsage.total_tokens,
+    contextTokens:
+      typeof usage.contextTokens === "number" && Number.isFinite(usage.contextTokens)
+        ? Math.max(0, usage.contextTokens)
+        : undefined,
     contextLimit: usage.contextLimitTokens,
     contextUsagePercent:
       typeof usage.contextUsagePercent === "number" && Number.isFinite(usage.contextUsagePercent)
@@ -238,6 +246,14 @@ const toToolResultEvent = (
   toolCallsById: Map<string, AgentToolUseEvent>
 ): AgentToolResultEvent => {
   const toolCallId = readString(payload.tool_call_id) ?? readString(payload.toolCallId) ?? "unknown";
+  const metadata = asRecord(payload.metadata);
+  const toolResult = asRecord(metadata.toolResult);
+  const error = asRecord(toolResult.error);
+  const summary = readString(toolResult.summary);
+  const explicitOutput = readString(toolResult.output);
+  const content = readString(payload.content);
+  const output =
+    explicitOutput !== undefined ? explicitOutput : content !== summary ? content : undefined;
   const toolCall =
     toolCallsById.get(toolCallId) ??
     ({
@@ -248,9 +264,13 @@ const toToolResultEvent = (
   return {
     toolCall,
     result: {
-      success: true,
+      success: readBoolean(toolResult.success) ?? true,
+      error: readString(error.message),
       data: {
-        output: toJsonString(payload.content ?? payload),
+        ...(summary !== undefined ? { summary } : {}),
+        ...(output !== undefined ? { output } : {}),
+        ...(toolResult.payload !== undefined ? { payload: toolResult.payload } : {}),
+        ...(toolResult.metadata !== undefined ? { metadata: toolResult.metadata } : {}),
       },
       raw: payload,
     },

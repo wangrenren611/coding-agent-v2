@@ -1970,7 +1970,7 @@ describe('StatelessAgent', () => {
     expect(messages.at(-1)).toMatchObject({ tool_call_id: 'tool_parallel' });
   });
 
-  it('executeTool maps success without output to empty string content', async () => {
+  it('executeTool maps success without output to summary content', async () => {
     const provider = createProvider();
     const manager = createToolManager();
     manager.execute = vi.fn().mockResolvedValue({ success: true });
@@ -1990,7 +1990,16 @@ describe('StatelessAgent', () => {
 
     expect(events[0]).toMatchObject({
       type: 'tool_result',
-      data: { content: '', tool_call_id: 'call_no_output' },
+      data: {
+        content: 'Command completed successfully with no output.',
+        tool_call_id: 'call_no_output',
+        metadata: {
+          toolResult: {
+            summary: 'Command completed successfully with no output.',
+            success: true,
+          },
+        },
+      },
     });
   });
 

@@ -10,6 +10,7 @@ function makeRecord(output: string): ToolExecutionLedgerRecord {
   return {
     success: true,
     output,
+    summary: output || 'no output',
     recordedAt: Date.now(),
   };
 }

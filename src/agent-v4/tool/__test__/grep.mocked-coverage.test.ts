@@ -25,7 +25,7 @@ function createChild(options: { withStdout?: boolean; withStderr?: boolean } = {
     stdout?: PassThrough;
     stderr?: PassThrough;
     killed: boolean;
-    kill: ReturnType<typeof vi.fn>;
+    kill: (signal?: string) => boolean;
   };
   if (options.withStdout !== false) {
     child.stdout = new PassThrough();
@@ -34,11 +34,11 @@ function createChild(options: { withStdout?: boolean; withStderr?: boolean } = {
     child.stderr = new PassThrough();
   }
   child.killed = false;
-  child.kill = vi.fn(() => {
+  child.kill = vi.fn((): boolean => {
     child.killed = true;
     child.emit('close', 0, null);
     return true;
-  });
+  }) as unknown as (signal?: string) => boolean;
   return child;
 }
 
@@ -196,9 +196,9 @@ describe('GrepTool mocked branch coverage', () => {
     };
 
     const child = createChild();
-    child.kill = vi.fn(() => {
+    child.kill = vi.fn((): boolean => {
       throw new Error('kill failed');
-    });
+    }) as unknown as (signal?: string) => boolean;
     spawnMock.mockReturnValueOnce(child);
 
     const run = helper.runRipgrep('rg', ['--json'], rootDir, {

@@ -105,12 +105,7 @@ describe('FileEditTool', () => {
   });
 
   it('always requires confirmation', () => {
-    expect(
-      editTool.shouldConfirm({
-        path: 'a.txt',
-        edits: [{ oldText: 'a', newText: 'b' }],
-      })
-    ).toBe(true);
+    expect(editTool.shouldConfirm()).toBe(true);
   });
 
   it('returns failure when target path is not a file', async () => {

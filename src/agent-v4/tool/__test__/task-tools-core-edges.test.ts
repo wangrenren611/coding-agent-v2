@@ -80,7 +80,7 @@ describe('task_create/task_get/task_list/task_update edge branches', () => {
       } as never)
     ).toBe('taskns:default');
 
-    expect(taskCreate.getConcurrencyMode({} as never)).toBe('exclusive');
+    expect(taskCreate.getConcurrencyMode()).toBe('exclusive');
     expect(
       taskCreate.getConcurrencyLockKey({
         subject: 's',
@@ -152,7 +152,7 @@ describe('task_create/task_get/task_list/task_update edge branches', () => {
       'taskns:default:task:x'
     );
 
-    expect(taskGet.getConcurrencyMode({} as never)).toBe('parallel-safe');
+    expect(taskGet.getConcurrencyMode()).toBe('parallel-safe');
     expect(taskGet.getConcurrencyLockKey({ task_id: 't1' } as never)).toBe('taskns:def-ns:task:t1');
     expect(taskGet.getConcurrencyLockKey({ namespace: 'ns', task_id: 't2' } as never)).toBe(
       'taskns:ns:task:t2'
@@ -206,7 +206,7 @@ describe('task_create/task_get/task_list/task_update edge branches', () => {
     const defaultListTool = new TaskListTool();
     expect(defaultListTool.getConcurrencyLockKey({} as never)).toBe('taskns:default:list');
 
-    expect(taskList.getConcurrencyMode({} as never)).toBe('parallel-safe');
+    expect(taskList.getConcurrencyMode()).toBe('parallel-safe');
     expect(taskList.getConcurrencyLockKey({} as never)).toBe('taskns:def-ns:list');
     expect(taskList.getConcurrencyLockKey({ namespace: 'l1' } as never)).toBe('taskns:l1:list');
 
@@ -371,7 +371,7 @@ describe('task_create/task_get/task_list/task_update edge branches', () => {
       'taskns:default'
     );
 
-    expect(taskUpdate.getConcurrencyMode({} as never)).toBe('exclusive');
+    expect(taskUpdate.getConcurrencyMode()).toBe('exclusive');
     expect(taskUpdate.getConcurrencyLockKey({ task_id: 'x' } as never)).toBe('taskns:def-ns');
     expect(taskUpdate.getConcurrencyLockKey({ namespace: 'u1', task_id: 'x' } as never)).toBe(
       'taskns:u1'

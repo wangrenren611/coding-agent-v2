@@ -4,6 +4,7 @@ export type ReplySegment = {
   id: string;
   type: ReplySegmentType;
   content: string;
+  data?: unknown;
 };
 
 export type ReplyStatus = "streaming" | "done" | "error";

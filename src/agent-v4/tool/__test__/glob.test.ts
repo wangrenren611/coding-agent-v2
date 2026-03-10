@@ -81,11 +81,7 @@ describe('GlobTool', () => {
   });
 
   it('exposes parallel-safe concurrency policy and stable lock key', () => {
-    const mode = tool.getConcurrencyMode({
-      pattern: '**/*.ts',
-      include_hidden: false,
-      max_results: 10,
-    });
+    const mode = tool.getConcurrencyMode();
     const lockKey = tool.getConcurrencyLockKey({
       pattern: '**/*.ts',
       path: rootDir,

@@ -5,7 +5,7 @@ node_modules
 out
 dist
 *.tgz
-
+.agent-cache
 # code coverage
 coverage
 *.lcov

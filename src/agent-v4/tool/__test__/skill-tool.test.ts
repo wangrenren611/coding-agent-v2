@@ -94,7 +94,7 @@ This is a plain skill without frontmatter.`,
   it('exposes parallel-safe concurrency policy and lock key', () => {
     const tool = new SkillTool({ loaderOptions: { skillRoots: [skillsRoot] } });
 
-    expect(tool.getConcurrencyMode({ name: 'test-skill' })).toBe('parallel-safe');
+    expect(tool.getConcurrencyMode()).toBe('parallel-safe');
     expect(tool.getConcurrencyLockKey({ name: 'test-skill' })).toBe('skill:test-skill');
   });
 

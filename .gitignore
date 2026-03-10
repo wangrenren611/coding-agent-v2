@@ -55,3 +55,6 @@ coverage/
 plans
 logs
 .mcp.json
+
+.agent-v4
+.agent-v4/*

@@ -123,7 +123,7 @@ describe('AgentAppService', () => {
     expect(dropped).toHaveLength(0);
   });
 
-  it('emits usage callback with cumulative totals and compaction-aligned context percentage', async () => {
+  it('emits usage callback with cumulative totals and agent-calculated context usage', async () => {
     const provider = createProvider();
     const manager = createToolManager();
     provider.generateStream = vi.fn().mockReturnValue(
@@ -162,6 +162,7 @@ describe('AgentAppService', () => {
       stepIndex: number;
       usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
       cumulativeUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+      contextTokens?: number;
       contextLimitTokens?: number;
       contextUsagePercent?: number;
     }> = [];
@@ -180,12 +181,23 @@ describe('AgentAppService', () => {
             stepIndex: usage.stepIndex,
             usage: usage.usage,
             cumulativeUsage: usage.cumulativeUsage,
+            contextTokens: usage.contextTokens,
             contextLimitTokens: usage.contextLimitTokens,
             contextUsagePercent: usage.contextUsagePercent,
           });
         },
       }
     );
+
+    const expectedContextUsage = agent.estimateContextUsage([
+      {
+        messageId: 'msg_expected_user',
+        type: 'user',
+        role: 'user',
+        content: 'Show usage',
+        timestamp: Date.now(),
+      },
+    ]);
 
     expect(result.finishReason).toBe('stop');
     expect(usageEvents).toHaveLength(1);
@@ -200,8 +212,12 @@ describe('AgentAppService', () => {
       completion_tokens: 30,
       total_tokens: 150,
     });
-    expect(usageEvents[0]?.contextLimitTokens).toBe(32000 - 4096);
-    expect(usageEvents[0]?.contextUsagePercent).toBeCloseTo((120 / (32000 - 4096)) * 100, 6);
+    expect(usageEvents[0]?.contextTokens).toBe(expectedContextUsage.contextTokens);
+    expect(usageEvents[0]?.contextLimitTokens).toBe(expectedContextUsage.contextLimitTokens);
+    expect(usageEvents[0]?.contextUsagePercent).toBeCloseTo(
+      expectedContextUsage.contextUsagePercent,
+      6
+    );
   });
 
   it('maps aborted execution to CANCELLED terminal state', async () => {

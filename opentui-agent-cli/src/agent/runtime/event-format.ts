@@ -42,6 +42,10 @@ const limitText = (value: string): string => {
   return `${value.slice(0, MAX_TOOL_TEXT)}\n... (truncated)`;
 };
 
+const hasNonEmptyText = (value: unknown): value is string => {
+  return typeof value === "string" && value.length > 0;
+};
+
 type ToolCallLike = {
   id?: string;
   function?: {
@@ -129,11 +133,9 @@ const formatToolUseAsCode = (toolCall: ToolCallLike): string => {
 };
 
 const omitOutputField = (value: Record<string, unknown>): Record<string, unknown> => {
-  if (!("output" in value)) {
-    return value;
-  }
   const cloned = { ...value };
   delete cloned.output;
+  delete cloned.summary;
   return cloned;
 };
 
@@ -153,9 +155,21 @@ const formatToolResultAsCode = (
     lines.push(result.error);
   }
 
+  const summary = pickString(data.summary);
   const output = pickString(data.output);
-  if (output && !opts?.suppressOutput) {
+  if (!opts?.suppressOutput && hasNonEmptyText(output)) {
     lines.push(output);
+    return limitText(lines.join("\n"));
+  }
+
+  if (summary) {
+    lines.push(summary);
+  }
+
+  if (output === "") {
+    if (!summary) {
+      lines.push("no output");
+    }
     return limitText(lines.join("\n"));
   }
 
@@ -165,7 +179,7 @@ const formatToolResultAsCode = (
     return limitText(lines.join("\n"));
   }
 
-  if (opts?.suppressOutput && output) {
+  if (opts?.suppressOutput && hasNonEmptyText(output)) {
     return limitText(lines.join("\n"));
   }
 

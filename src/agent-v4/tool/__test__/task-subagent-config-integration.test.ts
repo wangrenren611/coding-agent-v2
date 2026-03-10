@@ -40,13 +40,13 @@ describe('task subagent config integration', () => {
   });
 
   it('injects default tools and systemPrompt from subagent config', async () => {
-    let captured: { allowedTools?: string[]; systemPrompt?: string } | null = null;
+    const captured: Array<{ allowedTools?: string[]; systemPrompt?: string }> = [];
     const runner: SubagentRunnerAdapter = {
       start: async (_ns, input) => {
-        captured = {
+        captured.push({
           allowedTools: input.allowedTools,
           systemPrompt: input.systemPrompt,
-        };
+        });
         return makeRun('agent-default-config');
       },
       poll: async () => null,
@@ -61,20 +61,24 @@ describe('task subagent config integration', () => {
       run_in_background: true,
     });
     expect(result.success).toBe(true);
-    expect(captured?.allowedTools).toContain('glob');
-    expect(captured?.allowedTools).toContain('grep');
-    expect(captured?.allowedTools).toContain('file_read');
-    expect(captured?.systemPrompt).toContain('planning specialist');
+    const firstCapture = captured[0];
+    if (!firstCapture) {
+      throw new Error('expected captured task config');
+    }
+    expect(firstCapture.allowedTools).toContain('glob');
+    expect(firstCapture.allowedTools).toContain('grep');
+    expect(firstCapture.allowedTools).toContain('file_read');
+    expect(firstCapture.systemPrompt).toContain('planning specialist');
   });
 
   it('filters requested allowed_tools through config whitelist', async () => {
-    let captured: { allowedTools?: string[]; systemPrompt?: string } | null = null;
+    const captured: Array<{ allowedTools?: string[]; systemPrompt?: string }> = [];
     const runner: SubagentRunnerAdapter = {
       start: async (_ns, input) => {
-        captured = {
+        captured.push({
           allowedTools: input.allowedTools,
           systemPrompt: input.systemPrompt,
-        };
+        });
         return makeRun('agent-filtered-config');
       },
       poll: async () => null,
@@ -90,20 +94,24 @@ describe('task subagent config integration', () => {
       allowed_tools: ['glob', 'bash', 'write_file'],
     });
     expect(result.success).toBe(true);
-    expect(captured?.allowedTools).toEqual(['glob']);
+    const firstCapture = captured[0];
+    if (!firstCapture) {
+      throw new Error('expected captured task config');
+    }
+    expect(firstCapture.allowedTools).toEqual(['glob']);
 
     const payload = parseOutput<{ agent_run: { agentId: string } }>(result.output);
     expect(payload.agent_run.agentId).toBe('agent-filtered-config');
   });
 
   it('injects find-skills defaults (skill + bash) and skill-discovery prompt', async () => {
-    let captured: { allowedTools?: string[]; systemPrompt?: string } | null = null;
+    const captured: Array<{ allowedTools?: string[]; systemPrompt?: string }> = [];
     const runner: SubagentRunnerAdapter = {
       start: async (_ns, input) => {
-        captured = {
+        captured.push({
           allowedTools: input.allowedTools,
           systemPrompt: input.systemPrompt,
-        };
+        });
         return makeRun('agent-find-skills-config');
       },
       poll: async () => null,
@@ -119,9 +127,13 @@ describe('task subagent config integration', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(captured?.allowedTools).toEqual(['skill', 'bash']);
-    expect(captured?.systemPrompt).toContain('skill discovery and installation specialist');
-    expect(captured?.systemPrompt).toContain('Always try the skill tool first');
-    expect(captured?.systemPrompt).toContain('load the "find-skills" skill');
+    const firstCapture = captured[0];
+    if (!firstCapture) {
+      throw new Error('expected captured task config');
+    }
+    expect(firstCapture.allowedTools).toEqual(['skill', 'bash']);
+    expect(firstCapture.systemPrompt).toContain('skill discovery and installation specialist');
+    expect(firstCapture.systemPrompt).toContain('Always try the skill tool first');
+    expect(firstCapture.systemPrompt).toContain('load the "find-skills" skill');
   });
 });

@@ -147,6 +147,12 @@ export class BashTool extends BaseTool<typeof schema> {
         return {
           success: false,
           output: timeoutMessage,
+          summary: `Command timed out after ${timeoutMs}ms.`,
+          payload: {
+            exitCode: commandResult.exitCode,
+            timeoutMs,
+            timedOut: true,
+          },
           error: new ToolExecutionError(timeoutMessage),
           metadata: {
             error: 'COMMAND_TIMEOUT',
@@ -160,9 +166,22 @@ export class BashTool extends BaseTool<typeof schema> {
       const truncated = this.truncateOutput(sanitized);
 
       if (commandResult.exitCode === 0) {
+        const summary =
+          truncated.output.length > 0
+            ? truncated.truncated
+              ? 'Command completed successfully. Output truncated.'
+              : 'Command completed successfully.'
+            : 'Command completed successfully with no output.';
         return {
           success: true,
           output: truncated.output,
+          summary,
+          payload: {
+            exitCode: commandResult.exitCode,
+            timedOut: false,
+            truncated: truncated.truncated,
+            hasOutput: truncated.output.length > 0,
+          },
           metadata: {
             output: truncated.output,
             exitCode: commandResult.exitCode,
@@ -176,6 +195,12 @@ export class BashTool extends BaseTool<typeof schema> {
       return {
         success: false,
         output: failureOutput,
+        summary: `Command failed with exit code ${commandResult.exitCode}.`,
+        payload: {
+          exitCode: commandResult.exitCode,
+          timedOut: false,
+          truncated: truncated.truncated,
+        },
         error: new ToolExecutionError(failureOutput),
         metadata: {
           output: truncated.output,
@@ -190,6 +215,7 @@ export class BashTool extends BaseTool<typeof schema> {
       return {
         success: false,
         output,
+        summary: `Command execution failed: ${message}`,
         error: new ToolExecutionError(output),
         metadata: {
           error: 'EXECUTION_FAILED',

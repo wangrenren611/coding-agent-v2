@@ -19,7 +19,13 @@ import type { ReplySegmentType } from "../types/chat";
 type BuildAgentEventHandlersParams = {
   turnId: number;
   isCurrentRequest: () => boolean;
-  appendSegment: (turnId: number, segmentId: string, type: ReplySegmentType, chunk: string) => void;
+  appendSegment: (
+    turnId: number,
+    segmentId: string,
+    type: ReplySegmentType,
+    chunk: string,
+    data?: unknown,
+  ) => void;
   appendEventLine: (turnId: number, text: string) => void;
 };
 
@@ -143,7 +149,13 @@ export const buildAgentEventHandlers = ({
         renderedToolUseIds.add(toolCallId);
       }
       const segmentSuffix = toolCallId ?? `anonymous_${++anonymousToolUseCounter}`;
-      appendSegment(turnId, `${turnId}:tool-use:${segmentSuffix}`, "code", `${formatToolUseEventCode(event)}\n`);
+      appendSegment(
+        turnId,
+        `${turnId}:tool-use:${segmentSuffix}`,
+        "code",
+        `${formatToolUseEventCode(event)}\n`,
+        event,
+      );
       logEvent(formatToolUseEvent(event));
     },
     onToolResult: (event) => {
@@ -159,6 +171,7 @@ export const buildAgentEventHandlers = ({
         `${turnId}:tool-result:${segmentSuffix}`,
         "code",
         `${formatToolResultEventCode(event, { suppressOutput })}\n`,
+        event,
       );
       logEvent(formatToolResultEvent(event));
     },

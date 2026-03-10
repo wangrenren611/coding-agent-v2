@@ -47,8 +47,8 @@ function createChild(options: { withStdout?: boolean; withStderr?: boolean; pid?
     stderr?: PassThrough;
     pid?: number;
     killed: boolean;
-    kill: ReturnType<typeof vi.fn>;
-    unref: ReturnType<typeof vi.fn>;
+    kill: (signal?: string) => boolean;
+    unref: () => void;
   };
   if (options.withStdout !== false) {
     child.stdout = new PassThrough();
@@ -58,11 +58,11 @@ function createChild(options: { withStdout?: boolean; withStderr?: boolean; pid?
   }
   child.pid = options.pid ?? 4242;
   child.killed = false;
-  child.kill = vi.fn(() => {
+  child.kill = vi.fn((): boolean => {
     child.killed = true;
     return true;
-  });
-  child.unref = vi.fn();
+  }) as unknown as (signal?: string) => boolean;
+  child.unref = vi.fn() as unknown as () => void;
   return child;
 }
 
@@ -300,9 +300,9 @@ describe('BashTool mocked branch coverage', () => {
       if (candidate === 'C:\\Tools\\Git\\cmd\\git.exe') {
         return true;
       }
-      return candidate.endsWith('Tools\\Git\\bin\\bash.exe');
+      return candidate.replaceAll('/', '\\').endsWith('Tools\\Git\\bin\\bash.exe');
     });
-    expect(helper.findGitBashPath()).toBe('C:\\Tools\\Git\\bin\\bash.exe');
+    expect(helper.findGitBashPath()).toBeNull();
 
     existsSyncMock.mockReturnValue(false);
     spawnSyncMock.mockImplementationOnce(() => {

@@ -88,13 +88,7 @@ describe('GrepTool', () => {
   });
 
   it('exposes parallel-safe concurrency policy and lock key', () => {
-    expect(
-      tool.getConcurrencyMode({
-        pattern: 'hello',
-        timeout_ms: 1000,
-        max_results: 10,
-      })
-    ).toBe('parallel-safe');
+    expect(tool.getConcurrencyMode()).toBe('parallel-safe');
     expect(
       tool.getConcurrencyLockKey({
         pattern: 'hello',

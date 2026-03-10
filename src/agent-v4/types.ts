@@ -48,6 +48,7 @@ export interface AgentInput {
   abortSignal?: AbortSignal;
   timeoutBudgetMs?: number;
   llmTimeoutRatio?: number;
+  contextLimitTokens?: number;
 }
 
 export interface AgentOutput {
@@ -83,11 +84,20 @@ export interface AgentTraceEvent {
   attributes?: Record<string, unknown>;
 }
 
+export interface AgentContextUsage {
+  stepIndex: number;
+  messageCount: number;
+  contextTokens: number;
+  contextLimitTokens: number;
+  contextUsagePercent: number;
+}
+
 export interface AgentCallbacks {
   onMessage: (message: Message) => void | Promise<void>;
   onCheckpoint: (checkpoint: ExecutionCheckpoint) => void | Promise<void>;
   onProgress?: (progress: ExecutionProgress) => void | Promise<void>;
   onCompaction?: (compaction: CompactionInfo) => void | Promise<void>;
+  onContextUsage?: (usage: AgentContextUsage) => void | Promise<void>;
   onMetric?: (metric: AgentMetric) => void | Promise<void>;
   onTrace?: (event: AgentTraceEvent) => void | Promise<void>;
   onToolPolicy?: (info: ToolPolicyCheckInfo) => ToolPolicyDecision | Promise<ToolPolicyDecision>;

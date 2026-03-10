@@ -13,8 +13,8 @@ const buildHarness = () => {
   const handlers = buildAgentEventHandlers({
     turnId,
     isCurrentRequest: () => true,
-    appendSegment: (_turnId, segmentId, type, chunk) => {
-      segments = appendToSegment(segments, segmentId, type, chunk);
+    appendSegment: (_turnId, segmentId, type, chunk, data) => {
+      segments = appendToSegment(segments, segmentId, type, chunk, data);
     },
     appendEventLine: (_turnId, text) => {
       notes.push(text);
@@ -58,6 +58,22 @@ const createToolResultEvent = (): AgentToolResultEvent => ({
     success: true,
     data: {
       output: "total 80",
+    },
+  },
+});
+
+const createEmptyToolResultEvent = (): AgentToolResultEvent => ({
+  toolCall: {
+    id: "call_2",
+    function: {
+      name: "bash",
+      arguments: JSON.stringify({ command: "find /tmp -name missing" }),
+    },
+  },
+  result: {
+    success: true,
+    data: {
+      summary: "Command completed successfully with no output.",
     },
   },
 });
@@ -127,6 +143,39 @@ describe("buildAgentEventHandlers", () => {
     const toolResult = readSegments().find((segment) => segment.id === `${turnId}:tool-result:call_1`);
     expect(toolResult?.content).toContain("# Result: bash (call_1) success");
     expect(toolResult?.content).toContain("total 80");
+  });
+
+  it("renders a summary instead of an output wrapper when tool succeeds without output", () => {
+    const { handlers, readSegments, turnId } = buildHarness();
+
+    handlers.onToolUse?.({
+      id: "call_2",
+      function: {
+        name: "bash",
+        arguments: JSON.stringify({ command: "find /tmp -name missing" }),
+      },
+    });
+    handlers.onToolResult?.(createEmptyToolResultEvent());
+
+    const toolResult = readSegments().find((segment) => segment.id === `${turnId}:tool-result:call_2`);
+    expect(toolResult?.content).toContain("# Result: bash (call_2) success");
+    expect(toolResult?.content).toContain("Command completed successfully with no output.");
+    expect(toolResult?.content).not.toContain('{"output":""}');
+  });
+
+  it("stores structured tool event data on tool-use and tool-result segments", () => {
+    const { handlers, readSegments, turnId } = buildHarness();
+
+    const toolUseEvent = createToolUseEvent();
+    const toolResultEvent = createToolResultEvent();
+    handlers.onToolUse?.(toolUseEvent);
+    handlers.onToolResult?.(toolResultEvent);
+
+    const toolUse = readSegments().find((segment) => segment.id === `${turnId}:tool-use:call_1`);
+    const toolResult = readSegments().find((segment) => segment.id === `${turnId}:tool-result:call_1`);
+
+    expect(toolUse?.data).toEqual(toolUseEvent);
+    expect(toolResult?.data).toEqual(toolResultEvent);
   });
 
   it("deduplicates repeated tool-use events for the same toolCallId", () => {

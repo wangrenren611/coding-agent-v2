@@ -83,6 +83,7 @@ export type AgentAppUsageLike = {
     completion_tokens: number;
     total_tokens: number;
   };
+  contextTokens?: number;
   contextLimitTokens?: number;
   contextUsagePercent?: number;
 };

@@ -128,6 +128,9 @@ export const Prompt = ({
               focusedTextColor={uiTheme.text}
               backgroundColor={uiTheme.panel}
               focusedBackgroundColor={uiTheme.panel}
+              cursorColor={uiTheme.inputCursor}
+              selectionBg={uiTheme.inputSelectionBg}
+              selectionFg={uiTheme.inputSelectionText}
               placeholder={
                 isThinking
                   ? "waiting for agent response..."

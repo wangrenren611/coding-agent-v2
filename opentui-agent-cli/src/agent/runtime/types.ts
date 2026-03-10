@@ -53,6 +53,7 @@ export type AgentUsageEvent = {
   cumulativePromptTokens?: number;
   cumulativeCompletionTokens?: number;
   cumulativeTotalTokens?: number;
+  contextTokens?: number;
   contextLimit?: number;
   contextUsagePercent?: number;
 };

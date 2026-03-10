@@ -3,6 +3,9 @@ import type { Message } from '../types';
 export interface ToolExecutionLedgerRecord {
   success: boolean;
   output: string;
+  summary: string;
+  payload?: unknown;
+  metadata?: Record<string, unknown>;
   errorName?: string;
   errorMessage?: string;
   errorCode?: string;
@@ -121,9 +124,10 @@ export class InMemoryToolExecutionLedger implements ToolExecutionLedger {
 export function createToolResultMessage(params: {
   toolCallId: string;
   content: string;
+  metadata?: Record<string, unknown>;
   createMessageId: () => string;
 }): Message {
-  const { toolCallId, content, createMessageId } = params;
+  const { toolCallId, content, metadata, createMessageId } = params;
   return {
     messageId: createMessageId(),
     type: 'tool-result',
@@ -131,6 +135,7 @@ export function createToolResultMessage(params: {
     content,
     tool_call_id: toolCallId,
     timestamp: Date.now(),
+    metadata,
   };
 }
 

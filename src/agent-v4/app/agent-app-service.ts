@@ -49,6 +49,7 @@ export interface RunForegroundUsage {
   messageId: string;
   usage: Usage;
   cumulativeUsage: Usage;
+  contextTokens?: number;
   contextLimitTokens?: number;
   contextUsagePercent?: number;
 }
@@ -97,13 +98,20 @@ export class AgentAppService {
     let latestErrorPayload: ErrorEventPayload | undefined;
     let streamFailure: unknown;
     let toolStreamFailure: unknown;
-    const contextLimitTokens = resolveContextLimitTokens(request, this.deps.agent);
     const cumulativeUsage: Usage = {
       prompt_tokens: 0,
       completion_tokens: 0,
       total_tokens: 0,
     };
     let usageSequence = 0;
+    let latestContextUsage:
+      | {
+          stepIndex: number;
+          contextTokens: number;
+          contextLimitTokens: number;
+          contextUsagePercent: number;
+        }
+      | undefined;
 
     await this.deps.executionStore.create({
       executionId,
@@ -158,6 +166,15 @@ export class AgentAppService {
     this.deps.agent.on('tool_chunk', toolChunkListener);
 
     const agentCallbacks: AgentCallbacks = {
+      onContextUsage: async (contextUsage) => {
+        latestContextUsage = {
+          stepIndex: contextUsage.stepIndex,
+          contextTokens: contextUsage.contextTokens,
+          contextLimitTokens: contextUsage.contextLimitTokens,
+          contextUsagePercent: contextUsage.contextUsagePercent,
+        };
+        await callbacks?.onContextUsage?.(contextUsage);
+      },
       onMessage: async (message) => {
         emittedMessages.push(message);
         await appendAndProject('assistant_message', {
@@ -170,18 +187,17 @@ export class AgentAppService {
           cumulativeUsage.prompt_tokens += usage.prompt_tokens;
           cumulativeUsage.completion_tokens += usage.completion_tokens;
           cumulativeUsage.total_tokens += usage.total_tokens;
+          const usageStepIndex = latestContextUsage?.stepIndex ?? currentStepIndex;
 
           const usagePayload: RunForegroundUsage = {
             sequence: usageSequence,
-            stepIndex: currentStepIndex,
+            stepIndex: usageStepIndex,
             messageId: message.messageId,
             usage,
             cumulativeUsage: { ...cumulativeUsage },
-            contextLimitTokens,
-            contextUsagePercent:
-              typeof contextLimitTokens === 'number' && contextLimitTokens > 0
-                ? (usage.prompt_tokens / contextLimitTokens) * 100
-                : undefined,
+            contextTokens: latestContextUsage?.contextTokens,
+            contextLimitTokens: latestContextUsage?.contextLimitTokens,
+            contextUsagePercent: latestContextUsage?.contextUsagePercent,
           };
           await callbacks?.onUsage?.(usagePayload);
         }
@@ -211,6 +227,7 @@ export class AgentAppService {
           abortSignal: request.abortSignal,
           timeoutBudgetMs: request.timeoutBudgetMs,
           llmTimeoutRatio: request.llmTimeoutRatio,
+          contextLimitTokens: request.contextLimitTokens,
         },
         agentCallbacks
       )) {
@@ -506,25 +523,6 @@ function readUsage(value: unknown): Usage | undefined {
     completion_tokens: Math.max(0, completionTokens),
     total_tokens: Math.max(0, totalTokens),
   };
-}
-
-function resolveContextLimitTokens(
-  request: RunForegroundRequest,
-  agent: StatelessAgent
-): number | undefined {
-  if (
-    typeof request.contextLimitTokens === 'number' &&
-    Number.isFinite(request.contextLimitTokens) &&
-    request.contextLimitTokens > 0
-  ) {
-    return Math.floor(request.contextLimitTokens);
-  }
-
-  const fromAgent = agent.getContextLimitTokens();
-  if (typeof fromAgent !== 'number' || !Number.isFinite(fromAgent) || fromAgent <= 0) {
-    return undefined;
-  }
-  return Math.floor(fromAgent);
 }
 
 function resolveContextStore(

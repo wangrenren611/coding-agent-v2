@@ -176,7 +176,7 @@ describe('task-store branches', () => {
     const store = new TaskStore({ baseDir });
     const executionOrder: string[] = [];
 
-    let releaseFirst: (() => void) | null = null;
+    let releaseFirst!: () => void;
     const firstDone = new Promise<void>((resolve) => {
       releaseFirst = resolve;
     });
@@ -197,7 +197,7 @@ describe('task-store branches', () => {
 
     await sleep(20);
     expect(executionOrder).toEqual(['first-start']);
-    releaseFirst?.();
+    releaseFirst();
     await Promise.all([first, second]);
     expect(executionOrder).toEqual(['first-start', 'first-end', 'second']);
 
