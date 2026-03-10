@@ -1,4 +1,4 @@
-import type { LLMRequestMessage } from '../../providers';
+import type { LLMRequestMessage, ToolCall } from '../../providers';
 import type { AgentInput, Message } from '../types';
 
 export function convertMessageToLLMMessage(message: Message): LLMRequestMessage {
@@ -6,10 +6,39 @@ export function convertMessageToLLMMessage(message: Message): LLMRequestMessage 
     role: message.role,
     content: message.content,
     tool_call_id: message.tool_call_id,
-    tool_calls: message.tool_calls,
+    tool_calls: sanitizeToolCallsForRequest(message.tool_calls),
     id: message.id,
     reasoning_content: message.reasoning_content,
   };
+}
+
+function sanitizeToolCallsForRequest(
+  toolCalls: Message['tool_calls']
+): LLMRequestMessage['tool_calls'] {
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+    return toolCalls;
+  }
+
+  return toolCalls.map((toolCall) => ({
+    ...toolCall,
+    function: {
+      ...toolCall.function,
+      arguments: sanitizeToolCallArguments(toolCall.function?.arguments),
+    },
+  })) as ToolCall[];
+}
+
+function sanitizeToolCallArguments(argumentsText: unknown): string {
+  if (typeof argumentsText !== 'string' || argumentsText.trim().length === 0) {
+    return '{}';
+  }
+
+  try {
+    JSON.parse(argumentsText);
+    return argumentsText;
+  } catch {
+    return '{}';
+  }
 }
 
 export function mergeLLMConfig(

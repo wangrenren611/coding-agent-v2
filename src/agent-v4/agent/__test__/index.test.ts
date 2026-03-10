@@ -583,6 +583,114 @@ describe('StatelessAgent', () => {
     expect(events.filter((event) => event.type === 'tool_result')).toHaveLength(1);
   });
 
+  it('returns invalid tool arguments back to llm without replaying broken arguments upstream', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    const toolCallId = 'call_invalid_args_1';
+    const invalidToolOutput =
+      'Invalid arguments format for tool glob: JSON Parse error: Unexpected EOF';
+
+    provider.generateStream = vi
+      .fn()
+      .mockReturnValueOnce(
+        toStream([
+          {
+            index: 0,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      id: toolCallId,
+                      type: 'function',
+                      index: 0,
+                      function: { name: 'glob', arguments: '' },
+                    },
+                  ],
+                  finish_reason: 'tool_calls',
+                } as unknown as ChunkDelta,
+              },
+            ],
+          },
+        ])
+      )
+      .mockImplementationOnce(
+        (
+          messages: Array<{
+            role: string;
+            content?: unknown;
+            tool_call_id?: string;
+            tool_calls?: ToolCall[];
+          }>
+        ) => {
+          const assistantToolCallMessage = messages.find(
+            (message) => message.role === 'assistant' && Array.isArray(message.tool_calls)
+          );
+          const invalidToolCall = assistantToolCallMessage?.tool_calls?.find(
+            (toolCall) => toolCall.id === toolCallId
+          );
+          const toolResultMessage = messages.find(
+            (message) => message.role === 'tool' && message.tool_call_id === toolCallId
+          );
+
+          expect(toolResultMessage).toMatchObject({
+            content: invalidToolOutput,
+            tool_call_id: toolCallId,
+          });
+
+          if (invalidToolCall?.function.arguments === '') {
+            throw new LLMBadRequestError(
+              `400 Bad Request - invalid params, invalid function arguments json string, tool_call_id: ${toolCallId} (2013)`
+            );
+          }
+
+          expect(invalidToolCall).toMatchObject({
+            id: toolCallId,
+            function: {
+              name: 'glob',
+              arguments: '{}',
+            },
+          });
+
+          return toStream([
+            {
+              index: 0,
+              choices: [{ index: 0, delta: { content: 'retry with valid args' } }],
+            },
+            {
+              index: 0,
+              choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+            },
+          ]);
+        }
+      );
+    manager.execute = vi.fn().mockResolvedValue({
+      success: false,
+      output: invalidToolOutput,
+    });
+
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
+
+    const events = await collectEvents(
+      agent.runStream(createInput(), { onMessage: vi.fn(), onCheckpoint: vi.fn() })
+    );
+
+    expect(provider.generateStream).toHaveBeenCalledTimes(2);
+    expect(events.some((event) => event.type === 'error')).toBe(false);
+    expect(events.filter((event) => event.type === 'tool_result')).toHaveLength(1);
+    expect(events.at(-1)).toMatchObject({
+      type: 'done',
+      data: {
+        finishReason: 'stop',
+        steps: 2,
+      },
+    });
+  });
+
   it('enforces llm timeout budget and emits timeout error event', async () => {
     vi.useFakeTimers();
     const provider = createProvider();
@@ -2656,7 +2764,32 @@ describe('StatelessAgent', () => {
       id: 'legacy-id',
       reasoning_content: 'reason',
       tool_call_id: 'tool-1',
+      tool_calls: [
+        {
+          id: 'tool-1',
+          function: {
+            arguments: '{}',
+          },
+        },
+      ],
     });
+
+    const invalidToolArgsMessage: Message = {
+      ...message,
+      tool_calls: [
+        {
+          id: 'tool-invalid',
+          type: 'function',
+          index: 0,
+          function: { name: 'glob', arguments: '' },
+        },
+      ],
+    };
+    const sanitizedLlmMessage = agentPrivate.convertMessageToLLMMessage(invalidToolArgsMessage) as {
+      tool_calls?: ToolCall[];
+    };
+    expect(sanitizedLlmMessage.tool_calls?.[0]?.function.arguments).toBe('{}');
+    expect(invalidToolArgsMessage.tool_calls?.[0]?.function.arguments).toBe('');
 
     await agentPrivate.safeCallback(async () => {
       throw new Error('callback failed');
