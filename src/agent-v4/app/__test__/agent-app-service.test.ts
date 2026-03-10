@@ -47,6 +47,10 @@ function createToolManager(): ToolManager {
   } as unknown as ToolManager;
 }
 
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 describe('AgentAppService', () => {
   let tempDir: string | null = null;
   let store: SqliteAgentAppStore | null = null;
@@ -121,6 +125,16 @@ describe('AgentAppService', () => {
 
     const dropped = await app.listDroppedMessages('exec_service');
     expect(dropped).toHaveLength(0);
+
+    const traces = result.events.filter((event) => event.eventType === 'trace');
+    const metrics = result.events.filter((event) => event.eventType === 'metric');
+    const runLogEvents = result.events.filter((event) => event.eventType === 'run_log');
+    const runLogs = await app.listRunLogs('exec_service');
+    expect(traces.length).toBeGreaterThan(0);
+    expect(metrics.length).toBeGreaterThan(0);
+    expect(runLogEvents.length).toBeGreaterThan(0);
+    expect(runLogs.length).toBeGreaterThan(0);
+    expect(runLogs.some((log) => log.message.includes('run.start'))).toBe(true);
   });
 
   it('emits usage callback with cumulative totals and agent-calculated context usage', async () => {
@@ -499,5 +513,132 @@ describe('AgentAppService', () => {
     expect(genericRetryableResult.run.status).toBe('FAILED');
     expect(genericRetryableResult.run.terminalReason).toBe('error');
     expect(genericRetryableResult.run.errorCode).toBe('AGENT_UPSTREAM_RETRYABLE');
+  });
+
+  it('isolates run logs across concurrent executions on the same service instance', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi.fn().mockImplementation((messages: Array<{ content: string }>) => {
+      const marker = messages.at(-1)?.content ?? 'unknown';
+      return (async function* () {
+        await delay(marker === 'first' ? 10 : 1);
+        yield {
+          index: 0,
+          choices: [{ index: 0, delta: { content: `reply:${marker}` } }],
+        } as Chunk;
+        await delay(marker === 'first' ? 1 : 10);
+        yield {
+          index: 0,
+          choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+        } as Chunk;
+      })();
+    });
+
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-app-service-concurrent-'));
+    store = new SqliteAgentAppStore(path.join(tempDir, 'agent.db'));
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 2,
+      backoffConfig: { initialDelayMs: 1, maxDelayMs: 1, base: 2, jitter: false },
+    });
+    const app = new AgentAppService({
+      agent,
+      executionStore: store,
+      eventStore: store,
+      messageStore: store,
+    });
+
+    const [first, second] = await Promise.all([
+      app.runForeground({
+        conversationId: 'conv_concurrent',
+        executionId: 'exec_first',
+        userInput: 'first',
+        maxSteps: 3,
+      }),
+      app.runForeground({
+        conversationId: 'conv_concurrent',
+        executionId: 'exec_second',
+        userInput: 'second',
+        maxSteps: 3,
+      }),
+    ]);
+
+    expect(first.run.status).toBe('COMPLETED');
+    expect(second.run.status).toBe('COMPLETED');
+
+    const firstLogs = await app.listRunLogs('exec_first');
+    const secondLogs = await app.listRunLogs('exec_second');
+    expect(firstLogs.length).toBeGreaterThan(0);
+    expect(secondLogs.length).toBeGreaterThan(0);
+    expect(firstLogs.every((log) => log.executionId === 'exec_first')).toBe(true);
+    expect(secondLogs.every((log) => log.executionId === 'exec_second')).toBe(true);
+    expect(
+      firstLogs.every(
+        (log) => log.context?.executionId === undefined || log.context.executionId === 'exec_first'
+      )
+    ).toBe(true);
+    expect(
+      secondLogs.every(
+        (log) => log.context?.executionId === undefined || log.context.executionId === 'exec_second'
+      )
+    ).toBe(true);
+  });
+
+  it('persists error run logs with structured details when execution fails', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi.fn().mockImplementation(() =>
+      (async function* () {
+        for (const chunk of [] as Chunk[]) {
+          yield chunk;
+        }
+        throw new Error('provider exploded');
+      })()
+    );
+
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-app-service-error-logs-'));
+    store = new SqliteAgentAppStore(path.join(tempDir, 'agent.db'));
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 1,
+      backoffConfig: { initialDelayMs: 1, maxDelayMs: 1, base: 2, jitter: false },
+    });
+    const app = new AgentAppService({
+      agent,
+      executionStore: store,
+      eventStore: store,
+      messageStore: store,
+    });
+
+    const result = await app.runForeground(
+      {
+        conversationId: 'conv_error_logs',
+        executionId: 'exec_error_logs',
+        userInput: 'explode',
+      },
+      {
+        onError: async () => ({ retry: false }),
+      }
+    );
+
+    expect(result.run.status).toBe('FAILED');
+    const errorLogs = await app.listRunLogs('exec_error_logs', { level: 'error' });
+    expect(errorLogs.length).toBeGreaterThan(0);
+    expect(errorLogs.some((log) => log.message === '[Agent] run.error')).toBe(true);
+    expect(errorLogs).toContainEqual(
+      expect.objectContaining({
+        executionId: 'exec_error_logs',
+        level: 'error',
+        message: '[Agent] run.error',
+        error: expect.objectContaining({
+          message: 'provider exploded',
+        }),
+      })
+    );
+
+    const runLogEvents = result.events.filter((event) => event.eventType === 'run_log');
+    expect(
+      runLogEvents.some(
+        (event) => (event.data as { message?: string }).message === '[Agent] run.error'
+      )
+    ).toBe(true);
   });
 });

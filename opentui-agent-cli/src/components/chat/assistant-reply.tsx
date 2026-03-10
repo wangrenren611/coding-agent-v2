@@ -45,6 +45,7 @@ export const AssistantReply = ({ reply }: AssistantReplyProps) => {
   const status = renderStatus(reply.status);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const items = buildReplyRenderItems(reply.segments);
+  const isStreaming = reply.status === "streaming";
 
   useEffect(() => {
     if (reply.status !== "streaming") {
@@ -70,7 +71,7 @@ export const AssistantReply = ({ reply }: AssistantReplyProps) => {
         item.type === "tool" ? (
           <AssistantToolGroup key={`tool-group:${item.group.toolCallId}:${index}`} group={item.group} />
         ) : (
-          <AssistantSegment key={item.segment.id} segment={item.segment} />
+          <AssistantSegment key={item.segment.id} segment={item.segment} streaming={isStreaming} />
         ),
       )}
       <box flexDirection="row" gap={1} paddingLeft={3}>

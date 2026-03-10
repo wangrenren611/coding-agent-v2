@@ -17,8 +17,12 @@ export interface WriteBufferRuntime {
 
 interface WriteFileProtocolPayload {
   ok: boolean;
-  code: 'OK' | 'WRITE_FILE_PARTIAL_BUFFERED' | 'WRITE_FILE_NEED_RESUME' | 'WRITE_FILE_FINALIZE_OK';
-  nextAction: 'resume' | 'finalize' | 'none';
+  code:
+    | 'OK'
+    | 'WRITE_FILE_PARTIAL_BUFFERED'
+    | 'WRITE_FILE_NEED_FINALIZE'
+    | 'WRITE_FILE_FINALIZE_OK';
+  nextAction: 'finalize' | 'none';
 }
 
 export function buildWriteFileSessionKey(params: {
@@ -157,9 +161,9 @@ export async function enrichWriteFileToolError(
   if (!runtime) {
     return JSON.stringify({
       ok: false,
-      code: 'WRITE_FILE_NEED_RESUME',
+      code: 'WRITE_FILE_NEED_FINALIZE',
       message: content,
-      nextAction: 'resume',
+      nextAction: 'finalize',
     });
   }
   try {
@@ -174,14 +178,14 @@ export async function enrichWriteFileToolError(
         bufferedBytes: meta.contentBytes,
         maxChunkBytes: 32768,
       },
-      nextAction: 'resume',
+      nextAction: 'finalize',
     });
   } catch {
     return JSON.stringify({
       ok: false,
-      code: 'WRITE_FILE_NEED_RESUME',
+      code: 'WRITE_FILE_NEED_FINALIZE',
       message: content,
-      nextAction: 'resume',
+      nextAction: 'finalize',
     });
   }
 }
@@ -198,9 +202,7 @@ export function isWriteFileProtocolOutput(content: string | undefined): content 
     return (
       typeof parsed.code === 'string' &&
       typeof parsed.ok === 'boolean' &&
-      (parsed.nextAction === 'resume' ||
-        parsed.nextAction === 'finalize' ||
-        parsed.nextAction === 'none')
+      (parsed.nextAction === 'finalize' || parsed.nextAction === 'none')
     );
   } catch {
     return false;

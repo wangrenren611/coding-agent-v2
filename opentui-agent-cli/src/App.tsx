@@ -4,6 +4,7 @@ import { resolveSlashCommand, type SlashCommandDefinition } from "./commands/sla
 import { ConversationPanel } from "./components/conversation-panel";
 import { ModelPickerDialog } from "./components/model-picker-dialog";
 import { Prompt } from "./components/prompt";
+import { ToolConfirmDialog } from "./components/tool-confirm-dialog";
 import { useAgentChat } from "./hooks/use-agent-chat";
 import { useModelPicker } from "./hooks/use-model-picker";
 import { requestExit } from "./runtime/exit";
@@ -16,11 +17,15 @@ export const App = () => {
     isThinking,
     modelLabel,
     contextUsagePercent,
+    pendingToolConfirm,
     setInputValue,
     submitInput,
     clearInput,
     resetConversation,
     setModelLabelDisplay,
+    setToolConfirmSelection,
+    submitToolConfirmSelection,
+    rejectPendingToolConfirm,
   } = useAgentChat();
   const modelPicker = useModelPicker({
     onModelChanged: setModelLabelDisplay,
@@ -60,6 +65,28 @@ export const App = () => {
       return;
     }
 
+    if (pendingToolConfirm) {
+      if (key.name === "left" || key.name === "h") {
+        setToolConfirmSelection("approve");
+        return;
+      }
+
+      if (key.name === "right" || key.name === "l") {
+        setToolConfirmSelection("deny");
+        return;
+      }
+
+      if (key.name === "return" || key.name === "enter") {
+        submitToolConfirmSelection();
+        return;
+      }
+
+      if (key.name === "escape") {
+        rejectPendingToolConfirm();
+      }
+      return;
+    }
+
     if (key.ctrl && key.name === "l") {
       resetConversation();
       return;
@@ -84,13 +111,19 @@ export const App = () => {
       <ConversationPanel turns={turns} isThinking={isThinking} />
       <Prompt
         isThinking={isThinking}
-        disabled={modelPicker.visible}
+        disabled={modelPicker.visible || Boolean(pendingToolConfirm)}
         modelLabel={modelLabel}
         contextUsagePercent={contextUsagePercent}
         value={inputValue}
         onValueChange={setInputValue}
         onSlashCommandSelect={handleSlashCommandSelect}
         onSubmit={submitWithCommands}
+      />
+      <ToolConfirmDialog
+        visible={Boolean(pendingToolConfirm)}
+        viewportWidth={dimensions.width}
+        viewportHeight={dimensions.height}
+        request={pendingToolConfirm}
       />
       <ModelPickerDialog
         visible={modelPicker.visible}

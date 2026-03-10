@@ -9,11 +9,13 @@ import {
   registerTerminalBackgroundRestore,
 } from "./runtime/exit";
 import { probeTerminalBackground, setTerminalWindowBackground } from "./runtime/terminal-theme";
+import { applyMarkdownThemeMode } from "./ui/opencode-markdown";
 import { applyUiThemeMode, uiTheme } from "./ui/theme";
 
 bindExitGuards();
 const terminalBackground = await probeTerminalBackground();
-applyUiThemeMode(terminalBackground.mode);
+applyUiThemeMode('dark');
+applyMarkdownThemeMode('dark');
 
 if (terminalBackground.rawColor && terminalBackground.rawColor.toLowerCase() !== uiTheme.bg.toLowerCase()) {
   const originalBackground = terminalBackground.rawColor;

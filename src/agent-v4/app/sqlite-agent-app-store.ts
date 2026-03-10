@@ -3,15 +3,18 @@ import type {
   CliEventEnvelope,
   CompactionDroppedMessageRecord,
   ListConversationEventsOptions,
+  ListRunLogsOptions,
   ListRunsOptions,
   ListRunsResult,
   RunRecord,
+  RunLogRecord,
 } from './contracts';
 import type {
   ContextProjectionStorePort,
   EventStorePort,
   ExecutionStorePort,
   MessageProjectionStorePort,
+  RunLogStorePort,
 } from './ports';
 import { AgentAppSqliteClient } from './sqlite-client';
 
@@ -71,6 +74,21 @@ interface CompactionDroppedMessageRow {
   execution_id: string;
   step_index: number;
   removed_message_id: string;
+  created_at_ms: number;
+}
+
+interface RunLogRow {
+  id: number;
+  execution_id: string;
+  conversation_id: string;
+  step_index: number | null;
+  level: 'debug' | 'info' | 'warn' | 'error';
+  code: string | null;
+  source: string;
+  message: string;
+  error_json: string | null;
+  context_json: string | null;
+  data_json: string | null;
   created_at_ms: number;
 }
 
@@ -212,6 +230,29 @@ const APP_MIGRATIONS = [
       FROM messages;
     `,
   },
+  {
+    version: 3,
+    sql: `
+      CREATE TABLE IF NOT EXISTS run_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        execution_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        step_index INTEGER,
+        level TEXT NOT NULL CHECK(level IN ('debug', 'info', 'warn', 'error')),
+        code TEXT,
+        source TEXT NOT NULL,
+        message TEXT NOT NULL,
+        error_json TEXT,
+        context_json TEXT,
+        data_json TEXT,
+        created_at_ms INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_run_logs_execution_created
+        ON run_logs(execution_id, created_at_ms ASC, id ASC);
+      CREATE INDEX IF NOT EXISTS idx_run_logs_execution_level_created
+        ON run_logs(execution_id, level, created_at_ms ASC, id ASC);
+    `,
+  },
 ];
 
 export class SqliteAgentAppStore
@@ -219,7 +260,8 @@ export class SqliteAgentAppStore
     ExecutionStorePort,
     EventStorePort,
     MessageProjectionStorePort,
-    ContextProjectionStorePort
+    ContextProjectionStorePort,
+    RunLogStorePort
 {
   private readonly client: AgentAppSqliteClient;
   private prepared = false;
@@ -753,6 +795,80 @@ export class SqliteAgentAppStore
     }));
   }
 
+  async appendRunLog(record: RunLogRecord): Promise<void> {
+    await this.prepare();
+    await this.withMutationLock(async () => {
+      await this.client.run(
+        `
+          INSERT INTO run_logs (
+            execution_id,
+            conversation_id,
+            step_index,
+            level,
+            code,
+            source,
+            message,
+            error_json,
+            context_json,
+            data_json,
+            created_at_ms
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          record.executionId,
+          record.conversationId,
+          record.stepIndex ?? null,
+          record.level,
+          record.code ?? null,
+          record.source,
+          record.message,
+          record.error ? JSON.stringify(record.error) : null,
+          record.context ? JSON.stringify(record.context) : null,
+          record.data !== undefined ? JSON.stringify(record.data) : null,
+          record.createdAt,
+        ]
+      );
+    });
+  }
+
+  async listRunLogs(executionId: string, opts: ListRunLogsOptions = {}): Promise<RunLogRecord[]> {
+    await this.prepare();
+    const filters = ['execution_id = ?'];
+    const params: unknown[] = [executionId];
+
+    if (opts.level) {
+      filters.push('level = ?');
+      params.push(opts.level);
+    }
+
+    params.push(clampLimit(opts.limit));
+
+    const rows = await this.client.all<RunLogRow>(
+      `
+        SELECT
+          id,
+          execution_id,
+          conversation_id,
+          step_index,
+          level,
+          code,
+          source,
+          message,
+          error_json,
+          context_json,
+          data_json,
+          created_at_ms
+        FROM run_logs
+        WHERE ${filters.join(' AND ')}
+        ORDER BY created_at_ms ASC, id ASC
+        LIMIT ?
+      `,
+      params
+    );
+
+    return rows.map(mapRunLogRow);
+  }
+
   private async withMutationLock<T>(operation: () => Promise<T>): Promise<T> {
     const previous = this.mutationChain;
     let release: () => void = () => undefined;
@@ -937,6 +1053,27 @@ function mapEventRow(row: EventRow): CliEventEnvelope {
     seq: row.seq,
     eventType: row.event_type,
     data: parseJsonOrDefault(row.payload_json, null),
+    createdAt: row.created_at_ms,
+  };
+}
+
+function mapRunLogRow(row: RunLogRow): RunLogRecord {
+  return {
+    id: row.id,
+    executionId: row.execution_id,
+    conversationId: row.conversation_id,
+    stepIndex: row.step_index ?? undefined,
+    level: row.level,
+    code: row.code ?? undefined,
+    source: row.source,
+    message: row.message,
+    error: row.error_json
+      ? (parseJsonOrDefault(row.error_json, undefined) as RunLogRecord['error'])
+      : undefined,
+    context: row.context_json
+      ? (parseJsonOrDefault(row.context_json, undefined) as RunLogRecord['context'])
+      : undefined,
+    data: row.data_json ? parseJsonOrDefault(row.data_json, undefined) : undefined,
     createdAt: row.created_at_ms,
   };
 }

@@ -6,9 +6,11 @@ import type {
   CliEventEnvelope,
   CompactionDroppedMessageRecord,
   ListConversationEventsOptions,
+  ListRunLogsOptions,
   ListRunsOptions,
   ListRunsResult,
   RunRecord,
+  RunLogRecord,
 } from './contracts';
 
 export interface ExecutionStorePort {
@@ -46,6 +48,11 @@ export interface ContextProjectionStorePort extends MessageProjectionStorePort {
     executionId: string,
     opts?: { stepIndex?: number; limit?: number }
   ): Promise<CompactionDroppedMessageRecord[]>;
+}
+
+export interface RunLogStorePort {
+  appendRunLog(record: RunLogRecord): Promise<void>;
+  listRunLogs(executionId: string, opts?: ListRunLogsOptions): Promise<RunLogRecord[]>;
 }
 
 export interface ContextProviderPort {

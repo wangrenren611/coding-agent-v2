@@ -294,6 +294,11 @@ export interface ToolResult {
   metadata?: Record<string, unknown>;
 }
 
+export interface ToolConfirmDetails {
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export abstract class BaseTool<T extends ToolParameterSchema = ToolParameterSchema> {
   abstract name: string;
   abstract description: string;
@@ -301,6 +306,10 @@ export abstract class BaseTool<T extends ToolParameterSchema = ToolParameterSche
 
   shouldConfirm(_args: z.infer<T>): boolean {
     return false;
+  }
+
+  getConfirmDetails(_args: z.infer<T>): ToolConfirmDetails | null {
+    return null;
   }
 
   getConcurrencyMode(_args: z.infer<T>): ToolConcurrencyMode {

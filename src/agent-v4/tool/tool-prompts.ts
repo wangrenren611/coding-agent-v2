@@ -59,8 +59,8 @@ export const WRITE_FILE_TOOL_DESCRIPTION = `Writes file content to the local fil
 
 Behavior:
 - direct mode writes content immediately.
-- resume mode appends a chunk into an existing buffered session.
-- finalize mode commits buffered content to the target file.
+- direct mode buffers the full payload when it exceeds the chunk limit and returns a bufferId.
+- finalize mode commits buffered content to the target file and can resolve the target path from bufferId.
 
 Usage notes:
 - Prefer editing existing files with file_edit when possible.

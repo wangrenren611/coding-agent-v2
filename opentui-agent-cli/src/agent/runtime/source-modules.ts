@@ -24,6 +24,8 @@ export type ToolConfirmEventLike = {
   toolCallId: string;
   toolName: string;
   arguments: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
   resolve: (decision: ToolDecisionLike) => void;
 };
 

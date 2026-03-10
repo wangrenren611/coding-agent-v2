@@ -12,7 +12,7 @@ import {
   ToolPolicyDecision,
   ToolExecutionContext,
 } from './types';
-import { BaseTool } from './base-tool';
+import { BaseTool, ToolConfirmDetails } from './base-tool';
 import { ToolResult } from './base-tool';
 import {
   EmptyToolNameError,
@@ -153,13 +153,16 @@ export class DefaultToolManager implements ToolManager {
       return this.buildPolicyDeniedResult(toolName, toolCall.id, builtInDecision, 'builtin');
     }
 
-    const needsConfirm = handler.shouldConfirm(validationResult.data);
+    const confirmDetails = handler.getConfirmDetails(validationResult.data);
+    const needsConfirm = handler.shouldConfirm(validationResult.data) || Boolean(confirmDetails);
+    let executionContext = options;
 
     if (needsConfirm && options?.onConfirm) {
       const confirmInfo: ToolConfirmInfo = {
         toolCallId: toolCall.id,
         toolName,
         arguments: toolCall.function.arguments,
+        ...this.normalizeConfirmDetails(confirmDetails),
       };
 
       const decision = await options.onConfirm(confirmInfo);
@@ -172,10 +175,15 @@ export class DefaultToolManager implements ToolManager {
           output: err.message,
         };
       }
+
+      executionContext = {
+        ...options,
+        confirmationApproved: true,
+      };
     }
 
     try {
-      const result = await handler.execute(validationResult.data, options);
+      const result = await handler.execute(validationResult.data, executionContext);
       return result;
     } catch (error) {
       const err = new ToolExecutionError((error as Error).message);
@@ -247,6 +255,16 @@ export class DefaultToolManager implements ToolManager {
       success: false,
       error: err,
       output: err.message,
+    };
+  }
+
+  private normalizeConfirmDetails(details: ToolConfirmDetails | null): Partial<ToolConfirmInfo> {
+    if (!details) {
+      return {};
+    }
+    return {
+      ...(details.reason ? { reason: details.reason } : {}),
+      ...(details.metadata ? { metadata: details.metadata } : {}),
     };
   }
 

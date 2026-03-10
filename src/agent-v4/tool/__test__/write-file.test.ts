@@ -77,7 +77,7 @@ describe('WriteFileTool', () => {
     expect(await fs.readFile(path.join(allowedDir, 'through-link.txt'), 'utf8')).toBe('hello-link');
   });
 
-  it('buffers large direct write and requests resume', async () => {
+  it('buffers large direct write and requests finalize', async () => {
     const allowedDir = await createTempDir();
     const bufferDir = await createTempDir();
     const tool = new WriteFileTool({
@@ -109,13 +109,13 @@ describe('WriteFileTool', () => {
     }>(result.output);
     expect(payload.ok).toBe(false);
     expect(payload.code).toBe('WRITE_FILE_PARTIAL_BUFFERED');
-    expect(payload.nextAction).toBe('resume');
+    expect(payload.nextAction).toBe('finalize');
     expect(payload.buffer.bufferId).toBe('write_call_1');
-    expect(payload.buffer.bufferedBytes).toBeGreaterThan(0);
+    expect(payload.buffer.bufferedBytes).toBe(Buffer.byteLength('0123456789012345', 'utf8'));
     expect(payload.buffer.maxChunkBytes).toBe(8);
   });
 
-  it('supports resume and finalize protocol with checksum', async () => {
+  it('finalizes a fully buffered direct write without any intermediate chunk step', async () => {
     const allowedDir = await createTempDir();
     const bufferDir = await createTempDir();
     const tool = new WriteFileTool({
@@ -123,8 +123,8 @@ describe('WriteFileTool', () => {
       bufferBaseDir: bufferDir,
       maxChunkBytes: 8,
     });
-    const target = path.join(allowedDir, 'resume.txt');
-    const fullContent = 'abcdefghi12345678';
+    const target = path.join(allowedDir, 'finalize.txt');
+    const fullContent = 'abcdefghi';
 
     const direct = await tool.execute(
       {
@@ -139,26 +139,6 @@ describe('WriteFileTool', () => {
       }
     );
     const directPayload = parseOutput<{ buffer: { bufferId: string } }>(direct.output);
-
-    const resume1 = await tool.execute({
-      path: target,
-      content: 'i1234567',
-      mode: 'resume',
-      bufferId: directPayload.buffer.bufferId,
-    });
-    const resume1Payload = parseOutput<{ code: string; nextAction: string }>(resume1.output);
-    expect(resume1Payload.code).toBe('WRITE_FILE_NEED_RESUME');
-    expect(resume1Payload.nextAction).toBe('resume');
-
-    const resume2 = await tool.execute({
-      path: target,
-      content: '8',
-      mode: 'resume',
-      bufferId: directPayload.buffer.bufferId,
-    });
-    const resume2Payload = parseOutput<{ code: string; nextAction: string }>(resume2.output);
-    expect(resume2Payload.code).toBe('WRITE_FILE_NEED_RESUME');
-    expect(resume2Payload.nextAction).toBe('resume');
 
     const finalize = await tool.execute({
       path: target,
@@ -176,7 +156,7 @@ describe('WriteFileTool', () => {
     expect(await fs.readFile(target, 'utf8')).toBe(fullContent);
   });
 
-  it('finalizes buffered content without checksum field', async () => {
+  it('finalizes buffered content to the original full direct payload', async () => {
     const allowedDir = await createTempDir();
     const bufferDir = await createTempDir();
     const tool = new WriteFileTool({
@@ -214,10 +194,10 @@ describe('WriteFileTool', () => {
       code: 'WRITE_FILE_FINALIZE_OK',
       nextAction: 'none',
     });
-    expect(await fs.readFile(target, 'utf8')).toBe(content.slice(0, 8));
+    expect(await fs.readFile(target, 'utf8')).toBe(content);
   });
 
-  it('returns NEED_RESUME with current buffer snapshot when resume chunk exceeds maxChunkBytes', async () => {
+  it('finalizes a buffered direct write by bufferId without requiring path and keeps full content', async () => {
     const allowedDir = await createTempDir();
     const bufferDir = await createTempDir();
     const tool = new WriteFileTool({
@@ -225,40 +205,62 @@ describe('WriteFileTool', () => {
       bufferBaseDir: bufferDir,
       maxChunkBytes: 8,
     });
-    const target = path.join(allowedDir, 'oversize-resume.txt');
+    const target = path.join(allowedDir, 'finalize-by-buffer-id.txt');
+    const content = 'abcdefghijklmno';
 
     const direct = await tool.execute(
       {
         path: target,
-        content: 'abcdefghi',
+        content,
         mode: 'direct',
       },
       {
-        toolCallId: 'write_call_oversize_resume',
+        toolCallId: 'write_call_finalize_by_id',
         loopIndex: 1,
         agent: {},
       }
     );
-    const directPayload = parseOutput<{ buffer: { bufferId: string } }>(direct.output);
+    const directPayload = parseOutput<{ ok: boolean; buffer: { bufferId: string } }>(direct.output);
+    expect(directPayload.ok).toBe(false);
 
-    const resume = await tool.execute({
-      path: target,
-      content: '1234567890',
-      mode: 'resume',
+    const finalize = await tool.execute({
+      mode: 'finalize',
       bufferId: directPayload.buffer.bufferId,
+    } as never);
+    const finalizePayload = parseOutput<{ ok: boolean; code: string; nextAction: string }>(
+      finalize.output
+    );
+    expect(finalizePayload).toMatchObject({
+      ok: true,
+      code: 'WRITE_FILE_FINALIZE_OK',
+      nextAction: 'none',
+    });
+    expect(await fs.readFile(target, 'utf8')).toBe(content);
+  });
+
+  it('returns NEED_FINALIZE when finalize is missing bufferId', async () => {
+    const allowedDir = await createTempDir();
+    const bufferDir = await createTempDir();
+    const tool = new WriteFileTool({
+      allowedDirectories: [allowedDir],
+      bufferBaseDir: bufferDir,
+      maxChunkBytes: 8,
     });
     const payload = parseOutput<{
       ok: boolean;
       code: string;
       nextAction: string;
-      buffer: { bufferedBytes: number; maxChunkBytes: number };
-    }>(resume.output);
+    }>(
+      (
+        await tool.execute({
+          mode: 'finalize',
+        } as never)
+      ).output
+    );
 
     expect(payload.ok).toBe(false);
-    expect(payload.code).toBe('WRITE_FILE_NEED_RESUME');
-    expect(payload.nextAction).toBe('resume');
-    expect(payload.buffer.bufferedBytes).toBe(8);
-    expect(payload.buffer.maxChunkBytes).toBe(8);
+    expect(payload.code).toBe('WRITE_FILE_NEED_FINALIZE');
+    expect(payload.nextAction).toBe('finalize');
   });
 
   it('prevents finalize from committing buffered content to a different target path', async () => {
@@ -296,9 +298,9 @@ describe('WriteFileTool', () => {
     );
 
     expect(payload.ok).toBe(false);
-    expect(payload.code).toBe('WRITE_FILE_NEED_RESUME');
+    expect(payload.code).toBe('WRITE_FILE_NEED_FINALIZE');
     expect(payload.message).toContain('Target path does not match');
-    expect(payload.nextAction).toBe('resume');
+    expect(payload.nextAction).toBe('finalize');
     await expect(fs.readFile(targetB, 'utf8')).rejects.toBeDefined();
   });
 

@@ -1,9 +1,15 @@
 import { z } from 'zod';
-import { BaseTool, ToolResult } from './base-tool';
+import { BaseTool, ToolConfirmDetails, ToolResult } from './base-tool';
 import { ToolExecutionError } from './error';
 import { collectFilesByGlob, DEFAULT_IGNORE_GLOBS, resolveSearchRoot } from './search/common';
-import { normalizeAllowedDirectories } from './path-security';
+import {
+  assessPathAccess,
+  ensurePathWithinAllowed,
+  normalizeAllowedDirectories,
+  resolveRequestedPath,
+} from './path-security';
 import { GLOB_TOOL_DESCRIPTION } from './tool-prompts';
+import type { ToolExecutionContext } from './types';
 
 const schema = z
   .object({
@@ -62,12 +68,45 @@ export class GlobTool extends BaseTool<typeof schema> {
     return `glob:${args.path || process.cwd()}`;
   }
 
-  async execute(args: z.infer<typeof schema>): Promise<ToolResult> {
-    try {
-      const { rootPath } = await resolveSearchRoot({
-        requestedPath: args.path,
+  override getConfirmDetails(args: z.infer<typeof schema>): ToolConfirmDetails | null {
+    const requestedPath = args.path?.trim().length ? args.path : process.cwd();
+    const absolute = resolveRequestedPath(requestedPath);
+    const assessment = assessPathAccess(
+      absolute,
+      this.allowedDirectories,
+      'SEARCH_PATH_NOT_ALLOWED'
+    );
+    if (assessment.allowed) {
+      return null;
+    }
+    return {
+      reason: assessment.message,
+      metadata: {
+        requestedPath: absolute,
         allowedDirectories: this.allowedDirectories,
-      });
+        errorCode: 'SEARCH_PATH_NOT_ALLOWED',
+      },
+    };
+  }
+
+  async execute(args: z.infer<typeof schema>, context?: ToolExecutionContext): Promise<ToolResult> {
+    try {
+      let rootPath: string;
+      if (context?.confirmationApproved === true) {
+        const requestedPath = args.path?.trim().length ? args.path : process.cwd();
+        const absolute = resolveRequestedPath(requestedPath);
+        rootPath = ensurePathWithinAllowed(
+          absolute,
+          this.allowedDirectories,
+          'SEARCH_PATH_NOT_ALLOWED',
+          true
+        );
+      } else {
+        ({ rootPath } = await resolveSearchRoot({
+          requestedPath: args.path,
+          allowedDirectories: this.allowedDirectories,
+        }));
+      }
 
       const ignorePatterns = [...DEFAULT_IGNORE_GLOBS, ...(args.ignore_patterns || [])];
       const { files, truncated } = await collectFilesByGlob({

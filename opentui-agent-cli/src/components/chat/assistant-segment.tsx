@@ -4,9 +4,16 @@ import { uiTheme } from "../../ui/theme";
 
 type AssistantSegmentProps = {
   segment: ReplySegment;
+  streaming: boolean;
 };
 
-const ThinkingSegment = ({ content }: { content: string }) => {
+const markdownTableOptions = {
+  widthMode: "full" as const,
+  wrapMode: "word" as const,
+  selectable: false,
+};
+
+const ThinkingSegment = ({ content, streaming }: { content: string; streaming: boolean }) => {
   const normalized = content.trim();
   if (!normalized) {
     return null;
@@ -16,14 +23,12 @@ const ThinkingSegment = ({ content }: { content: string }) => {
     <box flexDirection="row" marginTop={1}>
       <box width={1} backgroundColor={uiTheme.divider} />
       <box flexGrow={1} paddingLeft={2}>
-        <code
-          filetype="markdown"
-          drawUnstyledText={false}
-          streaming={true}
+        <markdown
+          streaming={streaming}
           syntaxStyle={opencodeSubtleMarkdownSyntax}
           content={`_Thinking:_ ${normalized}`}
-          conceal={false}
-          fg={uiTheme.muted}
+          conceal={true}
+          tableOptions={markdownTableOptions}
         />
       </box>
     </box>
@@ -50,7 +55,7 @@ const NoteSegment = ({ content }: { content: string }) => {
   );
 };
 
-const TextSegment = ({ content }: { content: string }) => {
+const TextSegment = ({ content, streaming }: { content: string; streaming: boolean }) => {
   const normalized = content.trim();
   if (!normalized) {
     return null;
@@ -58,22 +63,20 @@ const TextSegment = ({ content }: { content: string }) => {
 
   return (
     <box paddingLeft={3} marginTop={1}>
-      <code
-        filetype="markdown"
-        drawUnstyledText={false}
-        streaming={true}
+      <markdown
+        streaming={streaming}
         syntaxStyle={opencodeMarkdownSyntax}
         content={normalized}
-        conceal={false}
-        fg={uiTheme.text}
+        conceal={true}
+        tableOptions={markdownTableOptions}
       />
     </box>
   );
 };
 
-export const AssistantSegment = ({ segment }: AssistantSegmentProps) => {
+export const AssistantSegment = ({ segment, streaming }: AssistantSegmentProps) => {
   if (segment.type === "thinking") {
-    return <ThinkingSegment content={segment.content} />;
+    return <ThinkingSegment content={segment.content} streaming={streaming} />;
   }
 
   if (segment.type === "code") {
@@ -84,5 +87,5 @@ export const AssistantSegment = ({ segment }: AssistantSegmentProps) => {
     return <NoteSegment content={segment.content} />;
   }
 
-  return <TextSegment content={segment.content} />;
+  return <TextSegment content={segment.content} streaming={streaming} />;
 };

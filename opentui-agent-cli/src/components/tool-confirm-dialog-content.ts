@@ -1,0 +1,94 @@
+import type { AgentToolConfirmEvent } from "../agent/runtime/types";
+
+export type ToolConfirmDialogContent = {
+  summary: string;
+  detail?: string;
+  reason?: string;
+  requestedPath?: string;
+  allowedDirectories: string[];
+  argumentsBlock?: string;
+};
+
+const asRecord = (value: unknown): Record<string, unknown> => {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+};
+
+const readString = (value: unknown): string | undefined => {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+};
+
+const readStringArray = (value: unknown): string[] => {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+};
+
+const stringifyPretty = (value: unknown): string | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const formatPathTarget = (value: unknown, fallback = "."): string => {
+  return readString(value) ?? fallback;
+};
+
+const buildSummary = (event: AgentToolConfirmEvent): { summary: string; detail?: string } => {
+  const args = asRecord(event.args);
+
+  switch (event.toolName) {
+    case "bash": {
+      const command = readString(args.command) ?? "(empty command)";
+      const description = readString(args.description);
+      return {
+        summary: description ? `Run bash: ${description}` : "Run bash command",
+        detail: `$ ${command}`,
+      };
+    }
+    case "file_read":
+      return { summary: `Read ${formatPathTarget(args.path)}` };
+    case "file_edit":
+      return { summary: `Edit ${formatPathTarget(args.path)}` };
+    case "write_file":
+      return { summary: `Write ${formatPathTarget(args.path)}` };
+    case "glob":
+      return {
+        summary: `Glob ${readString(args.pattern) ?? "*"}`,
+        detail: `Path: ${formatPathTarget(args.path)}`,
+      };
+    case "grep":
+      return {
+        summary: `Grep ${readString(args.pattern) ?? ""}`,
+        detail: `Path: ${formatPathTarget(args.path)}`,
+      };
+    case "task":
+      return {
+        summary: `Run task ${(readString(args.subagent_type) ?? "agent").trim()}`,
+        detail: readString(args.description),
+      };
+    default:
+      return {
+        summary: `Call ${event.toolName}`,
+        detail: stringifyPretty(args),
+      };
+  }
+};
+
+export const buildToolConfirmDialogContent = (
+  event: AgentToolConfirmEvent,
+): ToolConfirmDialogContent => {
+  const metadata = asRecord(event.metadata);
+  const { summary, detail } = buildSummary(event);
+
+  return {
+    summary,
+    detail,
+    reason: readString(event.reason),
+    requestedPath: readString(metadata.requestedPath),
+    allowedDirectories: readStringArray(metadata.allowedDirectories),
+    argumentsBlock: stringifyPretty(event.args),
+  };
+};

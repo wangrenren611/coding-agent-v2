@@ -13,6 +13,7 @@ import type {
   AgentUsageEvent,
 } from "./types";
 import type { AgentModelOption, AgentModelSwitchResult } from "./model-types";
+import { resolveToolConfirmDecision } from "./tool-confirmation";
 import {
   type AgentAppUsageLike,
   type AgentAppRunResultLike,
@@ -48,20 +49,6 @@ const DEFAULT_MAX_STEPS = 200;
 const DEFAULT_MAX_RETRY_COUNT = 2;
 const DEFAULT_DB_PATH = ".agent-v4/agent.db";
 
-const toBoolean = (raw?: string): boolean | undefined => {
-  if (!raw) {
-    return undefined;
-  }
-  const value = raw.trim().toLowerCase();
-  if (["1", "true", "yes", "y", "on"].includes(value)) {
-    return true;
-  }
-  if (["0", "false", "no", "n", "off"].includes(value)) {
-    return false;
-  }
-  return undefined;
-};
-
 const parsePositiveInt = (raw: string | undefined, fallback: number): number => {
   if (!raw || raw.trim().length === 0) {
     return fallback;
@@ -96,16 +83,6 @@ const requireModelApiKey = (modules: SourceModules, modelId: string) => {
   }
   return modelConfig;
 };
-
-
-const resolveToolDecision = () => {
-  const parsed = toBoolean(process.env.AGENT_AUTO_CONFIRM_TOOLS);
-  if (parsed === false) {
-    return "deny";
-  }
-  return "approve";
-};
-
 const resolveConversationId = () => {
   const fromEnv = process.env.AGENT_CONVERSATION_ID?.trim() || process.env.AGENT_SESSION_ID?.trim();
   if (fromEnv) {
@@ -491,15 +468,22 @@ export const runAgentPrompt = async (prompt: string, handlers: AgentEventHandler
       toolName: event.toolName,
       args: rawArgs,
       rawArgs,
+      reason: readString(event.reason),
+      metadata: event.metadata,
     };
     safeInvoke(() => handlers.onToolConfirm?.(toolConfirmEvent));
 
-    const decision = resolveToolDecision();
-    event.resolve(
-      decision === "approve"
-        ? { approved: true }
-        : { approved: false, message: "Tool call denied by AGENT_AUTO_CONFIRM_TOOLS." }
-    );
+    void resolveToolConfirmDecision(toolConfirmEvent, handlers)
+      .then((decision) => {
+        event.resolve(decision);
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        event.resolve({
+          approved: false,
+          message: message || "Tool confirmation failed.",
+        });
+      });
   };
 
   runtime.agent.on("tool_confirm", onToolConfirm);

@@ -19,6 +19,12 @@ export type AgentToolConfirmEvent = {
   args: Record<string, unknown>;
   rawArgs: Record<string, unknown>;
   reason?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type AgentToolConfirmDecision = {
+  approved: boolean;
+  message?: string;
 };
 
 export type AgentStepEvent = {
@@ -63,6 +69,9 @@ export type AgentEventHandlers = {
   onTextComplete?: (text: string) => void;
   onToolStream?: (event: AgentToolStreamEvent) => void;
   onToolConfirm?: (event: AgentToolConfirmEvent) => void;
+  onToolConfirmRequest?: (
+    event: AgentToolConfirmEvent,
+  ) => AgentToolConfirmDecision | Promise<AgentToolConfirmDecision>;
   onToolUse?: (event: AgentToolUseEvent) => void;
   onToolResult?: (event: AgentToolResultEvent) => void;
   onStep?: (event: AgentStepEvent) => void;

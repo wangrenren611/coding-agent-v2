@@ -2,7 +2,11 @@
 
 import { resolveSlashCommand } from "../commands/slash-commands";
 import { getAgentModelLabel, runAgentPrompt } from "../agent/runtime/runtime";
-import type { AgentUsageEvent } from "../agent/runtime/types";
+import type {
+  AgentToolConfirmDecision,
+  AgentToolConfirmEvent,
+  AgentUsageEvent,
+} from "../agent/runtime/types";
 import { requestExit } from "../runtime/exit";
 import type { ChatTurn, ReplySegmentType } from "../types/chat";
 import { buildAgentEventHandlers } from "./agent-event-handlers";
@@ -22,11 +26,15 @@ export type UseAgentChatResult = {
   isThinking: boolean;
   modelLabel: string;
   contextUsagePercent: number | null;
+  pendingToolConfirm: (AgentToolConfirmEvent & { selectedAction: "approve" | "deny" }) | null;
   setInputValue: (value: string) => void;
   submitInput: () => void;
   clearInput: () => void;
   resetConversation: () => void;
   setModelLabelDisplay: (label: string) => void;
+  setToolConfirmSelection: (selection: "approve" | "deny") => void;
+  submitToolConfirmSelection: () => void;
+  rejectPendingToolConfirm: () => void;
 };
 
 const INITIAL_MODEL_LABEL = process.env.AGENT_MODEL?.trim() || "glm-5";
@@ -86,9 +94,20 @@ export const useAgentChat = (): UseAgentChatResult => {
   const [isThinking, setIsThinking] = useState(false);
   const [modelLabel, setModelLabel] = useState(INITIAL_MODEL_LABEL);
   const [contextUsagePercent, setContextUsagePercent] = useState<number | null>(null);
+  const [pendingToolConfirm, setPendingToolConfirm] = useState<
+    (AgentToolConfirmEvent & { selectedAction: "approve" | "deny" }) | null
+  >(null);
 
   const turnIdRef = useRef(1);
   const requestIdRef = useRef(0);
+  const pendingToolConfirmResolverRef = useRef<((decision: AgentToolConfirmDecision) => void) | null>(null);
+
+  const resolvePendingToolConfirm = useCallback((decision: AgentToolConfirmDecision) => {
+    const resolver = pendingToolConfirmResolverRef.current;
+    pendingToolConfirmResolverRef.current = null;
+    setPendingToolConfirm(null);
+    resolver?.(decision);
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -105,12 +124,27 @@ export const useAgentChat = (): UseAgentChatResult => {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      const resolver = pendingToolConfirmResolverRef.current;
+      pendingToolConfirmResolverRef.current = null;
+      resolver?.({
+        approved: false,
+        message: "Tool confirmation cancelled because the UI was closed.",
+      });
+    };
+  }, []);
+
   const resetConversation = useCallback(() => {
+    resolvePendingToolConfirm({
+      approved: false,
+      message: "Tool confirmation cancelled because the conversation was reset.",
+    });
     requestIdRef.current += 1;
     setIsThinking(false);
     setTurns([]);
     setContextUsagePercent(null);
-  }, []);
+  }, [resolvePendingToolConfirm]);
 
   const appendSegment = useCallback(
     (turnId: number, segmentId: string, type: ReplySegmentType, chunk: string, data?: unknown) => {
@@ -243,6 +277,30 @@ export const useAgentChat = (): UseAgentChatResult => {
     });
     const handlers = {
       ...baseHandlers,
+      onToolConfirmRequest: (event: AgentToolConfirmEvent) => {
+        if (!isCurrentRequest()) {
+          return Promise.resolve({
+            approved: false,
+            message: "Tool confirmation denied because the request is no longer active.",
+          });
+        }
+
+        if (pendingToolConfirmResolverRef.current) {
+          pendingToolConfirmResolverRef.current({
+            approved: false,
+            message: "Superseded by a newer tool confirmation request.",
+          });
+          pendingToolConfirmResolverRef.current = null;
+        }
+
+        return new Promise<AgentToolConfirmDecision>((resolve) => {
+          pendingToolConfirmResolverRef.current = resolve;
+          setPendingToolConfirm({
+            ...event,
+            selectedAction: "approve",
+          });
+        });
+      },
       onUsage: (event: AgentUsageEvent) => {
         if (!isCurrentRequest()) {
           return;
@@ -344,16 +402,44 @@ export const useAgentChat = (): UseAgentChatResult => {
     setModelLabel(label);
   }, []);
 
+  const setToolConfirmSelection = useCallback((selection: "approve" | "deny") => {
+    setPendingToolConfirm((current) => (current ? { ...current, selectedAction: selection } : current));
+  }, []);
+
+  const rejectPendingToolConfirm = useCallback(() => {
+    resolvePendingToolConfirm({
+      approved: false,
+      message: "Tool call denied by user.",
+    });
+  }, [resolvePendingToolConfirm]);
+
+  const submitToolConfirmSelection = useCallback(() => {
+    if (!pendingToolConfirm) {
+      return;
+    }
+
+    if (pendingToolConfirm.selectedAction === "deny") {
+      rejectPendingToolConfirm();
+      return;
+    }
+
+    resolvePendingToolConfirm({ approved: true });
+  }, [pendingToolConfirm, rejectPendingToolConfirm, resolvePendingToolConfirm]);
+
   return {
     turns,
     inputValue,
     isThinking,
     modelLabel,
     contextUsagePercent,
+    pendingToolConfirm,
     setInputValue,
     submitInput,
     clearInput,
     resetConversation,
     setModelLabelDisplay,
+    setToolConfirmSelection,
+    submitToolConfirmSelection,
+    rejectPendingToolConfirm,
   };
 };

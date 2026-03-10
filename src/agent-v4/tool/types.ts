@@ -32,6 +32,8 @@ export interface ToolConfirmInfo {
   toolCallId: string;
   toolName: string;
   arguments: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ToolDecision {
@@ -105,6 +107,8 @@ export interface ToolExecutionContext {
   onChunk?: (event: ToolStreamEventInput) => void | Promise<void>;
   onConfirm?: (info: ToolConfirmInfo) => Promise<ToolDecision>;
   onPolicyCheck?: (info: ToolPolicyCheckInfo) => ToolPolicyDecision | Promise<ToolPolicyDecision>;
+  /** 当前调用是否已通过用户确认 */
+  confirmationApproved?: boolean;
   /** 工具执行中断信号（超时/取消时触发） */
   toolAbortSignal?: AbortSignal;
 }

@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { BaseTool, type ToolResult } from './base-tool';
+import { BaseTool, type ToolConfirmDetails, type ToolResult } from './base-tool';
 import type { ToolExecutionContext } from './types';
 import {
   appendContent,
@@ -13,14 +13,19 @@ import {
 } from '../agent/write-buffer';
 import { ToolExecutionError } from './error';
 import { WRITE_FILE_TOOL_DESCRIPTION } from './tool-prompts';
+import { assessPathAccess } from './path-security';
 
-const writeModeSchema = z.enum(['direct', 'resume', 'finalize']);
+const writeModeSchema = z.enum(['direct', 'finalize']);
 
 const schema = z.object({
-  path: z.string().min(1).describe('Required. Absolute or relative target path'),
+  path: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Target path. Required for direct; optional for finalize'),
   content: z.string().optional().describe('Plain text content chunk for this call'),
-  mode: writeModeSchema.default('direct').describe('Write mode: direct, resume, or finalize'),
-  bufferId: z.string().optional().describe('Buffer session id used for resume/finalize'),
+  mode: writeModeSchema.default('direct').describe('Write mode: direct or finalize'),
+  bufferId: z.string().optional().describe('Buffer session id used for finalize'),
 });
 
 type WriteFileArgs = z.infer<typeof schema>;
@@ -41,10 +46,14 @@ interface WriteBufferInfo {
 
 interface WriteFileResponse {
   ok: boolean;
-  code: 'OK' | 'WRITE_FILE_PARTIAL_BUFFERED' | 'WRITE_FILE_NEED_RESUME' | 'WRITE_FILE_FINALIZE_OK';
+  code:
+    | 'OK'
+    | 'WRITE_FILE_PARTIAL_BUFFERED'
+    | 'WRITE_FILE_NEED_FINALIZE'
+    | 'WRITE_FILE_FINALIZE_OK';
   message: string;
   buffer?: WriteBufferInfo;
-  nextAction: 'resume' | 'finalize' | 'none';
+  nextAction: 'finalize' | 'none';
 }
 
 interface SessionPointer {
@@ -73,19 +82,37 @@ export class WriteFileTool extends BaseTool<typeof schema> {
     fs.mkdirSync(this.bufferBaseDir, { recursive: true });
   }
 
+  override getConfirmDetails(args: WriteFileArgs): ToolConfirmDetails | null {
+    if (!args.path) {
+      return null;
+    }
+    const resolved = path.isAbsolute(args.path)
+      ? path.resolve(args.path)
+      : path.resolve(process.cwd(), args.path);
+    const assessment = assessPathAccess(resolved, this.allowedDirectories, 'PATH_NOT_ALLOWED');
+    if (assessment.allowed) {
+      return null;
+    }
+    return {
+      reason: assessment.message,
+      metadata: {
+        requestedPath: resolved,
+        allowedDirectories: this.allowedDirectories,
+        errorCode: 'PATH_NOT_ALLOWED',
+      },
+    };
+  }
+
   async execute(args: WriteFileArgs, context?: ToolExecutionContext): Promise<ToolResult> {
     try {
       const mode: WriteMode = args.mode || 'direct';
-      const targetPath = this.validateAndResolvePath(args.path);
       const content = args.content || '';
 
       if (mode === 'direct') {
+        const targetPath = this.validateAndResolveRequiredPath(args.path, mode, context);
         return this.handleDirect(targetPath, content, context);
       }
-      if (mode === 'resume') {
-        return this.handleResume(targetPath, content, args.bufferId, context);
-      }
-      return this.handleFinalize(targetPath, args.bufferId);
+      return this.handleFinalize(args.path, args.bufferId, context);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return {
@@ -118,100 +145,34 @@ export class WriteFileTool extends BaseTool<typeof schema> {
       undefined,
       targetPath
     );
-    const firstChunk = this.truncateUtf8ByBytes(content, this.maxChunkBytes);
-    await appendContent(session, firstChunk);
+    await appendContent(session, content);
     const latest = await loadWriteBufferSession(session.metaPath);
 
     return this.successResponse({
       ok: false,
       code: 'WRITE_FILE_PARTIAL_BUFFERED',
-      message: `Content exceeds maxChunkBytes=${this.maxChunkBytes}; buffered first chunk`,
+      message: `Content exceeds maxChunkBytes=${this.maxChunkBytes}; buffered full content`,
       buffer: {
         bufferId: latest.bufferId,
         path: targetPath,
         bufferedBytes: latest.contentBytes,
         maxChunkBytes: this.maxChunkBytes,
       },
-      nextAction: 'resume',
+      nextAction: 'finalize',
     });
   }
 
-  private async handleResume(
-    targetPath: string,
-    content: string,
+  private async handleFinalize(
+    inputPath: string | undefined,
     bufferId: string | undefined,
     context?: ToolExecutionContext
   ): Promise<ToolResult> {
     if (!bufferId) {
       return this.successResponse({
         ok: false,
-        code: 'WRITE_FILE_NEED_RESUME',
-        message: 'bufferId is required for resume mode',
-        nextAction: 'resume',
-      });
-    }
-
-    const contentBytes = Buffer.byteLength(content, 'utf8');
-    if (contentBytes > this.maxChunkBytes) {
-      let bufferedBytes = 0;
-      let bufferedPath = targetPath;
-      const pointer = await this.loadPointer(bufferId);
-      if (pointer) {
-        try {
-          const existing = await loadWriteBufferSession(pointer.metaPath);
-          bufferedBytes = existing.contentBytes;
-          bufferedPath = existing.targetPath || bufferedPath;
-        } catch {
-          // ignore and keep default buffer snapshot
-        }
-      }
-      return this.successResponse({
-        ok: false,
-        code: 'WRITE_FILE_NEED_RESUME',
-        message: `Chunk exceeds maxChunkBytes=${this.maxChunkBytes}`,
-        buffer: {
-          bufferId,
-          path: bufferedPath,
-          bufferedBytes,
-          maxChunkBytes: this.maxChunkBytes,
-        },
-        nextAction: 'resume',
-      });
-    }
-
-    const session = await this.createOrLoadSession(
-      targetPath,
-      bufferId || context?.toolCallId,
-      bufferId,
-      targetPath
-    );
-    await appendContent(session, content);
-    const latest = await loadWriteBufferSession(session.metaPath);
-
-    return this.successResponse({
-      ok: false,
-      code: 'WRITE_FILE_NEED_RESUME',
-      message: 'Chunk appended to buffer',
-      buffer: {
-        bufferId: latest.bufferId,
-        path: targetPath,
-        bufferedBytes: latest.contentBytes,
-        maxChunkBytes: this.maxChunkBytes,
-      },
-      nextAction: 'resume',
-    });
-  }
-
-  private async handleFinalize(
-    targetPath: string,
-    bufferId: string | undefined
-  ): Promise<ToolResult> {
-    if (!bufferId) {
-      return this.successResponse({
-        ok: false,
-        code: 'WRITE_FILE_NEED_RESUME',
+        code: 'WRITE_FILE_NEED_FINALIZE',
         message: 'bufferId is required for finalize mode',
-        nextAction: 'resume',
+        nextAction: 'finalize',
       });
     }
 
@@ -219,17 +180,18 @@ export class WriteFileTool extends BaseTool<typeof schema> {
     if (!pointer) {
       return this.successResponse({
         ok: false,
-        code: 'WRITE_FILE_NEED_RESUME',
+        code: 'WRITE_FILE_NEED_FINALIZE',
         message: `Buffer session not found for bufferId=${bufferId}`,
-        nextAction: 'resume',
+        nextAction: 'finalize',
       });
     }
 
     const session = await loadWriteBufferSession(pointer.metaPath);
+    const targetPath = this.resolveFinalizeTargetPath(inputPath, session.targetPath, context);
     if (session.targetPath && path.resolve(session.targetPath) !== path.resolve(targetPath)) {
       return this.successResponse({
         ok: false,
-        code: 'WRITE_FILE_NEED_RESUME',
+        code: 'WRITE_FILE_NEED_FINALIZE',
         message: 'Target path does not match existing buffer session',
         buffer: {
           bufferId: session.bufferId,
@@ -237,7 +199,7 @@ export class WriteFileTool extends BaseTool<typeof schema> {
           bufferedBytes: session.contentBytes,
           maxChunkBytes: this.maxChunkBytes,
         },
-        nextAction: 'resume',
+        nextAction: 'finalize',
       });
     }
     await finalizeWriteBufferSession({
@@ -288,23 +250,6 @@ export class WriteFileTool extends BaseTool<typeof schema> {
     return session;
   }
 
-  private truncateUtf8ByBytes(input: string, maxBytes: number): string {
-    if (maxBytes <= 0 || input.length === 0) {
-      return '';
-    }
-    let usedBytes = 0;
-    let endIndex = 0;
-    for (const char of input) {
-      const charBytes = Buffer.byteLength(char, 'utf8');
-      if (usedBytes + charBytes > maxBytes) {
-        break;
-      }
-      usedBytes += charBytes;
-      endIndex += char.length;
-    }
-    return input.slice(0, endIndex);
-  }
-
   private successResponse(payload: WriteFileResponse): ToolResult {
     return {
       success: payload.ok,
@@ -313,21 +258,40 @@ export class WriteFileTool extends BaseTool<typeof schema> {
     };
   }
 
-  private validateAndResolvePath(inputPath: string): string {
+  private validateAndResolveRequiredPath(
+    inputPath: string | undefined,
+    mode: 'direct',
+    context?: ToolExecutionContext
+  ): string {
+    if (!inputPath) {
+      throw new Error(`path is required for ${mode} mode`);
+    }
+    return this.validateAndResolvePath(inputPath, context);
+  }
+
+  private validateAndResolvePath(inputPath: string, context?: ToolExecutionContext): string {
     const resolved = path.isAbsolute(inputPath)
       ? path.resolve(inputPath)
       : path.resolve(process.cwd(), inputPath);
-    const normalizedResolved = this.normalizePathWithExistingAncestor(resolved);
-    const allowed = this.allowedDirectories.some((allowedDir) => {
-      return (
-        normalizedResolved === allowedDir ||
-        normalizedResolved.startsWith(`${allowedDir}${path.sep}`)
-      );
-    });
-    if (!allowed) {
+    const assessment = assessPathAccess(resolved, this.allowedDirectories, 'PATH_NOT_ALLOWED');
+    if (!assessment.allowed && context?.confirmationApproved !== true) {
       throw new Error(`Path is outside allowed directories: ${inputPath}`);
     }
-    return normalizedResolved;
+    return assessment.normalizedCandidate;
+  }
+
+  private resolveFinalizeTargetPath(
+    inputPath: string | undefined,
+    sessionTargetPath: string | undefined,
+    context?: ToolExecutionContext
+  ): string {
+    if (inputPath) {
+      return this.validateAndResolvePath(inputPath, context);
+    }
+    if (sessionTargetPath) {
+      return this.validateAndResolvePath(sessionTargetPath, context);
+    }
+    throw new Error('path is required for finalize mode when buffer session has no target path');
   }
 
   private normalizeAllowedDirectory(dir: string): string {
@@ -336,35 +300,6 @@ export class WriteFileTool extends BaseTool<typeof schema> {
       return fs.realpathSync(resolved);
     } catch {
       return resolved;
-    }
-  }
-
-  private normalizePathWithExistingAncestor(inputPath: string): string {
-    const absolute = path.resolve(inputPath);
-    let current = absolute;
-    const tailSegments: string[] = [];
-
-    for (;;) {
-      try {
-        const realCurrent = fs.realpathSync(current);
-        if (tailSegments.length === 0) {
-          return realCurrent;
-        }
-        return path.join(realCurrent, ...tailSegments.reverse());
-      } catch (error) {
-        const nodeError = error as NodeJS.ErrnoException;
-        if (nodeError.code !== 'ENOENT' && nodeError.code !== 'ENOTDIR') {
-          return absolute;
-        }
-
-        const parent = path.dirname(current);
-        if (parent === current) {
-          return absolute;
-        }
-
-        tailSegments.push(path.basename(current));
-        current = parent;
-      }
     }
   }
 

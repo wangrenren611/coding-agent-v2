@@ -19,7 +19,7 @@ import {
   TimeoutBudgetExceededError,
   UnknownError,
 } from './error';
-import type { AgentLogger } from './logger';
+import { mergeAgentLoggers, type AgentLogger } from './logger';
 import { compact, estimateMessagesTokens } from './compaction';
 import { LLMTool, ToolConcurrencyPolicy } from '../tool/types';
 import type { BackoffConfig } from '../../providers';
@@ -206,6 +206,11 @@ export class StatelessAgent extends EventEmitter {
       contextLimitTokens: resolvedContextLimitTokens,
       contextUsagePercent: (contextTokens / resolvedContextLimitTokens) * 100,
     };
+  }
+
+  attachLogger(logger: AgentLogger): void {
+    this.logger = mergeAgentLoggers(this.logger, logger);
+    this.config.logger = this.logger;
   }
 
   private convertMessageToLLMMessage(message: Message) {

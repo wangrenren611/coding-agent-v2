@@ -1,14 +1,16 @@
 import * as fs from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { BaseTool, ToolResult } from './base-tool';
+import { BaseTool, ToolConfirmDetails, ToolResult } from './base-tool';
 import { ToolExecutionError } from './error';
 import {
+  assessPathAccess,
   ensurePathWithinAllowed,
   normalizeAllowedDirectories,
   resolveRequestedPath,
 } from './path-security';
 import { FILE_READ_TOOL_DESCRIPTION } from './tool-prompts';
+import type { ToolExecutionContext } from './types';
 
 const schema = z
   .object({
@@ -64,7 +66,23 @@ export class FileReadTool extends BaseTool<typeof schema> {
     return `file_read:${args.path}`;
   }
 
-  async execute(args: z.infer<typeof schema>): Promise<ToolResult> {
+  override getConfirmDetails(args: z.infer<typeof schema>): ToolConfirmDetails | null {
+    const absolute = resolveRequestedPath(args.path);
+    const assessment = assessPathAccess(absolute, this.allowedDirectories, 'PATH_NOT_ALLOWED');
+    if (assessment.allowed) {
+      return null;
+    }
+    return {
+      reason: assessment.message,
+      metadata: {
+        requestedPath: absolute,
+        allowedDirectories: this.allowedDirectories,
+        errorCode: 'PATH_NOT_ALLOWED',
+      },
+    };
+  }
+
+  async execute(args: z.infer<typeof schema>, context?: ToolExecutionContext): Promise<ToolResult> {
     if (
       typeof args.startLine === 'number' &&
       typeof args.endLine === 'number' &&
@@ -90,7 +108,8 @@ export class FileReadTool extends BaseTool<typeof schema> {
       const validatedPath = ensurePathWithinAllowed(
         absolute,
         this.allowedDirectories,
-        'PATH_NOT_ALLOWED'
+        'PATH_NOT_ALLOWED',
+        context?.confirmationApproved === true
       );
 
       const stats = await fs.stat(validatedPath);

@@ -134,6 +134,42 @@ describe('task/task_output/task_stop lifecycle', () => {
     expect(outPayload.completed).toBe(true);
   });
 
+  it('keeps background subagent running after parent tool execution returns normally', async () => {
+    const controller = new AbortController();
+    const execution = await taskTool.execute(
+      {
+        namespace: 'run2b',
+        subagent_type: 'general-purpose',
+        prompt: 'Background run should outlive parent tool return',
+        run_in_background: true,
+      },
+      {
+        toolCallId: 'parent-finish-background-keeps-running',
+        loopIndex: 1,
+        agent: {},
+        toolAbortSignal: controller.signal,
+      }
+    );
+    expect(execution.success).toBe(true);
+
+    const payload = parseOutput<{ agent_run: { agentId: string; status: string } }>(
+      execution.output
+    );
+    expect(payload.agent_run.status).toBe('running');
+
+    const stateAfterReturn = await store.getState('run2b');
+    expect(stateAfterReturn.agentRuns[payload.agent_run.agentId]?.status).toBe('running');
+
+    await waitUntil(async () => {
+      const state = await store.getState('run2b');
+      return state.agentRuns[payload.agent_run.agentId]?.status === 'completed';
+    });
+
+    const finalState = await store.getState('run2b');
+    expect(controller.signal.aborted).toBe(false);
+    expect(finalState.agentRuns[payload.agent_run.agentId]?.status).toBe('completed');
+  });
+
   it('stops a running background task and cancels linked task', async () => {
     const linked = parseOutput<{ task: { id: string } }>(
       (

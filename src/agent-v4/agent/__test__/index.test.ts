@@ -1244,7 +1244,7 @@ describe('StatelessAgent', () => {
     expect(payload.code).toBe('WRITE_FILE_PARTIAL_BUFFERED');
     expect(payload.message).toContain('Invalid arguments format for tool write_file');
     expect(payload.buffer?.bufferId).toBe('wf_call_1');
-    expect(payload.nextAction).toBe('resume');
+    expect(payload.nextAction).toBe('finalize');
 
     const writeBufferCacheDir = path.resolve(process.cwd(), '.agent-cache', 'write-file');
     const cacheEntries = await fs.readdir(writeBufferCacheDir).catch(() => []);
@@ -1255,7 +1255,7 @@ describe('StatelessAgent', () => {
     );
   });
 
-  it('supports streamed write_file direct/resume/finalize across multiple llm turns', async () => {
+  it('supports streamed write_file direct/finalize across multiple llm turns', async () => {
     const provider = createProvider();
 
     const allowedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-index-write-e2e-'));
@@ -1327,15 +1327,7 @@ describe('StatelessAgent', () => {
           })
         )
         .mockReturnValueOnce(
-          buildToolCallStream('wf_resume_2', {
-            path: targetPath,
-            mode: 'resume',
-            bufferId: 'wf_direct_1',
-            content: 'ijklmnop',
-          })
-        )
-        .mockReturnValueOnce(
-          buildToolCallStream('wf_finalize_3', {
+          buildToolCallStream('wf_finalize_2', {
             path: targetPath,
             mode: 'finalize',
             bufferId: 'wf_direct_1',
@@ -1366,7 +1358,7 @@ describe('StatelessAgent', () => {
       );
 
       const toolResults = events.filter((event) => event.type === 'tool_result');
-      expect(toolResults).toHaveLength(3);
+      expect(toolResults).toHaveLength(2);
 
       const payloads = toolResults.map(
         (event) =>
@@ -1377,15 +1369,137 @@ describe('StatelessAgent', () => {
       );
       expect(payloads.map((payload) => payload.code)).toEqual([
         'WRITE_FILE_PARTIAL_BUFFERED',
-        'WRITE_FILE_NEED_RESUME',
         'WRITE_FILE_FINALIZE_OK',
       ]);
-      expect(payloads.map((payload) => payload.nextAction)).toEqual(['resume', 'resume', 'none']);
+      expect(payloads.map((payload) => payload.nextAction)).toEqual(['finalize', 'none']);
       expect(events.at(-1)).toMatchObject({
         type: 'done',
         data: { finishReason: 'stop' },
       });
 
+      expect(await fs.readFile(targetPath, 'utf8')).toBe(fullContent);
+    } finally {
+      await fs.rm(allowedDir, { recursive: true, force: true });
+      await fs.rm(bufferDir, { recursive: true, force: true });
+    }
+  });
+
+  it('supports streamed write_file finalize by bufferId without path after an oversized direct write', async () => {
+    const provider = createProvider();
+
+    const allowedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-index-finalize-id-'));
+    const bufferDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-index-finalize-buffer-'));
+    const targetPath = path.join(allowedDir, 'streamed-finalize-by-id.txt');
+    const fullContent = 'abcdefghijklmnop';
+
+    try {
+      const manager = new DefaultToolManager();
+      manager.registerTool(
+        new WriteFileTool({
+          allowedDirectories: [allowedDir],
+          bufferBaseDir: bufferDir,
+          maxChunkBytes: 8,
+        })
+      );
+
+      const buildToolCallStream = (toolCallId: string, args: Record<string, unknown>) => {
+        const raw = JSON.stringify(args);
+        const cut = Math.max(1, Math.floor(raw.length / 2));
+        return toStream([
+          {
+            index: 0,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      id: toolCallId,
+                      type: 'function',
+                      index: 0,
+                      function: { name: 'write_file', arguments: raw.slice(0, cut) },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          {
+            index: 0,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      id: toolCallId,
+                      type: 'function',
+                      index: 0,
+                      function: { name: 'write_file', arguments: raw.slice(cut) },
+                    },
+                  ],
+                  finish_reason: 'tool_calls',
+                } as unknown as ChunkDelta,
+              },
+            ],
+          },
+        ]);
+      };
+
+      provider.generateStream = vi
+        .fn()
+        .mockReturnValueOnce(
+          buildToolCallStream('wf_direct_finalize_id_1', {
+            path: targetPath,
+            mode: 'direct',
+            content: fullContent,
+          })
+        )
+        .mockReturnValueOnce(
+          buildToolCallStream('wf_finalize_by_id_2', {
+            mode: 'finalize',
+            bufferId: 'wf_direct_finalize_id_1',
+          })
+        )
+        .mockReturnValueOnce(
+          toStream([
+            {
+              index: 0,
+              choices: [{ index: 0, delta: { content: 'done' } }],
+            },
+            {
+              index: 0,
+              choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+            },
+          ])
+        );
+
+      const agent = new StatelessAgent(provider, manager, { maxRetryCount: 3 });
+      const events = await collectEvents(
+        agent.runStream(
+          {
+            ...createInput(),
+            maxSteps: 5,
+          },
+          { onMessage: vi.fn(), onCheckpoint: vi.fn() }
+        )
+      );
+
+      const toolResults = events.filter((event) => event.type === 'tool_result');
+      expect(toolResults).toHaveLength(2);
+
+      const payloads = toolResults.map(
+        (event) =>
+          JSON.parse((event.data as Message).content as string) as {
+            code: string;
+            nextAction: string;
+          }
+      );
+      expect(payloads.map((payload) => payload.code)).toEqual([
+        'WRITE_FILE_PARTIAL_BUFFERED',
+        'WRITE_FILE_FINALIZE_OK',
+      ]);
+      expect(payloads.map((payload) => payload.nextAction)).toEqual(['finalize', 'none']);
       expect(await fs.readFile(targetPath, 'utf8')).toBe(fullContent);
     } finally {
       await fs.rm(allowedDir, { recursive: true, force: true });

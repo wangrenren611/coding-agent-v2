@@ -7,7 +7,7 @@
 ## 2. 当前基线（已具备）
 - 无状态单轮流程：LLM -> Tool -> 回写消息。
 - 支持流式处理、工具调用、重试退避、`abortSignal`。
-- `write_file` 支持 `direct/resume/finalize` 断点续写协议。
+- `write_file` 支持 `direct/finalize` 缓冲写入协议。
 - `agent-v4` 测试已覆盖主流程与关键异常分支。
 
 ## 3. 验收范围定义

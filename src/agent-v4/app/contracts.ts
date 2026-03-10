@@ -38,7 +38,35 @@ export interface ExecutionStepRecord {
   completedAt?: number;
 }
 
-export type CliEventType = StreamEvent['type'] | 'user_message' | 'assistant_message';
+export type RunLogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface RunLogRecord {
+  id?: number;
+  executionId: string;
+  conversationId: string;
+  stepIndex?: number;
+  level: RunLogLevel;
+  code?: string;
+  source: string;
+  message: string;
+  error?: Record<string, unknown>;
+  context?: Record<string, unknown>;
+  data?: unknown;
+  createdAt: number;
+}
+
+export interface ListRunLogsOptions {
+  level?: RunLogLevel;
+  limit?: number;
+}
+
+export type CliEventType =
+  | StreamEvent['type']
+  | 'user_message'
+  | 'assistant_message'
+  | 'metric'
+  | 'trace'
+  | 'run_log';
 
 export interface CliEvent {
   type: CliEventType;

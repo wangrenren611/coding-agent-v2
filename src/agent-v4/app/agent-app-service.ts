@@ -1,5 +1,7 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { LLMGenerateOptions, Tool, Usage } from '../../providers';
 import { StatelessAgent } from '../agent';
+import type { AgentLogContext, AgentLogger } from '../agent/logger';
 import type { AgentCallbacks, Message } from '../types';
 import type {
   CliEventEnvelope,
@@ -7,6 +9,8 @@ import type {
   ListRunsOptions,
   ListRunsResult,
   RunRecord,
+  RunLogLevel,
+  RunLogRecord,
   TerminalReason,
 } from './contracts';
 import type {
@@ -14,6 +18,7 @@ import type {
   EventStorePort,
   ExecutionStorePort,
   MessageProjectionStorePort,
+  RunLogStorePort,
 } from './ports';
 
 type RunFinishReason = 'stop' | 'max_steps' | 'error';
@@ -75,10 +80,23 @@ export interface AgentAppServiceDeps {
   executionStore: ExecutionStorePort;
   eventStore: EventStorePort;
   messageStore?: MessageProjectionStorePort;
+  runLogStore?: RunLogStorePort;
+}
+
+interface RunObservabilityContext {
+  executionId: string;
+  conversationId: string;
+  getStepIndex: () => number;
+  enqueue: (task: () => Promise<void>) => void;
+  appendEvent: (eventType: CliEventEnvelope['eventType'], data: unknown) => Promise<void>;
 }
 
 export class AgentAppService {
-  constructor(private readonly deps: AgentAppServiceDeps) {}
+  private readonly observabilityScope = new AsyncLocalStorage<RunObservabilityContext>();
+
+  constructor(private readonly deps: AgentAppServiceDeps) {
+    this.deps.agent.attachLogger(this.createScopedLogger());
+  }
 
   async runForeground(
     request: RunForegroundRequest,
@@ -153,6 +171,7 @@ export class AgentAppService {
     });
 
     let toolEventQueue: Promise<void> = Promise.resolve();
+    let observabilityQueue: Promise<void> = Promise.resolve();
     const toolChunkListener = (payload: unknown): void => {
       toolEventQueue = toolEventQueue
         .then(async () => {
@@ -161,6 +180,14 @@ export class AgentAppService {
         .catch((error: unknown) => {
           toolStreamFailure = error;
         });
+    };
+
+    const enqueueObservabilityTask = (task: () => Promise<void>) => {
+      observabilityQueue = observabilityQueue.then(task).catch((error: unknown) => {
+        if (!streamFailure) {
+          streamFailure = error;
+        }
+      });
     };
 
     this.deps.agent.on('tool_chunk', toolChunkListener);
@@ -208,81 +235,108 @@ export class AgentAppService {
       },
       onProgress: callbacks?.onProgress,
       onCompaction: callbacks?.onCompaction,
-      onMetric: callbacks?.onMetric,
-      onTrace: callbacks?.onTrace,
+      onMetric: async (metric) => {
+        enqueueObservabilityTask(async () => {
+          await appendAndProject('metric', metric);
+        });
+        await callbacks?.onMetric?.(metric);
+      },
+      onTrace: async (event) => {
+        enqueueObservabilityTask(async () => {
+          await appendAndProject('trace', event);
+        });
+        await callbacks?.onTrace?.(event);
+      },
       onToolPolicy: callbacks?.onToolPolicy,
       onError: callbacks?.onError,
     };
 
-    try {
-      for await (const event of this.deps.agent.runStream(
-        {
-          executionId,
-          conversationId: request.conversationId,
-          messages: inputMessages,
-          systemPrompt: request.systemPrompt,
-          tools: request.tools,
-          config: request.config,
-          maxSteps: request.maxSteps,
-          abortSignal: request.abortSignal,
-          timeoutBudgetMs: request.timeoutBudgetMs,
-          llmTimeoutRatio: request.llmTimeoutRatio,
-          contextLimitTokens: request.contextLimitTokens,
+    await this.observabilityScope.run(
+      {
+        executionId,
+        conversationId: request.conversationId,
+        getStepIndex: () => currentStepIndex,
+        enqueue: enqueueObservabilityTask,
+        appendEvent: async (eventType, data) => {
+          await appendAndProject(eventType, data);
         },
-        agentCallbacks
-      )) {
-        const envelope = await appendAndProject(event.type, event.data);
+      },
+      async () => {
+        try {
+          for await (const event of this.deps.agent.runStream(
+            {
+              executionId,
+              conversationId: request.conversationId,
+              messages: inputMessages,
+              systemPrompt: request.systemPrompt,
+              tools: request.tools,
+              config: request.config,
+              maxSteps: request.maxSteps,
+              abortSignal: request.abortSignal,
+              timeoutBudgetMs: request.timeoutBudgetMs,
+              llmTimeoutRatio: request.llmTimeoutRatio,
+              contextLimitTokens: request.contextLimitTokens,
+            },
+            agentCallbacks
+          )) {
+            const envelope = await appendAndProject(event.type, event.data);
 
-        if (event.type === 'progress' || event.type === 'checkpoint') {
-          const stepIndex = readStepIndex(event.data);
-          if (stepIndex > currentStepIndex) {
-            currentStepIndex = stepIndex;
-          }
-          await this.deps.executionStore.patch(executionId, {
-            stepIndex: currentStepIndex,
-            updatedAt: Date.now(),
-            ...(event.type === 'checkpoint' ? { lastCheckpointSeq: envelope.seq } : {}),
-          });
-        }
-
-        if (event.type === 'compaction') {
-          const contextStore = resolveContextStore(this.deps.messageStore);
-          if (contextStore) {
-            const compaction = extractCompactionInfo(event.data, currentStepIndex);
-            if (compaction.removedMessageIds.length > 0) {
-              await contextStore.applyCompaction({
-                conversationId: request.conversationId,
-                executionId,
-                stepIndex: compaction.stepIndex,
-                removedMessageIds: compaction.removedMessageIds,
-                createdAt: envelope.createdAt,
+            if (event.type === 'progress' || event.type === 'checkpoint') {
+              const stepIndex = readStepIndex(event.data);
+              if (stepIndex > currentStepIndex) {
+                currentStepIndex = stepIndex;
+              }
+              await this.deps.executionStore.patch(executionId, {
+                stepIndex: currentStepIndex,
+                updatedAt: Date.now(),
+                ...(event.type === 'checkpoint' ? { lastCheckpointSeq: envelope.seq } : {}),
               });
             }
-          }
-        }
 
-        if (event.type === 'done') {
-          terminalEventSeen = true;
-          const doneData = event.data as { finishReason?: 'stop' | 'max_steps'; steps?: number };
-          finishReason = doneData.finishReason ?? 'stop';
-          if (typeof doneData.steps === 'number' && doneData.steps > 0) {
-            steps = doneData.steps;
-            currentStepIndex = Math.max(currentStepIndex, doneData.steps);
-          }
-        }
+            if (event.type === 'compaction') {
+              const contextStore = resolveContextStore(this.deps.messageStore);
+              if (contextStore) {
+                const compaction = extractCompactionInfo(event.data, currentStepIndex);
+                if (compaction.removedMessageIds.length > 0) {
+                  await contextStore.applyCompaction({
+                    conversationId: request.conversationId,
+                    executionId,
+                    stepIndex: compaction.stepIndex,
+                    removedMessageIds: compaction.removedMessageIds,
+                    createdAt: envelope.createdAt,
+                  });
+                }
+              }
+            }
 
-        if (event.type === 'error') {
-          terminalEventSeen = true;
-          finishReason = 'error';
-          latestErrorPayload = extractErrorPayload(event.data);
+            if (event.type === 'done') {
+              terminalEventSeen = true;
+              const doneData = event.data as {
+                finishReason?: 'stop' | 'max_steps';
+                steps?: number;
+              };
+              finishReason = doneData.finishReason ?? 'stop';
+              if (typeof doneData.steps === 'number' && doneData.steps > 0) {
+                steps = doneData.steps;
+                currentStepIndex = Math.max(currentStepIndex, doneData.steps);
+              }
+            }
+
+            if (event.type === 'error') {
+              terminalEventSeen = true;
+              finishReason = 'error';
+              latestErrorPayload = extractErrorPayload(event.data);
+            }
+          }
+        } catch (error) {
+          streamFailure = error;
+        } finally {
+          this.deps.agent.off('tool_chunk', toolChunkListener);
+          await toolEventQueue;
+          await observabilityQueue;
         }
       }
-    } catch (error) {
-      streamFailure = error;
-    } finally {
-      this.deps.agent.off('tool_chunk', toolChunkListener);
-      await toolEventQueue;
-    }
+    );
 
     if (toolStreamFailure && !streamFailure) {
       streamFailure = toolStreamFailure;
@@ -360,6 +414,61 @@ export class AgentAppService {
       return [];
     }
     return contextStore.listDroppedMessages(executionId, opts);
+  }
+
+  async listRunLogs(executionId: string, opts?: { level?: RunLogLevel; limit?: number }) {
+    const runLogStore = resolveRunLogStore(this.deps);
+    if (!runLogStore) {
+      return [];
+    }
+    return runLogStore.listRunLogs(executionId, opts);
+  }
+
+  private createScopedLogger(): AgentLogger {
+    return {
+      debug: (message, context, data) => {
+        this.enqueueRunLog('debug', message, undefined, context, data);
+      },
+      info: (message, context, data) => {
+        this.enqueueRunLog('info', message, undefined, context, data);
+      },
+      warn: (message, context, data) => {
+        this.enqueueRunLog('warn', message, undefined, context, data);
+      },
+      error: (message, error, context) => {
+        this.enqueueRunLog('error', message, error, context);
+      },
+    };
+  }
+
+  private enqueueRunLog(
+    level: RunLogLevel,
+    message: string,
+    error?: unknown,
+    context?: AgentLogContext,
+    data?: unknown
+  ): void {
+    const scope = this.observabilityScope.getStore();
+    const runLogStore = resolveRunLogStore(this.deps);
+    if (!scope || !runLogStore) {
+      return;
+    }
+
+    const payload = buildRunLogPayload({
+      level,
+      message,
+      error,
+      context,
+      data,
+      executionId: scope.executionId,
+      conversationId: scope.conversationId,
+      stepIndex: scope.getStepIndex(),
+    });
+
+    scope.enqueue(async () => {
+      await runLogStore.appendRunLog(payload);
+      await scope.appendEvent('run_log', payload);
+    });
   }
 }
 
@@ -449,6 +558,76 @@ function extractErrorPayload(payload: unknown): ErrorEventPayload | undefined {
     httpStatus: readNumber(payload.httpStatus),
     name: readString(payload.name),
   };
+}
+
+function buildRunLogPayload(input: {
+  level: RunLogLevel;
+  message: string;
+  error?: unknown;
+  context?: AgentLogContext;
+  data?: unknown;
+  executionId: string;
+  conversationId: string;
+  stepIndex: number;
+}): RunLogRecord {
+  const errorRecord = toErrorRecord(input.error);
+  const code =
+    readString(input.context?.errorCode) ??
+    readString(errorRecord?.errorCode) ??
+    readString(errorRecord?.code);
+
+  return {
+    executionId: input.executionId,
+    conversationId: input.conversationId,
+    stepIndex: input.stepIndex > 0 ? input.stepIndex : undefined,
+    level: input.level,
+    code: code ?? undefined,
+    source: typeof input.context?.toolName === 'string' ? 'tool' : 'agent',
+    message: input.message,
+    error: errorRecord ?? undefined,
+    context: input.context ? { ...input.context } : undefined,
+    data: input.data,
+    createdAt: Date.now(),
+  };
+}
+
+function toErrorRecord(error: unknown): Record<string, unknown> | undefined {
+  if (!error) {
+    return undefined;
+  }
+  if (error instanceof Error) {
+    const maybeError = error as Error & Record<string, unknown>;
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      ...(typeof error.cause !== 'undefined' ? { cause: error.cause } : {}),
+      ...(readString(maybeError.errorCode) ? { errorCode: readString(maybeError.errorCode) } : {}),
+      ...(readString(maybeError.code) ? { code: readString(maybeError.code) } : {}),
+    };
+  }
+  if (isRecord(error)) {
+    return { ...error };
+  }
+  return { message: String(error) };
+}
+
+function resolveRunLogStore(deps: AgentAppServiceDeps): RunLogStorePort | undefined {
+  if (deps.runLogStore) {
+    return deps.runLogStore;
+  }
+  if (isRunLogStorePort(deps.executionStore)) {
+    return deps.executionStore;
+  }
+  return undefined;
+}
+
+function isRunLogStorePort(value: unknown): value is RunLogStorePort {
+  return (
+    isRecord(value) &&
+    typeof value.appendRunLog === 'function' &&
+    typeof value.listRunLogs === 'function'
+  );
 }
 
 function normalizeUnknownError(error: unknown): ErrorEventPayload {

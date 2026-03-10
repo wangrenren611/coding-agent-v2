@@ -249,6 +249,52 @@ const parseJsonObject = (content?: string): Record<string, unknown> | null => {
   }
 };
 
+const parseJsonValue = (content?: string): unknown => {
+  if (!content) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(content);
+  } catch {
+    return undefined;
+  }
+};
+
+const countEscapeMarkers = (value: string): number => {
+  return (value.match(/\\r\\n|\\n|\\t|\\"|\\\\/g) ?? []).length;
+};
+
+const decodeEscapeSequencesOnce = (value: string): string => {
+  return value
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t")
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, "\\");
+};
+
+const normalizeToolDisplayText = (value: string): string => {
+  let current = value.replace(/\r\n/g, "\n").trimEnd();
+  for (let index = 0; index < 2; index += 1) {
+    const next = decodeEscapeSequencesOnce(current);
+    if (countEscapeMarkers(next) >= countEscapeMarkers(current)) {
+      break;
+    }
+    current = next;
+  }
+
+  const parsed = parseJsonValue(current);
+  if (parsed !== undefined && typeof parsed !== "string") {
+    try {
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return current;
+    }
+  }
+
+  return current;
+};
+
 const resolveStructuredResultObject = (
   result: ParsedToolResult | null,
 ): Record<string, unknown> | null => {
@@ -700,9 +746,30 @@ export const AssistantToolGroup = ({ group }: AssistantToolGroupProps) => {
     specialPresentation?.headerDetail ??
     compactDetail(commandText, 64) ??
     compactDetail(invocationDetails, 64);
-  const hasBody = specialPresentation
-    ? specialPresentation.sections.length > 0
-    : Boolean((!titleDetail && (commandText || hasInvocationDetails)) || hasOutput);
+  const defaultSections: ToolSection[] = [];
+  if (commandText && !titleDetail) {
+    defaultSections.push({
+      label: "command",
+      content: `$ ${commandText}`,
+      tone: "code",
+    });
+  }
+  if (invocationDetails && !titleDetail) {
+    defaultSections.push({
+      label: "arguments",
+      content: invocationDetails,
+      tone: "code",
+    });
+  }
+  if (hasOutput) {
+    defaultSections.push({
+      label: parsedResult?.status === "error" ? "error" : "output",
+      content: outputText,
+      tone: "code",
+    });
+  }
+  const sections = specialPresentation?.sections ?? defaultSections;
+  const hasBody = sections.length > 0;
   const statusText =
     parsedResult?.status === "success"
       ? "completed"
@@ -725,49 +792,36 @@ export const AssistantToolGroup = ({ group }: AssistantToolGroupProps) => {
         <box flexDirection="row" marginTop={1}>
           <box width={1} backgroundColor={uiTheme.divider} />
           <box flexGrow={1} backgroundColor={uiTheme.panel} paddingLeft={2} paddingRight={1} paddingTop={1} paddingBottom={1}>
-            {specialPresentation ? (
-              <>
-                {specialPresentation.sections.map((section, index) => (
+            {sections.map((section, index) => {
+              const content = normalizeToolDisplayText(section.content);
+              const isCode = section.tone === "code";
+
+              return (
+                <box key={`${toolName}:section:${index}`} flexDirection="column" paddingBottom={index < sections.length - 1 ? 1 : 0}>
+                  {section.label ? (
+                    <text fg={uiTheme.muted} attributes={uiTheme.typography.note}>
+                      {section.label}
+                    </text>
+                  ) : null}
                   <box
-                    key={`${toolName}:section:${index}`}
-                    paddingBottom={index < specialPresentation.sections.length - 1 ? 1 : 0}
+                    marginTop={section.label ? 1 : 0}
+                    backgroundColor={isCode ? uiTheme.surface : uiTheme.panel}
+                    paddingLeft={isCode ? 1 : 0}
+                    paddingRight={isCode ? 1 : 0}
+                    paddingTop={isCode ? 1 : 0}
+                    paddingBottom={isCode ? 1 : 0}
                   >
                     <text
                       fg={uiTheme.text}
-                      attributes={section.tone === "code" ? uiTheme.typography.code : uiTheme.typography.body}
-                      wrapMode="word"
+                      attributes={isCode ? uiTheme.typography.code : uiTheme.typography.body}
+                      wrapMode={isCode ? "char" : "word"}
                     >
-                      {section.content}
+                      {content}
                     </text>
                   </box>
-                ))}
-              </>
-            ) : (
-              <>
-                {commandText && !titleDetail ? (
-                  <box paddingBottom={1}>
-                    <text fg={uiTheme.text} attributes={uiTheme.typography.code} wrapMode="word">
-                      <span fg={uiTheme.accent}>$</span> {commandText}
-                    </text>
-                  </box>
-                ) : null}
-                {invocationDetails && !titleDetail ? (
-                  <box paddingBottom={hasOutput ? 1 : 0}>
-                    <text fg={uiTheme.muted} attributes={uiTheme.typography.note}>
-                      arguments
-                    </text>
-                    <text fg={uiTheme.text} attributes={uiTheme.typography.code} wrapMode="word">
-                      {invocationDetails}
-                    </text>
-                  </box>
-                ) : null}
-                {hasOutput ? (
-                  <text fg={uiTheme.text} attributes={uiTheme.typography.code} wrapMode="word">
-                    {outputText}
-                  </text>
-                ) : null}
-              </>
-            )}
+                </box>
+              );
+            })}
           </box>
         </box>
       ) : null}

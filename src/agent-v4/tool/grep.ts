@@ -3,11 +3,17 @@ import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { rgPath as vscodeRgPath } from '@vscode/ripgrep';
 import { z } from 'zod';
-import { BaseTool, ToolResult } from './base-tool';
+import { BaseTool, ToolConfirmDetails, ToolResult } from './base-tool';
 import { ToolExecutionError } from './error';
 import { ToolExecutionContext } from './types';
 import { DEFAULT_IGNORE_GLOBS, resolveSearchRoot } from './search/common';
-import { normalizeAllowedDirectories, toPosixPath } from './path-security';
+import {
+  assessPathAccess,
+  ensurePathWithinAllowed,
+  normalizeAllowedDirectories,
+  resolveRequestedPath,
+  toPosixPath,
+} from './path-security';
 import { GREP_TOOL_DESCRIPTION } from './tool-prompts';
 
 const schema = z
@@ -153,12 +159,45 @@ export class GrepTool extends BaseTool<typeof schema> {
     return `grep:${args.path || process.cwd()}:${args.pattern}`;
   }
 
+  override getConfirmDetails(args: GrepArgs): ToolConfirmDetails | null {
+    const requestedPath = args.path?.trim().length ? args.path : process.cwd();
+    const absolute = resolveRequestedPath(requestedPath);
+    const assessment = assessPathAccess(
+      absolute,
+      this.allowedDirectories,
+      'SEARCH_PATH_NOT_ALLOWED'
+    );
+    if (assessment.allowed) {
+      return null;
+    }
+    return {
+      reason: assessment.message,
+      metadata: {
+        requestedPath: absolute,
+        allowedDirectories: this.allowedDirectories,
+        errorCode: 'SEARCH_PATH_NOT_ALLOWED',
+      },
+    };
+  }
+
   async execute(args: GrepArgs, context?: ToolExecutionContext): Promise<ToolResult> {
     try {
-      const { rootPath } = await resolveSearchRoot({
-        requestedPath: args.path,
-        allowedDirectories: this.allowedDirectories,
-      });
+      let rootPath: string;
+      if (context?.confirmationApproved === true) {
+        const requestedPath = args.path?.trim().length ? args.path : process.cwd();
+        const absolute = resolveRequestedPath(requestedPath);
+        rootPath = ensurePathWithinAllowed(
+          absolute,
+          this.allowedDirectories,
+          'SEARCH_PATH_NOT_ALLOWED',
+          true
+        );
+      } else {
+        ({ rootPath } = await resolveSearchRoot({
+          requestedPath: args.path,
+          allowedDirectories: this.allowedDirectories,
+        }));
+      }
 
       const located = locateRipgrep(this.rgPath);
       if (!located.found) {

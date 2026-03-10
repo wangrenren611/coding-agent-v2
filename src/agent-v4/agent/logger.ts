@@ -44,3 +44,22 @@ export function createAgentLoggerAdapter(
     error: (message, error, context) => logger.error(message, error, withContext(context)),
   };
 }
+
+export function mergeAgentLoggers(primary: AgentLogger, secondary: AgentLogger): AgentLogger {
+  const callBoth = <T extends unknown[]>(
+    first: ((...args: T) => void) | undefined,
+    second: ((...args: T) => void) | undefined
+  ) => {
+    return (...args: T) => {
+      first?.(...args);
+      second?.(...args);
+    };
+  };
+
+  return {
+    debug: callBoth(primary.debug, secondary.debug),
+    info: callBoth(primary.info, secondary.info),
+    warn: callBoth(primary.warn, secondary.warn),
+    error: callBoth(primary.error, secondary.error),
+  };
+}

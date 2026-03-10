@@ -1,4 +1,5 @@
 import { RGBA, SyntaxStyle } from "@opentui/core";
+import type { UiThemeMode } from "./theme";
 
 type OpenCodeTheme = {
   primary: RGBA;
@@ -110,6 +111,60 @@ const opencodeDarkTheme: OpenCodeTheme = {
   thinkingOpacity: 0.6,
 };
 
+const opencodeLightTheme: OpenCodeTheme = {
+  primary: color("#0b67d7"),
+  secondary: color("#2563eb"),
+  accent: color("#0b67d7"),
+  error: color("#c2410c"),
+  warning: color("#b45309"),
+  success: color("#15803d"),
+  info: color("#0f766e"),
+  text: color("#1f2530"),
+  textMuted: color("#596273"),
+  background: color("#eceff3"),
+  backgroundPanel: color("#ffffff"),
+  backgroundElement: color("#dde3ea"),
+  border: color("#cfd5de"),
+  borderActive: color("#aeb7c4"),
+  borderSubtle: color("#d7dde5"),
+  diffAdded: color("#15803d"),
+  diffRemoved: color("#b91c1c"),
+  diffContext: color("#475569"),
+  diffHunkHeader: color("#334155"),
+  diffHighlightAdded: color("#166534"),
+  diffHighlightRemoved: color("#991b1b"),
+  diffAddedBg: color("#dcfce7"),
+  diffRemovedBg: color("#fee2e2"),
+  diffContextBg: color("#e2e8f0"),
+  diffLineNumber: color("#64748b"),
+  diffAddedLineNumberBg: color("#bbf7d0"),
+  diffRemovedLineNumberBg: color("#fecaca"),
+  markdownText: color("#1f2530"),
+  markdownHeading: color("#0b67d7"),
+  markdownLink: color("#0b67d7"),
+  markdownLinkText: color("#0f766e"),
+  markdownCode: color("#166534"),
+  markdownBlockQuote: color("#7c3aed"),
+  markdownEmph: color("#8b5e00"),
+  markdownStrong: color("#b45309"),
+  markdownHorizontalRule: color("#738094"),
+  markdownListItem: color("#0b67d7"),
+  markdownListEnumeration: color("#0f766e"),
+  markdownImage: color("#b45309"),
+  markdownImageText: color("#0f766e"),
+  markdownCodeBlock: color("#1f2530"),
+  syntaxComment: color("#596273"),
+  syntaxKeyword: color("#7c3aed"),
+  syntaxFunction: color("#b45309"),
+  syntaxVariable: color("#be123c"),
+  syntaxString: color("#15803d"),
+  syntaxNumber: color("#c2410c"),
+  syntaxType: color("#0f766e"),
+  syntaxOperator: color("#0b67d7"),
+  syntaxPunctuation: color("#1f2530"),
+  thinkingOpacity: 0.92,
+};
+
 type SyntaxRule = {
   scope: string[];
   style: {
@@ -217,20 +272,33 @@ const applyAlpha = (fg: RGBA, alpha: number) => {
   );
 };
 
-const syntaxRules = getSyntaxRules(opencodeDarkTheme);
+const createMarkdownSyntax = (theme: OpenCodeTheme) => SyntaxStyle.fromTheme(getSyntaxRules(theme));
 
-export const opencodeMarkdownSyntax = SyntaxStyle.fromTheme(syntaxRules);
-export const opencodeSubtleMarkdownSyntax = SyntaxStyle.fromTheme(
-  syntaxRules.map((rule) => {
-    if (!rule.style.foreground) {
-      return rule;
-    }
-    return {
-      ...rule,
-      style: {
-        ...rule.style,
-        foreground: applyAlpha(rule.style.foreground, opencodeDarkTheme.thinkingOpacity),
-      },
-    };
-  }),
-);
+const createSubtleMarkdownSyntax = (theme: OpenCodeTheme) =>
+  SyntaxStyle.fromTheme(
+    getSyntaxRules(theme).map((rule) => {
+      if (!rule.style.foreground) {
+        return rule;
+      }
+      return {
+        ...rule,
+        style: {
+          ...rule.style,
+          foreground: applyAlpha(rule.style.foreground, theme.thinkingOpacity),
+        },
+      };
+    }),
+  );
+
+const themeForMode = (mode: UiThemeMode): OpenCodeTheme => {
+  return mode === "light" ? opencodeLightTheme : opencodeDarkTheme;
+};
+
+export let opencodeMarkdownSyntax = createMarkdownSyntax(opencodeDarkTheme);
+export let opencodeSubtleMarkdownSyntax = createSubtleMarkdownSyntax(opencodeDarkTheme);
+
+export const applyMarkdownThemeMode = (mode: UiThemeMode) => {
+  const theme = themeForMode(mode);
+  opencodeMarkdownSyntax = createMarkdownSyntax(theme);
+  opencodeSubtleMarkdownSyntax = createSubtleMarkdownSyntax(theme);
+};

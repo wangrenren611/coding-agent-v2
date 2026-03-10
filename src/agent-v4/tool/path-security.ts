@@ -2,6 +2,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+export interface PathAccessAssessment {
+  normalizedCandidate: string;
+  allowed: boolean;
+  message: string;
+}
+
 export function expandHomePath(rawPath: string): string {
   if (rawPath === '~') {
     return os.homedir();
@@ -76,21 +82,34 @@ export function isWithinAllowedDirectories(
   );
 }
 
-export function ensurePathWithinAllowed(
+export function assessPathAccess(
   candidatePath: string,
   allowedDirectories: string[],
   errorPrefix = 'PATH_NOT_ALLOWED'
-): string {
+): PathAccessAssessment {
   const normalizedCandidate = normalizePathWithExistingAncestor(candidatePath);
   const allowed = allowedDirectories.some((allowedDirectory) =>
     isPathInsideDirectory(normalizedCandidate, allowedDirectory)
   );
-  if (!allowed) {
-    throw new Error(
-      `${errorPrefix}: ${candidatePath} is outside allowed directories: ${allowedDirectories.join(', ')}`
-    );
+
+  return {
+    normalizedCandidate,
+    allowed,
+    message: `${errorPrefix}: ${candidatePath} is outside allowed directories: ${allowedDirectories.join(', ')}`,
+  };
+}
+
+export function ensurePathWithinAllowed(
+  candidatePath: string,
+  allowedDirectories: string[],
+  errorPrefix = 'PATH_NOT_ALLOWED',
+  allowOutsideAllowedDirectories = false
+): string {
+  const assessment = assessPathAccess(candidatePath, allowedDirectories, errorPrefix);
+  if (!assessment.allowed && !allowOutsideAllowedDirectories) {
+    throw new Error(assessment.message);
   }
-  return normalizedCandidate;
+  return assessment.normalizedCandidate;
 }
 
 export function toPosixPath(rawPath: string): string {

@@ -164,6 +164,127 @@ describe('SqliteAgentAppStore', () => {
     });
   });
 
+  it('stores and lists run logs in created order', async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-app-sqlite-run-logs-'));
+    const dbPath = path.join(tempDir, 'agent.db');
+    store = new SqliteAgentAppStore(dbPath);
+
+    const now = Date.now();
+    await store.create({
+      executionId: 'exec_logs',
+      runId: 'exec_logs',
+      conversationId: 'conv_logs',
+      status: 'RUNNING',
+      createdAt: now,
+      updatedAt: now,
+      stepIndex: 0,
+    });
+
+    await store.appendRunLog({
+      executionId: 'exec_logs',
+      conversationId: 'conv_logs',
+      level: 'info',
+      source: 'agent',
+      message: 'run.start',
+      createdAt: now + 1,
+    });
+    await store.appendRunLog({
+      executionId: 'exec_logs',
+      conversationId: 'conv_logs',
+      stepIndex: 2,
+      level: 'error',
+      code: 'TOOL_EXECUTION_FAILED',
+      source: 'tool',
+      message: 'tool execution failed',
+      error: { name: 'Error', message: 'boom' },
+      context: { toolName: 'bash' },
+      createdAt: now + 2,
+    });
+
+    const logs = await store.listRunLogs('exec_logs');
+    expect(logs).toHaveLength(2);
+    expect(logs.map((log) => log.message)).toEqual(['run.start', 'tool execution failed']);
+    expect(logs[1]).toMatchObject({
+      level: 'error',
+      code: 'TOOL_EXECUTION_FAILED',
+      source: 'tool',
+      stepIndex: 2,
+      error: { message: 'boom' },
+      context: { toolName: 'bash' },
+    });
+  });
+
+  it('filters and limits run logs without mixing execution history', async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-app-sqlite-run-log-filter-'));
+    const dbPath = path.join(tempDir, 'agent.db');
+    store = new SqliteAgentAppStore(dbPath);
+
+    const now = Date.now();
+    await store.create({
+      executionId: 'exec_filter',
+      runId: 'exec_filter',
+      conversationId: 'conv_filter',
+      status: 'RUNNING',
+      createdAt: now,
+      updatedAt: now,
+      stepIndex: 0,
+    });
+    await store.create({
+      executionId: 'exec_other',
+      runId: 'exec_other',
+      conversationId: 'conv_filter',
+      status: 'RUNNING',
+      createdAt: now + 1,
+      updatedAt: now + 1,
+      stepIndex: 0,
+    });
+
+    await store.appendRunLog({
+      executionId: 'exec_filter',
+      conversationId: 'conv_filter',
+      level: 'info',
+      source: 'agent',
+      message: 'run.start',
+      createdAt: now + 2,
+    });
+    await store.appendRunLog({
+      executionId: 'exec_filter',
+      conversationId: 'conv_filter',
+      level: 'warn',
+      source: 'agent',
+      message: 'retry.scheduled',
+      createdAt: now + 3,
+    });
+    await store.appendRunLog({
+      executionId: 'exec_filter',
+      conversationId: 'conv_filter',
+      level: 'error',
+      source: 'agent',
+      message: 'run.error',
+      createdAt: now + 4,
+    });
+    await store.appendRunLog({
+      executionId: 'exec_other',
+      conversationId: 'conv_filter',
+      level: 'error',
+      source: 'agent',
+      message: 'other.error',
+      createdAt: now + 5,
+    });
+
+    const errorsOnly = await store.listRunLogs('exec_filter', { level: 'error' });
+    expect(errorsOnly).toHaveLength(1);
+    expect(errorsOnly[0]).toMatchObject({
+      executionId: 'exec_filter',
+      level: 'error',
+      message: 'run.error',
+    });
+
+    const limited = await store.listRunLogs('exec_filter', { limit: 2 });
+    expect(limited).toHaveLength(2);
+    expect(limited.map((log) => log.message)).toEqual(['run.start', 'retry.scheduled']);
+  });
+
   it('keeps full history while context is updated by compaction and dropped ids are recorded', async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-app-sqlite-context-'));
     const dbPath = path.join(tempDir, 'agent.db');

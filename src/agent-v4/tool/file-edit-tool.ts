@@ -3,14 +3,16 @@ import * as path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { createTwoFilesPatch } from 'diff';
 import { z } from 'zod';
-import { BaseTool, ToolResult } from './base-tool';
+import { BaseTool, ToolConfirmDetails, ToolResult } from './base-tool';
 import { ToolExecutionError } from './error';
 import {
+  assessPathAccess,
   ensurePathWithinAllowed,
   normalizeAllowedDirectories,
   resolveRequestedPath,
 } from './path-security';
 import { FILE_EDIT_TOOL_DESCRIPTION } from './tool-prompts';
+import type { ToolExecutionContext } from './types';
 
 const fileEditSchema = z.object({
   oldText: z.string().describe('The exact text segment to replace'),
@@ -129,13 +131,30 @@ export class FileEditTool extends BaseTool<typeof schema> {
     return true;
   }
 
-  async execute(args: z.infer<typeof schema>): Promise<ToolResult> {
+  override getConfirmDetails(args: z.infer<typeof schema>): ToolConfirmDetails | null {
+    const absolute = resolveRequestedPath(args.path);
+    const assessment = assessPathAccess(absolute, this.allowedDirectories, 'PATH_NOT_ALLOWED');
+    if (assessment.allowed) {
+      return null;
+    }
+    return {
+      reason: assessment.message,
+      metadata: {
+        requestedPath: absolute,
+        allowedDirectories: this.allowedDirectories,
+        errorCode: 'PATH_NOT_ALLOWED',
+      },
+    };
+  }
+
+  async execute(args: z.infer<typeof schema>, context?: ToolExecutionContext): Promise<ToolResult> {
     try {
       const absolute = resolveRequestedPath(args.path);
       const validatedPath = ensurePathWithinAllowed(
         absolute,
         this.allowedDirectories,
-        'PATH_NOT_ALLOWED'
+        'PATH_NOT_ALLOWED',
+        context?.confirmationApproved === true
       );
 
       const stats = await fs.stat(validatedPath);
