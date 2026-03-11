@@ -88,10 +88,10 @@ describe('ProviderRegistry', () => {
       expect(provider.config.apiKey).toBe('test-kimi-key');
     });
 
-    it('should create provider for deepseek-chat', () => {
+    it('should create provider for deepseek-reasoner', () => {
       process.env.DEEPSEEK_API_KEY = 'test-deepseek-key';
 
-      const provider = ProviderRegistry.createFromEnv('deepseek-chat');
+      const provider = ProviderRegistry.createFromEnv('deepseek-reasoner');
 
       expect(provider).toBeInstanceOf(OpenAICompatibleProvider);
       expect(provider.config.apiKey).toBe('test-deepseek-key');
@@ -285,7 +285,7 @@ describe('ProviderRegistry', () => {
       const models = ProviderRegistry.listModelsByProvider('deepseek');
 
       expect(models).toHaveLength(1);
-      expect(models[0].id).toBe('deepseek-chat');
+      expect(models[0].id).toBe('deepseek-reasoner');
     });
 
     it('should return models for kimi provider', () => {
@@ -333,12 +333,12 @@ describe('ProviderRegistry', () => {
       expect(config.name).toBe('GLM-4.7');
     });
 
-    it('should return config for deepseek-chat', () => {
-      const config = ProviderRegistry.getModelConfig('deepseek-chat');
+    it('should return config for deepseek-reasoner', () => {
+      const config = ProviderRegistry.getModelConfig('deepseek-reasoner');
 
-      expect(config.id).toBe('deepseek-chat');
+      expect(config.id).toBe('deepseek-reasoner');
       expect(config.provider).toBe('deepseek');
-      expect(config.name).toBe('DeepSeek Chat');
+      expect(config.name).toBe('DeepSeek Reasoner');
     });
 
     it('should throw error for unknown model', () => {
@@ -364,9 +364,9 @@ describe('ProviderRegistry', () => {
       expect(name).toBe('Kimi K2.5');
     });
 
-    it('should return display name for deepseek-chat', () => {
-      const name = ProviderRegistry.getModelName('deepseek-chat');
-      expect(name).toBe('DeepSeek Chat');
+    it('should return display name for deepseek-reasoner', () => {
+      const name = ProviderRegistry.getModelName('deepseek-reasoner');
+      expect(name).toBe('DeepSeek Reasoner');
     });
 
     it('should return modelId for unknown model', () => {
@@ -408,9 +408,9 @@ describe('ProviderRegistry', () => {
       expect(Models.kimiK25.apiKey).toBeUndefined();
     });
 
-    it('should have deepseekChat accessor', () => {
-      expect(Models.deepseekChat).toEqual(MODEL_CONFIGS['deepseek-chat']);
-      expect(Models.deepseekChat.apiKey).toBeUndefined();
+    it('should have deepseekReasoner accessor', () => {
+      expect(Models.deepseekReasoner).toEqual(MODEL_CONFIGS['deepseek-reasoner']);
+      expect(Models.deepseekReasoner.apiKey).toBeUndefined();
     });
   });
 });

@@ -124,8 +124,8 @@ export const Models = {
   },
 
   // DeepSeek
-  get deepseekChat(): ModelConfig {
-    return { ...MODEL_DEFINITIONS['deepseek-chat'], apiKey: undefined };
+  get deepseekReasoner(): ModelConfig {
+    return { ...MODEL_DEFINITIONS['deepseek-reasoner'], apiKey: undefined };
   },
 
   // Qwen
