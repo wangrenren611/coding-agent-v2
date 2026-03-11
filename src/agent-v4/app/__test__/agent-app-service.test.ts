@@ -3,12 +3,14 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ToolManager } from '../../tool/tool-manager';
+import { DefaultToolManager } from '../../tool/tool-manager';
 import type { Chunk, LLMProvider } from '../../../providers';
 import { LLMRateLimitError } from '../../../providers';
 import { LLMRetryableError } from '../../../providers';
 import { StatelessAgent } from '../../agent';
 import { AgentAppService } from '../agent-app-service';
 import { SqliteAgentAppStore } from '../sqlite-agent-app-store';
+import { WriteFileTool } from '../../tool/write-file';
 
 type ChunkDelta = NonNullable<NonNullable<Chunk['choices']>[number]>['delta'];
 type TestDelta = Partial<ChunkDelta> & { finish_reason?: string };
@@ -49,6 +51,58 @@ function createToolManager(): ToolManager {
 
 async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function extractJsonStringFieldPrefix(raw: string, fieldName: string): string {
+  const marker = `"${fieldName}":"`;
+  const start = raw.indexOf(marker);
+  if (start === -1) {
+    return '';
+  }
+
+  let cursor = start + marker.length;
+  let output = '';
+  while (cursor < raw.length) {
+    const ch = raw[cursor];
+    if (ch === '"') {
+      return output;
+    }
+    if (ch !== '\\') {
+      output += ch;
+      cursor += 1;
+      continue;
+    }
+    if (cursor + 1 >= raw.length) {
+      return output;
+    }
+
+    const esc = raw[cursor + 1];
+    if (esc === 'n') {
+      output += '\n';
+      cursor += 2;
+      continue;
+    }
+    if (esc === 'r') {
+      output += '\r';
+      cursor += 2;
+      continue;
+    }
+    if (esc === 't') {
+      output += '\t';
+      cursor += 2;
+      continue;
+    }
+    if (esc === '"' || esc === '\\' || esc === '/') {
+      output += esc;
+      cursor += 2;
+      continue;
+    }
+
+    output += esc;
+    cursor += 2;
+  }
+
+  return output;
 }
 
 describe('AgentAppService', () => {
@@ -428,6 +482,155 @@ describe('AgentAppService', () => {
 
     const persistedEvents = await app.listRunEvents('exec_tool');
     expect(persistedEvents.some((event) => event.eventType === 'tool_stream')).toBe(true);
+  });
+
+  it('resumes a truncated write_file direct call by recovering buffered session metadata', async () => {
+    const provider = createProvider();
+    const allowedDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-app-service-write-'));
+    const bufferDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-app-service-buffer-'));
+    const targetPath = path.join(allowedDir, 'nodejs-sandbox-implementation.md');
+    const directToolCallId = 'wf_resume_direct_1';
+
+    const manager = new DefaultToolManager();
+    manager.registerTool(
+      new WriteFileTool({
+        allowedDirectories: [allowedDir],
+        bufferBaseDir: bufferDir,
+        maxChunkBytes: 8,
+      })
+    );
+
+    const truncatedDirectArgs = JSON.stringify({
+      mode: 'direct',
+      path: targetPath,
+      content: '# Repro\n\n' + 'a'.repeat(64),
+    }).slice(0, -6);
+    const expectedBufferedContent = extractJsonStringFieldPrefix(truncatedDirectArgs, 'content');
+    const finalizeArgs = JSON.stringify({
+      mode: 'finalize',
+      bufferId: directToolCallId,
+      path: targetPath,
+    });
+
+    provider.generateStream = vi
+      .fn()
+      .mockReturnValueOnce(
+        toStream([
+          {
+            index: 0,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      id: directToolCallId,
+                      type: 'function',
+                      index: 0,
+                      function: {
+                        name: 'write_file',
+                        arguments: truncatedDirectArgs,
+                      },
+                    },
+                  ],
+                  finish_reason: 'tool_calls',
+                } as unknown as ChunkDelta,
+              },
+            ],
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        toStream([
+          {
+            index: 0,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      id: 'wf_resume_finalize_2',
+                      type: 'function',
+                      index: 0,
+                      function: {
+                        name: 'write_file',
+                        arguments: finalizeArgs,
+                      },
+                    },
+                  ],
+                  finish_reason: 'tool_calls',
+                } as unknown as ChunkDelta,
+              },
+            ],
+          },
+        ])
+      );
+
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-app-service-resume-'));
+    store = new SqliteAgentAppStore(path.join(tempDir, 'agent.db'));
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 2,
+      backoffConfig: { initialDelayMs: 1, maxDelayMs: 1, base: 2, jitter: false },
+    });
+    const app = new AgentAppService({
+      agent,
+      executionStore: store,
+      eventStore: store,
+      messageStore: store,
+    });
+    try {
+      const firstRun = await app.runForeground({
+        conversationId: 'conv_resume_write_file',
+        executionId: 'exec_resume_write_file_1',
+        userInput: 'write the document',
+        maxSteps: 1,
+      });
+
+      const firstToolResult = firstRun.events.find((event) => event.eventType === 'tool_result');
+      expect(firstToolResult).toBeDefined();
+      expect(
+        JSON.parse((firstToolResult?.data as { content: string }).content) as {
+          code: string;
+          nextAction: string;
+        }
+      ).toMatchObject({
+        code: 'WRITE_FILE_PARTIAL_BUFFERED',
+        nextAction: 'finalize',
+      });
+
+      const historyMessages = await app.listContextMessages('conv_resume_write_file');
+      const secondRun = await app.runForeground({
+        conversationId: 'conv_resume_write_file',
+        executionId: 'exec_resume_write_file_2',
+        userInput: 'continue',
+        historyMessages,
+        maxSteps: 1,
+      });
+
+      const secondToolResult = secondRun.events.find((event) => event.eventType === 'tool_result');
+      expect(secondToolResult).toBeDefined();
+      expect(
+        JSON.parse((secondToolResult?.data as { content: string }).content) as {
+          code: string;
+          message: string;
+          nextAction: string;
+        }
+      ).toMatchObject({
+        code: 'WRITE_FILE_FINALIZE_OK',
+        nextAction: 'none',
+      });
+
+      expect(await fs.readFile(targetPath, 'utf8')).toBe(expectedBufferedContent);
+
+      await expect(
+        fs.access(path.join(bufferDir, `${directToolCallId}.pointer.json`))
+      ).rejects.toThrow();
+      expect(provider.generateStream).toHaveBeenCalledTimes(2);
+    } finally {
+      await fs.rm(allowedDir, { recursive: true, force: true });
+      await fs.rm(bufferDir, { recursive: true, force: true });
+    }
   });
 
   it('maps AGENT_UPSTREAM_TIMEOUT to FAILED timeout terminal state', async () => {

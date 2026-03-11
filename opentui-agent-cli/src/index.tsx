@@ -8,23 +8,41 @@ import {
   initExitRuntime,
   registerTerminalBackgroundRestore,
 } from './runtime/exit';
-import { probeTerminalBackground, setTerminalWindowBackground } from './runtime/terminal-theme';
+import {
+  probeTerminalColors,
+  setTerminalWindowBackground,
+  setTerminalWindowForeground,
+} from './runtime/terminal-theme';
 import { applyMarkdownThemeMode } from './ui/opencode-markdown';
 import { applyUiThemeMode, uiTheme } from './ui/theme';
 
 bindExitGuards();
-const terminalBackground = await probeTerminalBackground();
-applyUiThemeMode('dark');
-applyMarkdownThemeMode('dark');
+// OpenTUI exposes OPENTUI_FORCE_WCWIDTH for terminals where CJK width handling
+// is more accurate with wcwidth than the default Unicode capability probe.
+process.env.OPENTUI_FORCE_WCWIDTH ??= '1';
+const terminalColors = await probeTerminalColors();
+applyUiThemeMode(terminalColors.mode);
+applyMarkdownThemeMode(terminalColors.mode, process.platform);
 
 if (
-  terminalBackground.rawColor &&
-  terminalBackground.rawColor.toLowerCase() !== uiTheme.bg.toLowerCase()
+  terminalColors.rawBackgroundColor &&
+  terminalColors.rawBackgroundColor.toLowerCase() !== uiTheme.bg.toLowerCase()
 ) {
-  const originalBackground = terminalBackground.rawColor;
+  const originalBackground = terminalColors.rawBackgroundColor;
   setTerminalWindowBackground(uiTheme.bg);
   registerTerminalBackgroundRestore(() => {
     setTerminalWindowBackground(originalBackground);
+  });
+}
+
+if (
+  terminalColors.rawForegroundColor &&
+  terminalColors.rawForegroundColor.toLowerCase() !== uiTheme.userPromptText.toLowerCase()
+) {
+  const originalForeground = terminalColors.rawForegroundColor;
+  setTerminalWindowForeground(uiTheme.userPromptText);
+  registerTerminalBackgroundRestore(() => {
+    setTerminalWindowForeground(originalForeground);
   });
 }
 

@@ -20,6 +20,7 @@ export const ConversationPanel = ({ turns, isThinking }: ConversationPanelProps)
       paddingY={uiTheme.layout.conversationPaddingY}
       viewportOptions={{ backgroundColor: uiTheme.bg }}
       contentOptions={{ backgroundColor: uiTheme.bg }}
+      marginBottom={1}
     >
       <box
         flexDirection="column"

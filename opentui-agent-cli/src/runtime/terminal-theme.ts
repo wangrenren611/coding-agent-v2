@@ -11,7 +11,14 @@ export type TerminalBackgroundProbe = {
   mode: TerminalBackgroundMode;
   rawColor: string | null;
 };
+export type TerminalColorProbe = {
+  rawBackgroundColor: string | null;
+  rawForegroundColor: string | null;
+  mode: TerminalBackgroundMode;
+};
 
+// eslint-disable-next-line no-control-regex
+const OSC10_PATTERN = /\x1b]10;([^\x07\x1b]+)/;
 // eslint-disable-next-line no-control-regex
 const OSC11_PATTERN = /\x1b]11;([^\x07\x1b]+)/;
 
@@ -85,24 +92,31 @@ export const modeFromColor = ({ r, g, b }: RgbColor): TerminalBackgroundMode => 
   return luminance > 0.5 ? 'light' : 'dark';
 };
 
+export const extractOsc10Color = (chunk: string): string | null => {
+  const match = chunk.match(OSC10_PATTERN);
+  return match?.[1] ?? null;
+};
+
 export const extractOsc11Color = (chunk: string): string | null => {
   const match = chunk.match(OSC11_PATTERN);
   return match?.[1] ?? null;
+};
+
+export const setTerminalWindowForeground = (color: string) => {
+  writeOsc(`\x1b]10;${color}\x07`);
 };
 
 export const setTerminalWindowBackground = (color: string) => {
   writeOsc(`\x1b]11;${color}\x07`);
 };
 
-export const probeTerminalBackground = async (
-  timeoutMs = 1000
-): Promise<TerminalBackgroundProbe> => {
+export const probeTerminalColors = async (timeoutMs = 1000): Promise<TerminalColorProbe> => {
   if (
     !process.stdin.isTTY ||
     !process.stdout.isTTY ||
     typeof process.stdin.setRawMode !== 'function'
   ) {
-    return { mode: 'dark', rawColor: null };
+    return { mode: 'dark', rawBackgroundColor: null, rawForegroundColor: null };
   }
 
   return new Promise(resolve => {
@@ -110,8 +124,10 @@ export const probeTerminalBackground = async (
     const previousRawMode = Boolean(stdin.isRaw);
     let timer: NodeJS.Timeout | null = null;
     let finished = false;
+    let rawBackgroundColor: string | null = null;
+    let rawForegroundColor: string | null = null;
 
-    const finish = (rawColor: string | null) => {
+    const finish = () => {
       if (finished) {
         return;
       }
@@ -128,40 +144,53 @@ export const probeTerminalBackground = async (
         // Ignore errors when restoring raw mode
       }
 
-      const color = rawColor ? parseTerminalColor(rawColor) : null;
+      const color = rawBackgroundColor ? parseTerminalColor(rawBackgroundColor) : null;
       resolve({
-        rawColor,
+        rawBackgroundColor,
+        rawForegroundColor,
         mode: color ? modeFromColor(color) : 'dark',
       });
     };
 
     const onData = (data: Buffer) => {
-      const colorValue = extractOsc11Color(data.toString());
-      if (!colorValue) {
-        return;
-      }
+      const chunk = data.toString();
+      rawForegroundColor ??= extractOsc10Color(chunk);
+      rawBackgroundColor ??= extractOsc11Color(chunk);
 
-      finish(colorValue);
+      if (rawForegroundColor && rawBackgroundColor) {
+        finish();
+      }
     };
 
     try {
       stdin.setRawMode(true);
       stdin.on('data', onData);
+      writeOsc('\x1b]10;?\x07');
       writeOsc('\x1b]11;?\x07');
     } catch {
-      finish(null);
+      finish();
       return;
     }
 
     timer = setTimeout(() => {
-      finish(null);
+      finish();
     }, timeoutMs);
   });
+};
+
+export const probeTerminalBackground = async (
+  timeoutMs = 1000
+): Promise<TerminalBackgroundProbe> => {
+  const result = await probeTerminalColors(timeoutMs);
+  return {
+    rawColor: result.rawBackgroundColor,
+    mode: result.mode,
+  };
 };
 
 export const detectTerminalBackgroundMode = async (
   timeoutMs = 1000
 ): Promise<TerminalBackgroundMode> => {
-  const result = await probeTerminalBackground(timeoutMs);
+  const result = await probeTerminalColors(timeoutMs);
   return result.mode;
 };

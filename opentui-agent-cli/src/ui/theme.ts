@@ -1,6 +1,8 @@
-import { TextAttributes } from '@opentui/core';
+import { TextAttributes, rgbToHex } from '@opentui/core';
 
-export type UiThemeMode = 'dark' | 'light';
+import { resolveOpenCodeTheme, type OpenCodeThemeMode } from './open-code-theme';
+
+export type UiThemeMode = OpenCodeThemeMode;
 type TextAttributeValue = (typeof TextAttributes)[keyof typeof TextAttributes];
 
 export type UiTheme = {
@@ -13,9 +15,35 @@ export type UiTheme = {
   accent: string;
   thinking: string;
   divider: string;
+  userPromptBg: string;
+  userPromptText: string;
+  inputBg: string;
   inputCursor: string;
   inputSelectionBg: string;
   inputSelectionText: string;
+  codeBlock: {
+    bg: string;
+    border: string;
+    header: string;
+    language: string;
+    text: string;
+    selectionBg: string;
+    selectionText: string;
+  };
+  diff: {
+    lineNumberFg: string;
+    lineNumberBg: string;
+    addedBg: string;
+    removedBg: string;
+    contextBg: string;
+    addedContentBg: string;
+    removedContentBg: string;
+    contextContentBg: string;
+    addedSign: string;
+    removedSign: string;
+    addedLineNumberBg: string;
+    removedLineNumberBg: string;
+  };
   layout: {
     appPaddingTop: number;
     appPaddingBottom: number;
@@ -60,48 +88,65 @@ const baseTypography: UiTheme['typography'] = {
   heading: TextAttributes.BOLD,
 };
 
-const DARK_THEME: UiTheme = {
-  bg: '#0a0a0a',
-  surface: '#141414',
-  panel: '#141414',
-  text: '#eeeeee',
-  muted: '#808080',
-  subtle: '#808080',
-  accent: '#fab283',
-  thinking: '#808080',
-  divider: '#1e1e1e',
-  inputCursor: '#fab283',
-  inputSelectionBg: '#3c3c3c',
-  inputSelectionText: '#eeeeee',
-  layout: baseLayout,
-  typography: baseTypography,
-};
+const toHex = (value: Parameters<typeof rgbToHex>[0]) => rgbToHex(value).toLowerCase();
 
-const LIGHT_THEME: UiTheme = {
-  bg: '#eceff3',
-  surface: '#ffffff',
-  panel: '#eceff3',
-  text: '#1f2530',
-  muted: '#596273',
-  subtle: '#738094',
-  accent: '#0b67d7',
-  thinking: '#8f6a1f',
-  divider: '#cfd5de',
-  inputCursor: '#0b67d7',
-  inputSelectionBg: '#b9d2f6',
-  inputSelectionText: '#1f2530',
-  layout: baseLayout,
-  typography: baseTypography,
+const createTheme = (mode: UiThemeMode, platform: NodeJS.Platform): UiTheme => {
+  const theme = resolveOpenCodeTheme(mode, platform);
+
+  return {
+    bg: toHex(theme.background),
+    surface: toHex(theme.backgroundPanel),
+    panel: toHex(theme.backgroundPanel),
+    text: toHex(theme.text),
+    muted: toHex(theme.textMuted),
+    subtle: toHex(theme.textMuted),
+    accent: toHex(theme.primary),
+    thinking: toHex(theme.textMuted),
+    divider: toHex(theme.borderSubtle),
+    userPromptBg: toHex(theme.backgroundElement),
+    userPromptText: toHex(theme.text),
+    inputBg: mode === 'light' ? '#e4e4e7' : '#27272a',
+    inputCursor: toHex(theme.primary),
+    inputSelectionBg: toHex(theme.borderActive),
+    inputSelectionText: toHex(theme.text),
+    codeBlock: {
+      bg: toHex(theme.backgroundElement),
+      border: toHex(theme.border),
+      header: toHex(theme.textMuted),
+      language: toHex(theme.accent),
+      text: toHex(theme.text),
+      selectionBg: toHex(theme.borderActive),
+      selectionText: toHex(theme.text),
+    },
+    diff: {
+      lineNumberFg: toHex(theme.diffLineNumber),
+      lineNumberBg: toHex(theme.backgroundElement),
+      addedBg: toHex(theme.diffAddedBg),
+      removedBg: toHex(theme.diffRemovedBg),
+      contextBg: toHex(theme.diffContextBg),
+      addedContentBg: toHex(theme.diffAddedBg),
+      removedContentBg: toHex(theme.diffRemovedBg),
+      contextContentBg: toHex(theme.diffContextBg),
+      addedSign: toHex(theme.diffAdded),
+      removedSign: toHex(theme.diffRemoved),
+      addedLineNumberBg: toHex(theme.diffAddedLineNumberBg),
+      removedLineNumberBg: toHex(theme.diffRemovedLineNumberBg),
+    },
+    layout: baseLayout,
+    typography: baseTypography,
+  };
 };
 
 const cloneTheme = (theme: UiTheme): UiTheme => ({
   ...theme,
+  codeBlock: { ...theme.codeBlock },
+  diff: { ...theme.diff },
   layout: { ...theme.layout },
   typography: { ...theme.typography },
 });
 
-export let uiTheme: UiTheme = cloneTheme(DARK_THEME);
+export let uiTheme: UiTheme = cloneTheme(createTheme('dark', process.platform));
 
 export const applyUiThemeMode = (mode: UiThemeMode) => {
-  uiTheme = cloneTheme(mode === 'light' ? LIGHT_THEME : DARK_THEME);
+  uiTheme = cloneTheme(createTheme(mode, process.platform));
 };

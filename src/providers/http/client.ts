@@ -80,6 +80,7 @@ export class HTTPClient {
         method,
         url,
         hasSignal: Boolean(upstreamSignal),
+        header:JSON.stringify(options),
       });
 
       const response = await fetch(url, {
@@ -231,9 +232,17 @@ export class HTTPClient {
     if (!(error instanceof Error)) return false;
 
     const code = this.getErrorCode(error);
+    const message = `${error.name} ${error.message}`.toLowerCase();
     if (!code) {
-      // Node fetch/undici 常见网络失败会以 TypeError 抛出
-      return error instanceof TypeError;
+      // Bun/Node fetch 的网络失败既可能是 TypeError，也可能是普通 Error 文案
+      return (
+        error instanceof TypeError ||
+        message.includes('unable to connect') ||
+        message.includes('access the url') ||
+        message.includes('failed to fetch') ||
+        message.includes('fetch failed') ||
+        message.includes('network request failed')
+      );
     }
 
     return [

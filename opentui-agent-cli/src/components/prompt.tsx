@@ -119,34 +119,40 @@ export const Prompt = ({
     <box
       flexDirection="column"
       flexShrink={0}
+      width="100%"
       gap={0}
       paddingBottom={uiTheme.layout.promptPaddingBottom}
     >
-      <box flexDirection="column" gap={0} paddingX={promptAlignPaddingX}>
+      <box flexDirection="column" width="100%" gap={0} paddingX={promptAlignPaddingX}>
         <SlashCommandMenu
           visible={slashMenu.visible}
           options={slashMenu.options}
           selectedIndex={slashMenu.selectedIndex}
         />
-        <box flexDirection="row" backgroundColor={uiTheme.panel}>
+        <box width="100%" flexDirection="row" overflow="hidden">
           <box width={1} backgroundColor={uiTheme.accent} />
           <box
+            width="100%"
             flexGrow={1}
             paddingX={2}
             paddingTop={1}
             paddingBottom={0}
-            backgroundColor={uiTheme.panel}
+            backgroundColor={uiTheme.inputBg}
           >
             <textarea
               ref={textareaRef}
+              buffered={false}
               width="100%"
+              minWidth="100%"
+              maxWidth="100%"
               minHeight={1}
               maxHeight={4}
+              wrapMode="char"
               initialValue={value}
-              textColor={uiTheme.text}
-              focusedTextColor={uiTheme.text}
-              backgroundColor={uiTheme.panel}
-              focusedBackgroundColor={uiTheme.panel}
+              textColor={uiTheme.userPromptText}
+              focusedTextColor={uiTheme.userPromptText}
+              backgroundColor="transparent"
+              focusedBackgroundColor="transparent"
               cursorColor={uiTheme.inputCursor}
               selectionBg={uiTheme.inputSelectionBg}
               selectionFg={uiTheme.inputSelectionText}

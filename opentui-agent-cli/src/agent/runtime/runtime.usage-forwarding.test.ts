@@ -21,11 +21,27 @@ describe('runAgentPrompt usage forwarding', () => {
   const mockGetSourceModules = vi.mocked(sourceModules.getSourceModules);
   const mockResolveWorkspaceRoot = vi.mocked(sourceModules.resolveWorkspaceRoot);
   const originalApiKey = process.env.TEST_API_KEY;
+  const loggerFromEnv = {
+    calls: [] as string[],
+    info(message: string) {
+      this.calls.push(`info:${message}`);
+    },
+    warn(message: string) {
+      this.calls.push(`warn:${message}`);
+    },
+    error(message: string) {
+      this.calls.push(`error:${message}`);
+    },
+    close: vi.fn(),
+  };
+  let receivedAgentConfig: Record<string, unknown> | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.TEST_API_KEY = 'test-key';
     mockResolveWorkspaceRoot.mockReturnValue('/test/workspace');
+    receivedAgentConfig = undefined;
+    loggerFromEnv.calls.length = 0;
 
     class FakeToolManager {
       registerTool = vi.fn();
@@ -44,6 +60,10 @@ describe('runAgentPrompt usage forwarding', () => {
     }
 
     class FakeAgent {
+      constructor(_provider: unknown, _toolManager: unknown, config: Record<string, unknown>) {
+        receivedAgentConfig = config;
+      }
+
       on = vi.fn();
       off = vi.fn();
     }
@@ -124,6 +144,15 @@ describe('runAgentPrompt usage forwarding', () => {
         createFromEnv: () => ({}),
       },
       loadEnvFiles: vi.fn().mockResolvedValue([]),
+      createLoggerFromEnv: vi.fn(() => loggerFromEnv),
+      createAgentLoggerAdapter: vi.fn((logger: typeof loggerFromEnv) => ({
+        info: (message: string, context?: Record<string, unknown>, data?: unknown) =>
+          logger.info(message, context, data),
+        warn: (message: string, context?: Record<string, unknown>, data?: unknown) =>
+          logger.warn(message, context, data),
+        error: (message: string, error?: unknown, context?: Record<string, unknown>) =>
+          logger.error(message, error, context),
+      })),
       StatelessAgent: FakeAgent,
       AgentAppService: FakeAppService,
       createSqliteAgentAppStore: () => ({
@@ -185,5 +214,9 @@ describe('runAgentPrompt usage forwarding', () => {
         totalTokens: 15,
       })
     );
+    expect(receivedAgentConfig?.logger).not.toBe(loggerFromEnv);
+    expect(typeof (receivedAgentConfig?.logger as { info?: unknown }).info).toBe('function');
+    (receivedAgentConfig?.logger as { info?: (message: string) => void }).info?.('bound');
+    expect(loggerFromEnv.calls).toContain('info:bound');
   });
 });

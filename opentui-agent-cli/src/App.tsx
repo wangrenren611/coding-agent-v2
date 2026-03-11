@@ -1,5 +1,6 @@
-import { useKeyboard, useTerminalDimensions } from '@opentui/react';
-import { useState } from 'react';
+import { TextAttributes, type Selection } from '@opentui/core';
+import { useKeyboard, useRenderer, useTerminalDimensions } from '@opentui/react';
+import { useEffect, useRef, useState } from 'react';
 
 import { resolveSlashCommand, type SlashCommandDefinition } from './commands/slash-commands';
 import { ConversationPanel } from './components/conversation-panel';
@@ -9,6 +10,7 @@ import { ToolConfirmDialog } from './components/tool-confirm-dialog';
 import { useAgentChat } from './hooks/use-agent-chat';
 import { useModelPicker } from './hooks/use-model-picker';
 import { requestExit } from './runtime/exit';
+import { copyTextToClipboard } from './runtime/clipboard';
 import { uiTheme } from './ui/theme';
 
 export const App = () => {
@@ -34,6 +36,55 @@ export const App = () => {
     onModelChanged: setModelLabelDisplay,
   });
   const dimensions = useTerminalDimensions();
+  const renderer = useRenderer();
+  const [copyToastVisible, setCopyToastVisible] = useState(false);
+  const selectionCopyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const handleSelection = (selection: Selection) => {
+      const selectedText = selection.getSelectedText();
+      if (!selectedText) {
+        return;
+      }
+
+      if (selectionCopyTimeoutRef.current) {
+        clearTimeout(selectionCopyTimeoutRef.current);
+      }
+
+      selectionCopyTimeoutRef.current = setTimeout(() => {
+        void copyTextToClipboard(selectedText, renderer).then(success => {
+          if (!success) {
+            return;
+          }
+
+          setCopyToastVisible(true);
+          if (copyToastTimeoutRef.current) {
+            clearTimeout(copyToastTimeoutRef.current);
+          }
+          copyToastTimeoutRef.current = setTimeout(() => {
+            setCopyToastVisible(false);
+            copyToastTimeoutRef.current = null;
+          }, 1500);
+        });
+        selectionCopyTimeoutRef.current = null;
+      }, 80);
+    };
+
+    renderer.on('selection', handleSelection);
+
+    return () => {
+      renderer.off('selection', handleSelection);
+      if (selectionCopyTimeoutRef.current) {
+        clearTimeout(selectionCopyTimeoutRef.current);
+        selectionCopyTimeoutRef.current = null;
+      }
+      if (copyToastTimeoutRef.current) {
+        clearTimeout(copyToastTimeoutRef.current);
+        copyToastTimeoutRef.current = null;
+      }
+    };
+  }, [renderer]);
 
   const submitWithCommands = () => {
     const command = resolveSlashCommand(inputValue);
@@ -153,6 +204,27 @@ export const App = () => {
         }}
         onListKeyDown={modelPicker.handleListKeyDown}
       />
+      {copyToastVisible ? (
+        <box
+          position="absolute"
+          right={2}
+          top={1}
+          zIndex={20}
+          flexDirection="row"
+          gap={1}
+          borderColor={uiTheme.divider}
+          borderStyle="rounded"
+          paddingX={1}
+          paddingY={0}
+        >
+          <text fg={uiTheme.accent} attributes={TextAttributes.BOLD}>
+            ✓
+          </text>
+          <text fg={uiTheme.text} attributes={TextAttributes.BOLD}>
+            Copied
+          </text>
+        </box>
+      ) : null}
     </box>
   );
 };

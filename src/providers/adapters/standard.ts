@@ -60,7 +60,7 @@ export class StandardAdapter extends BaseAPIAdapter {
       temperature: temperature,
       stream: stream ?? false,
     };
-
+    
     if (tool_stream !== undefined) {
       body.tool_stream = tool_stream;
     }

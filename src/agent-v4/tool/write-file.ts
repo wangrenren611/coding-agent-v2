@@ -60,6 +60,16 @@ interface SessionPointer {
   metaPath: string;
 }
 
+interface LoadedBufferSession {
+  session: {
+    contentPath: string;
+    metaPath: string;
+    rawArgsPath: string;
+    targetPath?: string;
+    bufferId: string;
+  };
+}
+
 export class WriteFileTool extends BaseTool<typeof schema> {
   name = 'write_file';
   description = WRITE_FILE_TOOL_DESCRIPTION;
@@ -176,8 +186,8 @@ export class WriteFileTool extends BaseTool<typeof schema> {
       });
     }
 
-    const pointer = await this.loadPointer(bufferId);
-    if (!pointer) {
+    const loaded = await this.loadBufferedSession(bufferId);
+    if (!loaded) {
       return this.successResponse({
         ok: false,
         code: 'WRITE_FILE_NEED_FINALIZE',
@@ -186,16 +196,19 @@ export class WriteFileTool extends BaseTool<typeof schema> {
       });
     }
 
-    const session = await loadWriteBufferSession(pointer.metaPath);
+    const session = loaded.session;
     const targetPath = this.resolveFinalizeTargetPath(inputPath, session.targetPath, context);
-    if (session.targetPath && path.resolve(session.targetPath) !== path.resolve(targetPath)) {
+    const normalizedSessionTargetPath = session.targetPath
+      ? this.validateAndResolvePath(session.targetPath, context)
+      : undefined;
+    if (normalizedSessionTargetPath && normalizedSessionTargetPath !== targetPath) {
       return this.successResponse({
         ok: false,
         code: 'WRITE_FILE_NEED_FINALIZE',
         message: 'Target path does not match existing buffer session',
         buffer: {
           bufferId: session.bufferId,
-          path: session.targetPath,
+          path: normalizedSessionTargetPath,
           bufferedBytes: session.contentBytes,
           maxChunkBytes: this.maxChunkBytes,
         },
@@ -225,9 +238,9 @@ export class WriteFileTool extends BaseTool<typeof schema> {
     expectedTargetPath?: string
   ): Promise<{ contentPath: string; metaPath: string; rawArgsPath: string }> {
     if (explicitBufferId) {
-      const pointer = await this.loadPointer(explicitBufferId);
-      if (pointer) {
-        const loaded = await loadWriteBufferSession(pointer.metaPath);
+      const loadedSession = await this.loadBufferedSession(explicitBufferId);
+      if (loadedSession) {
+        const loaded = loadedSession.session;
         if (
           expectedTargetPath &&
           loaded.targetPath &&
@@ -321,18 +334,156 @@ export class WriteFileTool extends BaseTool<typeof schema> {
     await fs.promises.writeFile(pointerPath, JSON.stringify(pointer), 'utf8');
   }
 
-  private async loadPointer(bufferId: string): Promise<SessionPointer | null> {
-    const pointerPath = this.pointerPath(bufferId);
+  private async loadBufferedSession(bufferId: string): Promise<LoadedBufferSession | null> {
+    for (const dir of this.getCandidateBufferDirs()) {
+      const pointer = await this.readPointer(path.join(dir, this.pointerFileName(bufferId)));
+      if (pointer) {
+        const session = await loadWriteBufferSession(pointer.metaPath);
+        return { session };
+      }
+    }
+
+    const fallback = await this.findFallbackSessionByBufferId(bufferId);
+    if (!fallback) {
+      return null;
+    }
+    return { session: fallback };
+  }
+
+  private async findFallbackSessionByBufferId(bufferId: string): Promise<{
+    contentPath: string;
+    metaPath: string;
+    rawArgsPath: string;
+    targetPath?: string;
+    bufferId: string;
+  } | null> {
+    const safeId = bufferId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    for (const dir of this.getCandidateBufferDirs()) {
+      let entries: string[] = [];
+      try {
+        entries = await fs.promises.readdir(dir);
+      } catch {
+        continue;
+      }
+
+      const candidates = entries
+        .filter((entry) => entry.endsWith('.meta.json') && entry.includes(safeId))
+        .sort()
+        .reverse();
+
+      for (const entry of candidates) {
+        try {
+          const session = await loadWriteBufferSession(path.join(dir, entry));
+          if (session.bufferId !== bufferId) {
+            continue;
+          }
+          if (!session.targetPath) {
+            const inferredTargetPath = await this.extractTargetPathFromRawArgs(session.rawArgsPath);
+            if (inferredTargetPath) {
+              session.targetPath = inferredTargetPath;
+            }
+          }
+          return session;
+        } catch {
+          continue;
+        }
+      }
+    }
+    return null;
+  }
+
+  private async extractTargetPathFromRawArgs(rawArgsPath: string): Promise<string | undefined> {
+    try {
+      const rawArgs = await fs.promises.readFile(rawArgsPath, 'utf8');
+      return this.extractJsonStringField(rawArgs, 'path');
+    } catch {
+      return undefined;
+    }
+  }
+
+  private extractJsonStringField(raw: string, fieldName: string): string | undefined {
+    const markerMatch = new RegExp(`"${fieldName}"\\s*:\\s*"`, 'm').exec(raw);
+    if (!markerMatch || typeof markerMatch.index !== 'number') {
+      return undefined;
+    }
+
+    let cursor = markerMatch.index + markerMatch[0].length;
+    let output = '';
+
+    while (cursor < raw.length) {
+      const ch = raw[cursor];
+      if (ch === '"') {
+        return output;
+      }
+      if (ch !== '\\') {
+        output += ch;
+        cursor += 1;
+        continue;
+      }
+
+      if (cursor + 1 >= raw.length) {
+        return output;
+      }
+
+      const esc = raw[cursor + 1];
+      if (esc === '"' || esc === '\\' || esc === '/') {
+        output += esc;
+        cursor += 2;
+      } else if (esc === 'b') {
+        output += '\b';
+        cursor += 2;
+      } else if (esc === 'f') {
+        output += '\f';
+        cursor += 2;
+      } else if (esc === 'n') {
+        output += '\n';
+        cursor += 2;
+      } else if (esc === 'r') {
+        output += '\r';
+        cursor += 2;
+      } else if (esc === 't') {
+        output += '\t';
+        cursor += 2;
+      } else if (esc === 'u') {
+        const unicodeHex = raw.slice(cursor + 2, cursor + 6);
+        if (!/^[0-9a-fA-F]{4}$/.test(unicodeHex)) {
+          return output;
+        }
+        output += String.fromCharCode(parseInt(unicodeHex, 16));
+        cursor += 6;
+      } else {
+        output += esc;
+        cursor += 2;
+      }
+    }
+
+    return output || undefined;
+  }
+
+  private pointerFileName(bufferId: string): string {
+    const safeId = bufferId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `${safeId}.pointer.json`;
+  }
+
+  private getCandidateBufferDirs(): string[] {
+    const defaultDir = path.resolve(process.cwd(), '.agent-cache', 'write-file');
+    return [...new Set([this.bufferBaseDir, defaultDir])];
+  }
+
+  private async readPointer(pointerPath: string): Promise<SessionPointer | null> {
     try {
       const content = await fs.promises.readFile(pointerPath, 'utf8');
-      const pointer = JSON.parse(content) as SessionPointer;
-      return pointer;
+      return JSON.parse(content) as SessionPointer;
     } catch {
       return null;
     }
   }
 
   private async removePointer(bufferId: string): Promise<void> {
-    await fs.promises.rm(this.pointerPath(bufferId), { force: true });
+    await Promise.all(
+      this.getCandidateBufferDirs().map((dir) =>
+        fs.promises.rm(path.join(dir, this.pointerFileName(bufferId)), { force: true })
+      )
+    );
   }
 }

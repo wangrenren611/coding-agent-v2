@@ -113,6 +113,13 @@ export type AgentAppServiceLike = {
   listContextMessages: (conversationId: string) => Promise<AgentV4MessageLike[]>;
 };
 
+type AgentLoggerLike = {
+  debug?: (message: string, context?: Record<string, unknown>, data?: unknown) => void;
+  info?: (message: string, context?: Record<string, unknown>, data?: unknown) => void;
+  warn?: (message: string, context?: Record<string, unknown>, data?: unknown) => void;
+  error?: (message: string, error?: unknown, context?: Record<string, unknown>) => void;
+};
+
 export type StatelessAgentLike = {
   on: (eventName: 'tool_confirm', listener: (event: ToolConfirmEventLike) => void) => void;
   off: (eventName: 'tool_confirm', listener: (event: ToolConfirmEventLike) => void) => void;
@@ -147,6 +154,11 @@ export type SourceModules = {
   repoRoot: string;
   ProviderRegistry: ProviderRegistryLike;
   loadEnvFiles: (cwd?: string) => Promise<string[]>;
+  createLoggerFromEnv: (env?: NodeJS.ProcessEnv, cwd?: string) => unknown;
+  createAgentLoggerAdapter: (
+    logger: Record<string, unknown>,
+    baseContext?: Record<string, unknown>
+  ) => AgentLoggerLike;
   StatelessAgent: StatelessAgentCtor;
   AgentAppService: AgentAppServiceCtor;
   createSqliteAgentAppStore: (dbPath: string) => AgentAppStoreLike;
@@ -205,6 +217,7 @@ const loadSourceModules = async (): Promise<SourceModules> => {
     configMod,
     appMod,
     agentV4Mod,
+    agentLoggerMod,
     toolManagerMod,
     bashToolMod,
     writeToolMod,
@@ -227,6 +240,7 @@ const loadSourceModules = async (): Promise<SourceModules> => {
     import(toModuleUrl(resolve(repoRoot, 'src/config/index.ts'))),
     import(toModuleUrl(resolve(repoRoot, 'src/agent-v4/app/index.ts'))),
     import(toModuleUrl(resolve(repoRoot, 'src/agent-v4/agent/index.ts'))),
+    import(toModuleUrl(resolve(repoRoot, 'src/agent-v4/agent/logger.ts'))),
     import(toModuleUrl(resolve(repoRoot, 'src/agent-v4/tool/tool-manager.ts'))),
     import(toModuleUrl(resolve(repoRoot, 'src/agent-v4/tool/bash.ts'))),
     import(toModuleUrl(resolve(repoRoot, 'src/agent-v4/tool/write-file.ts'))),
@@ -250,6 +264,8 @@ const loadSourceModules = async (): Promise<SourceModules> => {
     repoRoot,
     ProviderRegistry: getRequiredExport<ProviderRegistryLike>(providerMod, 'ProviderRegistry'),
     loadEnvFiles: getRequiredExport(configMod, 'loadEnvFiles'),
+    createLoggerFromEnv: getRequiredExport(configMod, 'createLoggerFromEnv'),
+    createAgentLoggerAdapter: getRequiredExport(agentLoggerMod, 'createAgentLoggerAdapter'),
     StatelessAgent: getRequiredExport<StatelessAgentCtor>(agentV4Mod, 'StatelessAgent'),
     AgentAppService: getRequiredExport<AgentAppServiceCtor>(appMod, 'AgentAppService'),
     createSqliteAgentAppStore: getRequiredExport<(dbPath: string) => AgentAppStoreLike>(

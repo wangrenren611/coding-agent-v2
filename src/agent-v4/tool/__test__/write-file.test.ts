@@ -3,6 +3,11 @@ import * as path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WriteFileTool } from '../write-file';
+import {
+  appendContent,
+  appendRawArgs,
+  createWriteBufferSession,
+} from '../../agent/write-buffer';
 
 const tempDirs: string[] = [];
 
@@ -231,6 +236,46 @@ describe('WriteFileTool', () => {
       finalize.output
     );
     expect(finalizePayload).toMatchObject({
+      ok: true,
+      code: 'WRITE_FILE_FINALIZE_OK',
+      nextAction: 'none',
+    });
+    expect(await fs.readFile(target, 'utf8')).toBe(content);
+  });
+
+  it('finalizes an orphaned buffered session by scanning meta/rawArgs when pointer is missing', async () => {
+    const allowedDir = await createTempDir();
+    const bufferDir = await createTempDir();
+    const tool = new WriteFileTool({
+      allowedDirectories: [allowedDir],
+      bufferBaseDir: bufferDir,
+      maxChunkBytes: 8,
+    });
+    const target = path.join(allowedDir, 'finalize-orphaned-session.txt');
+    const content = 'orphaned buffered content';
+    const session = await createWriteBufferSession({
+      messageId: 'msg_orphaned',
+      toolCallId: 'write_call_orphaned',
+      baseDir: bufferDir,
+    });
+
+    await appendRawArgs(
+      session,
+      JSON.stringify({
+        mode: 'direct',
+        path: target,
+        content,
+      })
+    );
+    await appendContent(session, content);
+
+    const finalize = await tool.execute({
+      mode: 'finalize',
+      bufferId: session.bufferId,
+    } as never);
+    const payload = parseOutput<{ ok: boolean; code: string; nextAction: string }>(finalize.output);
+
+    expect(payload).toMatchObject({
       ok: true,
       code: 'WRITE_FILE_FINALIZE_OK',
       nextAction: 'none',

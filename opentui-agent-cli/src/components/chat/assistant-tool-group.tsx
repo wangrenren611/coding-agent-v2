@@ -1,4 +1,5 @@
 import { uiTheme } from '../../ui/theme';
+import { CodeBlock } from './code-block';
 import type { ToolSegmentGroup } from './segment-groups';
 
 type AssistantToolGroupProps = {
@@ -299,6 +300,22 @@ const normalizeToolDisplayText = (value: string): string => {
   }
 
   return current;
+};
+
+const resolveSectionLanguageHint = (
+  toolName: string,
+  section: Pick<ToolSection, 'label' | 'tone'>
+): string | undefined => {
+  if (section.tone !== 'code') {
+    return undefined;
+  }
+  if (section.label === 'command') {
+    return toolName === 'bash' ? 'bash' : undefined;
+  }
+  if (section.label === 'arguments') {
+    return 'json';
+  }
+  return undefined;
 };
 
 const resolveStructuredResultObject = (
@@ -815,7 +832,7 @@ export const AssistantToolGroup = ({ group }: AssistantToolGroupProps) => {
           : 'running';
 
   return (
-    <box flexDirection="column" marginTop={1}>
+    <box flexDirection="column" >
       <box paddingLeft={3}>
         <text fg={uiTheme.text} attributes={uiTheme.typography.note} wrapMode="word">
           <span fg={uiTheme.accent}>{icon}</span>{' '}
@@ -846,26 +863,27 @@ export const AssistantToolGroup = ({ group }: AssistantToolGroupProps) => {
                   paddingBottom={index < sections.length - 1 ? 1 : 0}
                 >
                   {section.label ? (
-                    <text fg={uiTheme.muted} attributes={uiTheme.typography.note}>
-                      {section.label}
-                    </text>
+                    isCode ? null : (
+                      <text fg={uiTheme.muted} attributes={uiTheme.typography.note}>
+                        {section.label}
+                      </text>
+                    )
                   ) : null}
-                  <box
-                    marginTop={section.label ? 1 : 0}
-                    backgroundColor={isCode ? uiTheme.surface : uiTheme.panel}
-                    paddingLeft={isCode ? 1 : 0}
-                    paddingRight={isCode ? 1 : 0}
-                    paddingTop={isCode ? 1 : 0}
-                    paddingBottom={isCode ? 1 : 0}
-                  >
-                    <text
-                      fg={uiTheme.text}
-                      attributes={isCode ? uiTheme.typography.code : uiTheme.typography.body}
-                      wrapMode={isCode ? 'char' : 'word'}
-                    >
-                      {content}
-                    </text>
-                  </box>
+                  {isCode ? (
+                    <box>
+                      <CodeBlock
+                        content={content}
+                        label={section.label}
+                        languageHint={resolveSectionLanguageHint(toolName, section)}
+                      />
+                    </box>
+                  ) : (
+                    <box marginTop={section.label ? 1 : 0}>
+                      <text fg={uiTheme.text} attributes={uiTheme.typography.body} wrapMode="word">
+                        {content}
+                      </text>
+                    </box>
+                  )}
                 </box>
               );
             })}

@@ -41,6 +41,9 @@ type RuntimeCore = {
   agent: StatelessAgentLike;
   appService: AgentAppServiceLike;
   appStore: AgentAppStoreLike;
+  logger?: {
+    close?: () => void | Promise<void>;
+  };
   modules: SourceModules;
 };
 
@@ -110,6 +113,11 @@ const resolveDbPath = (workspaceRoot: string): string => {
   }
   return resolvePath(workspaceRoot, raw);
 };
+
+const buildCliLoggerEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({
+  ...env,
+  AGENT_LOG_CONSOLE: 'false',
+});
 
 const safeInvoke = (fn: (() => void) | undefined): void => {
   if (!fn) {
@@ -321,8 +329,14 @@ const createRuntime = async (): Promise<RuntimeCore> => {
   const modelId = resolveModelId(modules, preferredModelId);
   const modelConfig = requireModelApiKey(modules, modelId);
   const maxSteps = parsePositiveInt(process.env.AGENT_MAX_STEPS, DEFAULT_MAX_STEPS);
+  const coreLogger = modules.createLoggerFromEnv(buildCliLoggerEnv(process.env), workspaceRoot);
+  const agentLogger = modules.createAgentLoggerAdapter(asRecord(coreLogger), {
+    runtime: 'opentui-agent-cli',
+  });
 
-  const provider = modules.ProviderRegistry.createFromEnv(modelId);
+  const provider = modules.ProviderRegistry.createFromEnv(modelId, {
+    logger: asRecord(coreLogger),
+  });
   const toolManager = new modules.DefaultToolManager();
   const taskStore = new modules.TaskStore({
     baseDir: resolvePath(workspaceRoot, '.agent-cache', 'task-system-v1'),
@@ -364,6 +378,7 @@ const createRuntime = async (): Promise<RuntimeCore> => {
   const agent = new modules.StatelessAgent(provider, toolManager, {
     maxRetryCount: parsePositiveInt(process.env.AGENT_MAX_RETRY_COUNT, DEFAULT_MAX_RETRY_COUNT),
     enableCompaction: true,
+    logger: agentLogger,
   });
 
   const appStore = modules.createSqliteAgentAppStore(resolveDbPath(workspaceRoot));
@@ -469,6 +484,10 @@ const createRuntime = async (): Promise<RuntimeCore> => {
     agent,
     appService,
     appStore,
+    logger:
+      coreLogger && typeof coreLogger === 'object'
+        ? (coreLogger as { close?: () => void | Promise<void> })
+        : undefined,
   };
 };
 
@@ -512,6 +531,7 @@ const disposeRuntimeInstance = async () => {
   if (!runtime) {
     return;
   }
+  await runtime.logger?.close?.();
   await runtime.appStore.close();
 };
 
@@ -574,6 +594,12 @@ export const runAgentPrompt = async (
         abortSignal: options.abortSignal,
       },
       {
+        onError: error => {
+          const message = error instanceof Error ? error.message : String(error);
+          if (message) {
+            streamedState.latestErrorMessage = message;
+          }
+        },
         onContextUsage: usage => {
           const contextUsageEvent = toContextUsageEventFromApp(usage);
           if (!contextUsageEvent) {

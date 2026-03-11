@@ -58,13 +58,22 @@ export const buildUsageItems = (
   const completionTokens = normalizeUsageTokens(reply.usageCompletionTokens);
 
   if (promptTokens) {
-    items.push({ icon: '↓', value: promptTokens });
+    items.push({ icon: '↑', value: promptTokens });
   }
   if (completionTokens) {
-    items.push({ icon: '↑', value: completionTokens });
+    items.push({ icon: '↓', value: completionTokens });
   }
 
   return items;
+};
+
+export const getCompletionErrorMessage = (reply: AssistantReplyType): string | undefined => {
+  if (reply.status !== 'error' && reply.completionReason !== 'error') {
+    return undefined;
+  }
+
+  const message = reply.completionMessage?.trim();
+  return message ? message : undefined;
 };
 
 export const AssistantReply = ({ reply }: AssistantReplyProps) => {
@@ -87,6 +96,7 @@ export const AssistantReply = ({ reply }: AssistantReplyProps) => {
 
   const durationText = formatDurationSeconds(reply, nowMs);
   const usageItems = buildUsageItems(reply);
+  const completionErrorMessage = getCompletionErrorMessage(reply);
 
   return (
     <box flexDirection="column" gap={1}>
@@ -100,7 +110,14 @@ export const AssistantReply = ({ reply }: AssistantReplyProps) => {
           <AssistantSegment key={item.segment.id} segment={item.segment} streaming={isStreaming} />
         )
       )}
-      <box flexDirection="row" gap={1} paddingLeft={3}>
+      {completionErrorMessage ? (
+        <box backgroundColor={uiTheme.surface} paddingX={2} paddingY={1}>
+          <text fg="#c2410c" attributes={uiTheme.typography.body} wrapMode="word">
+            {completionErrorMessage}
+          </text>
+        </box>
+      ) : null}
+      <box flexDirection="row" gap={1} paddingLeft={3} >
         <text fg={uiTheme.muted} attributes={uiTheme.typography.muted}>
           <span fg={uiTheme.accent}>▣</span> assistant
           <span fg={uiTheme.muted}> · {reply.modelLabel}</span>

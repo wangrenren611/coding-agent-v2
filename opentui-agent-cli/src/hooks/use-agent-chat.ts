@@ -94,6 +94,12 @@ const toReplyUsage = (
   };
 };
 
+export const resolveReplyStatus = (
+  completionReason: string
+): 'done' | 'error' => {
+  return completionReason === 'error' ? 'error' : 'done';
+};
+
 export const useAgentChat = (): UseAgentChatResult => {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -443,13 +449,18 @@ export const useAgentChat = (): UseAgentChatResult => {
               };
             });
 
-            return setReplyStatus(withFallbackText, turnId, 'done', {
-              durationSeconds: result.durationSeconds,
-              completionReason: result.completionReason,
-              completionMessage: result.completionMessage,
-              modelLabel: result.modelLabel,
-              ...(replyUsage ?? {}),
-            });
+            return setReplyStatus(
+              withFallbackText,
+              turnId,
+              resolveReplyStatus(result.completionReason),
+              {
+                durationSeconds: result.durationSeconds,
+                completionReason: result.completionReason,
+                completionMessage: result.completionMessage,
+                modelLabel: result.modelLabel,
+                ...(replyUsage ?? {}),
+              }
+            );
           });
         })
         .catch(error => {

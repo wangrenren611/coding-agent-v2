@@ -11,6 +11,7 @@ import type { BaseProviderConfig, ModelId } from '../types';
 import type { BaseAPIAdapter } from '../adapters/base';
 import { MODEL_DEFINITIONS } from './model-config';
 import { KimiAdapter } from '../adapters/kimi';
+import { ResponsesAdapter } from '../adapters/responses';
 
 /**
  * Provider 工厂类
@@ -104,6 +105,13 @@ export class ProviderFactory {
       return new KimiAdapter({
         defaultModel: modelConfig.model,
         endpointPath: modelConfig.endpointPath || '/chat/completions',
+      });
+    }
+
+    if (modelConfig.endpointPath === '/responses') {
+      return new ResponsesAdapter({
+        defaultModel: modelConfig.model,
+        endpointPath: modelConfig.endpointPath,
       });
     }
 

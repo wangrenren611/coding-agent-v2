@@ -15,12 +15,17 @@ vi.mock('../../../../src/agent-v4/prompts/system', () => ({
 
 import { disposeAgentRuntime, runAgentPrompt } from './runtime';
 import * as sourceModules from './source-modules';
-import type { AgentContextUsageEvent, AgentEventHandlers } from './types';
 
-describe('runAgentPrompt context usage forwarding', () => {
-  const mockGetSourceModules = vi.mocked(sourceModules.getSourceModules);
-  const mockResolveWorkspaceRoot = vi.mocked(sourceModules.resolveWorkspaceRoot);
+describe('runAgentPrompt error handling', () => {
+  const mockGetSourceModules = sourceModules.getSourceModules as ReturnType<typeof vi.fn>;
+  const mockResolveWorkspaceRoot = sourceModules.resolveWorkspaceRoot as ReturnType<typeof vi.fn>;
   const originalApiKey = process.env.TEST_API_KEY;
+  const createLoggerFromEnv = vi.fn(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    close: vi.fn(),
+  }));
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -56,53 +61,16 @@ describe('runAgentPrompt context usage forwarding', () => {
       async runForeground(
         _request: unknown,
         callbacks?: {
-          onContextUsage?: (usage: {
-            stepIndex: number;
-            messageCount: number;
-            contextTokens: number;
-            contextLimitTokens: number;
-            contextUsagePercent: number;
-          }) => void | Promise<void>;
-          onUsage?: (usage: {
-            sequence: number;
-            stepIndex: number;
-            messageId: string;
-            usage: {
-              prompt_tokens: number;
-              completion_tokens: number;
-              total_tokens: number;
-            };
-            cumulativeUsage: {
-              prompt_tokens: number;
-              completion_tokens: number;
-              total_tokens: number;
-            };
-            contextTokens?: number;
-            contextLimitTokens?: number;
-            contextUsagePercent?: number;
-          }) => void | Promise<void>;
+          onError?: (error: Error) => void | Promise<void>;
         }
       ) {
-        await callbacks?.onContextUsage?.({
-          stepIndex: 1,
-          messageCount: 1,
-          contextTokens: 123,
-          contextLimitTokens: 1000,
-          contextUsagePercent: 12.3,
-        });
+        await callbacks?.onError?.(new Error('502 Bad Gateway: Upstream request failed'));
 
         return {
-          executionId: 'exec_ctx',
-          conversationId: 'conv_ctx',
-          messages: [
-            {
-              messageId: 'msg_assistant',
-              role: 'assistant',
-              type: 'assistant-text',
-              content: 'done',
-            },
-          ],
-          finishReason: 'stop' as const,
+          executionId: 'exec_error',
+          conversationId: 'conv_error',
+          messages: [],
+          finishReason: 'error' as const,
           steps: 1,
           run: {},
         };
@@ -120,11 +88,11 @@ describe('runAgentPrompt context usage forwarding', () => {
         createFromEnv: () => ({}),
       },
       loadEnvFiles: vi.fn().mockResolvedValue([]),
-      createLoggerFromEnv: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() })),
-      createAgentLoggerAdapter: vi.fn((logger: Record<string, unknown>) => ({
-        info: typeof logger.info === 'function' ? logger.info.bind(logger) : undefined,
-        warn: typeof logger.warn === 'function' ? logger.warn.bind(logger) : undefined,
-        error: typeof logger.error === 'function' ? logger.error.bind(logger) : undefined,
+      createLoggerFromEnv,
+      createAgentLoggerAdapter: vi.fn(() => ({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
       })),
       StatelessAgent: FakeAgent,
       AgentAppService: FakeAppService,
@@ -161,26 +129,21 @@ describe('runAgentPrompt context usage forwarding', () => {
     }
   });
 
-  it('forwards realtime context usage to TUI handlers before final usage', async () => {
-    const onContextUsage = vi.fn();
-    const onUsage = vi.fn();
-    const handlers = {
-      onContextUsage,
-      onUsage,
-    } as AgentEventHandlers & {
-      onContextUsage: (event: AgentContextUsageEvent) => void;
-    };
+  it('disables console logging for the TUI runtime', async () => {
+    await runAgentPrompt('hello', {});
 
-    await runAgentPrompt('show context', handlers);
-
-    expect(onContextUsage).toHaveBeenCalledTimes(1);
-    expect(onContextUsage).toHaveBeenCalledWith(
+    expect(createLoggerFromEnv).toHaveBeenCalledWith(
       expect.objectContaining({
-        contextTokens: 123,
-        contextLimit: 1000,
-        contextUsagePercent: 12.3,
-      })
+        AGENT_LOG_CONSOLE: 'false',
+      }),
+      '/test/workspace'
     );
-    expect(onUsage).not.toHaveBeenCalled();
+  });
+
+  it('uses onError messages as the completion message when the run fails', async () => {
+    const result = await runAgentPrompt('hello', {});
+
+    expect(result.completionReason).toBe('error');
+    expect(result.completionMessage).toBe('502 Bad Gateway: Upstream request failed');
   });
 });

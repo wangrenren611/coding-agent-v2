@@ -1,6 +1,7 @@
 import type { ReplySegment } from '../../types/chat';
 import { opencodeMarkdownSyntax, opencodeSubtleMarkdownSyntax } from '../../ui/opencode-markdown';
 import { uiTheme } from '../../ui/theme';
+import { CodeBlock } from './code-block';
 
 type AssistantSegmentProps = {
   segment: ReplySegment;
@@ -10,7 +11,7 @@ type AssistantSegmentProps = {
 const markdownTableOptions = {
   widthMode: 'full' as const,
   wrapMode: 'word' as const,
-  selectable: false,
+  selectable: true,
 };
 
 const ThinkingSegment = ({ content, streaming }: { content: string; streaming: boolean }) => {
@@ -20,7 +21,7 @@ const ThinkingSegment = ({ content, streaming }: { content: string; streaming: b
   }
 
   return (
-    <box flexDirection="row" marginTop={1}>
+    <box flexDirection="row">
       <box width={1} backgroundColor={uiTheme.divider} />
       <box flexGrow={1} paddingLeft={2}>
         <markdown
@@ -37,18 +38,21 @@ const ThinkingSegment = ({ content, streaming }: { content: string; streaming: b
 
 const CodeSegment = ({ content }: { content: string }) => {
   return (
-    <box backgroundColor={uiTheme.surface} paddingX={2} paddingY={1} marginTop={1}>
-      <text fg={uiTheme.text} attributes={uiTheme.typography.code} wrapMode="word">
-        {content}
-      </text>
+    <box >
+      <CodeBlock content={content} />
     </box>
   );
 };
 
 const NoteSegment = ({ content }: { content: string }) => {
   return (
-    <box paddingLeft={3} marginTop={1}>
-      <text fg={uiTheme.muted} attributes={uiTheme.typography.note} wrapMode="word">
+    <box paddingLeft={3}>
+      <text
+        fg={uiTheme.muted}
+        attributes={uiTheme.typography.note}
+        wrapMode="word"
+        selectable={true}
+      >
         {content}
       </text>
     </box>
@@ -62,7 +66,7 @@ const TextSegment = ({ content, streaming }: { content: string; streaming: boole
   }
 
   return (
-    <box paddingLeft={3} marginTop={1}>
+    <box paddingLeft={3} >
       <markdown
         streaming={streaming}
         syntaxStyle={opencodeMarkdownSyntax}

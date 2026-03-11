@@ -1,14 +1,10 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { applyUiThemeMode, uiTheme, type UiTheme, type UiThemeMode } from './theme';
+import { applyUiThemeMode, uiTheme } from './theme';
 
 describe('theme module', () => {
-  // 保存原始主题
-  let originalTheme: UiTheme;
-
   beforeEach(() => {
-    // 保存当前主题状态
-    originalTheme = { ...uiTheme };
+    applyUiThemeMode('dark');
   });
 
   afterEach(() => {
@@ -33,8 +29,11 @@ describe('theme module', () => {
       expect(uiTheme).toHaveProperty('thinking');
       expect(uiTheme).toHaveProperty('divider');
       expect(uiTheme).toHaveProperty('inputCursor');
+      expect(uiTheme).toHaveProperty('inputBg');
       expect(uiTheme).toHaveProperty('inputSelectionBg');
       expect(uiTheme).toHaveProperty('inputSelectionText');
+      expect(uiTheme).toHaveProperty('codeBlock');
+      expect(uiTheme).toHaveProperty('diff');
       expect(uiTheme).toHaveProperty('layout');
       expect(uiTheme).toHaveProperty('typography');
     });
@@ -53,6 +52,13 @@ describe('theme module', () => {
       expect(uiTheme.layout).toHaveProperty('footerPaddingRight');
     });
 
+    it('should expose code and diff theme tokens', () => {
+      expect(uiTheme.codeBlock).toHaveProperty('bg');
+      expect(uiTheme.codeBlock).toHaveProperty('language');
+      expect(uiTheme.diff).toHaveProperty('addedBg');
+      expect(uiTheme.diff).toHaveProperty('removedLineNumberBg');
+    });
+
     it('should have typography properties', () => {
       expect(uiTheme.typography).toHaveProperty('body');
       expect(uiTheme.typography).toHaveProperty('code');
@@ -65,10 +71,10 @@ describe('theme module', () => {
       // 确保是暗色主题
       applyUiThemeMode('dark');
 
-      expect(uiTheme.bg).toBe('#0a0a0a');
-      expect(uiTheme.surface).toBe('#141414');
-      expect(uiTheme.text).toBe('#eeeeee');
-      expect(uiTheme.accent).toBe('#fab283');
+      expect(uiTheme.bg).toBe('#09090b');
+      expect(uiTheme.surface).toBe('#18181b');
+      expect(uiTheme.text).toBe('#fafafa');
+      expect(uiTheme.accent).toBe('#8e51ff');
     });
   });
 
@@ -76,19 +82,19 @@ describe('theme module', () => {
     it('should switch to dark theme', () => {
       applyUiThemeMode('dark');
 
-      expect(uiTheme.bg).toBe('#0a0a0a');
-      expect(uiTheme.surface).toBe('#141414');
-      expect(uiTheme.text).toBe('#eeeeee');
-      expect(uiTheme.accent).toBe('#fab283');
+      expect(uiTheme.bg).toBe('#09090b');
+      expect(uiTheme.surface).toBe('#18181b');
+      expect(uiTheme.text).toBe('#fafafa');
+      expect(uiTheme.accent).toBe('#8e51ff');
     });
 
     it('should switch to light theme', () => {
       applyUiThemeMode('light');
 
-      expect(uiTheme.bg).toBe('#eceff3');
+      expect(uiTheme.bg).toBe('#ffffff');
       expect(uiTheme.surface).toBe('#ffffff');
-      expect(uiTheme.text).toBe('#1f2530');
-      expect(uiTheme.accent).toBe('#0b67d7');
+      expect(uiTheme.text).toBe('#09090b');
+      expect(uiTheme.accent).toBe('#7f22fe');
     });
 
     it('should create independent theme objects', () => {
@@ -134,12 +140,12 @@ describe('theme module', () => {
     it('should handle invalid mode by defaulting to dark', () => {
       // 先设置为亮色主题
       applyUiThemeMode('light');
-      expect(uiTheme.bg).toBe('#eceff3');
+      expect(uiTheme.bg).toBe('#ffffff');
 
       // 使用无效模式（TypeScript会阻止，但JavaScript可能允许）
       // 这里测试默认行为
       applyUiThemeMode('dark' as any); // 强制为暗色
-      expect(uiTheme.bg).toBe('#0a0a0a');
+      expect(uiTheme.bg).toBe('#09090b');
     });
   });
 });

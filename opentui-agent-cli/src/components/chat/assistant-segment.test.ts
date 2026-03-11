@@ -81,4 +81,18 @@ describe('AssistantSegment', () => {
     expect(markdownNode?.props?.content).toBe('_Thinking:_ 先整理一下结论。');
     expect(markdownNode?.props?.streaming).toBe(true);
   });
+
+  it('renders code segments with the OpenTUI code renderable', () => {
+    const segment: ReplySegment = {
+      id: '1:code:1',
+      type: 'code',
+      content: '{\n  "ok": true\n}',
+    };
+
+    const tree = AssistantSegment({ segment, streaming: false });
+    const codeNode = findElementByType(tree, 'code');
+
+    expect(codeNode).not.toBeNull();
+    expect(codeNode?.props?.filetype).toBe('json');
+  });
 });

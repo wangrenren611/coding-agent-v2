@@ -17,21 +17,26 @@ const formatTime = (timestamp: number) => {
 
 export const PromptCard = ({ prompt, createdAtMs, isFirst = false }: PromptCardProps) => {
   return (
-    <box flexDirection="row" marginTop={isFirst ? 0 : 1}>
-      <box width={1} backgroundColor={uiTheme.accent} />
+    <box flexDirection="row" marginTop={isFirst ? 0 : 1} marginBottom={1}>
+      <box width={0.5} backgroundColor={uiTheme.accent} />
       <box
         flexGrow={1}
-        backgroundColor={uiTheme.panel}
+        backgroundColor={uiTheme.userPromptBg}
         paddingLeft={2}
         paddingRight={1}
         paddingTop={1}
         paddingBottom={1}
       >
-        <text fg={uiTheme.text} attributes={uiTheme.typography.heading} wrapMode="word">
+        <text
+          fg={uiTheme.userPromptText}
+          attributes={uiTheme.typography.heading}
+          wrapMode="word"
+          selectable={true}
+        >
           {prompt}
         </text>
         <box paddingTop={1}>
-          <text fg={uiTheme.muted} attributes={uiTheme.typography.note}>
+          <text fg={uiTheme.muted} attributes={uiTheme.typography.note} selectable={true}>
             {formatTime(createdAtMs)}
           </text>
         </box>

@@ -14,7 +14,7 @@ const PendingReply = () => {
     <box flexDirection="row">
       <box width={1} backgroundColor={uiTheme.divider} />
       <box flexGrow={1} paddingLeft={2}>
-        <text attributes={uiTheme.typography.body}>
+        <text attributes={uiTheme.typography.body} selectable={true}>
           <i fg={uiTheme.thinking}>Thinking:</i>
           <span fg={uiTheme.muted}> preparing response...</span>
         </text>

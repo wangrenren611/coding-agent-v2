@@ -1,7 +1,8 @@
 import * as path from 'node:path';
-import { config as loadDotEnv } from 'dotenv';
+import { createLoggerFromEnv, loadEnvFiles } from '../src/config/index.ts';
 import { ProviderRegistry, type ModelId } from '../src/providers/index.ts';
 import { StatelessAgent } from '../src/agent-v4/agent/index.ts';
+import { createAgentLoggerAdapter } from '../src/agent-v4/agent/logger.ts';
 import { DefaultToolManager } from '../src/agent-v4/tool/tool-manager.ts';
 import type { StreamEvent } from '../src/agent-v4/types.ts';
 import { BashTool } from '../src/agent-v4/tool/bash.ts';
@@ -15,14 +16,13 @@ import {
 const DEFAULT_MODEL: ModelId = 'minimax-2.5';
 const DEFAULT_PROMPT = '请用三点总结当前仓库的主要结构。';
 
-function bootstrapEnv(): void {
-  const dotenvPath = '.env.development';
-  const result = loadDotEnv({ path: dotenvPath, quiet: true });
-  if (result.error) {
-    console.warn(`[demo] dotenv file not loaded: ${dotenvPath} (${result.error.message})`);
-  } else {
-    console.log(`[demo] loaded env from ${dotenvPath}`);
+async function bootstrapEnv(): Promise<void> {
+  const loadedFiles = await loadEnvFiles(process.cwd());
+  if (loadedFiles.length === 0) {
+    console.warn('[demo] no env file loaded (.env / .env.development)');
+    return;
   }
+  console.log(`[demo] loaded env from ${loadedFiles.join(', ')}`);
 }
 
 function resolveModelId(input?: string): ModelId {
@@ -87,7 +87,7 @@ function printEvent(event: CliEventEnvelope): void {
 }
 
 async function main(): Promise<void> {
-  bootstrapEnv();
+  await bootstrapEnv();
   const [modelArg, ...promptParts] = process.argv.slice(2);
 
   const modelId = resolveModelId(modelArg);
@@ -95,11 +95,16 @@ async function main(): Promise<void> {
   const prompt =
     promptParts.join(' ').trim() || process.env.AGENT_V4_PROMPT?.trim() || DEFAULT_PROMPT;
 
-  const provider = ProviderRegistry.createFromEnv(modelId);
+  const logger = createLoggerFromEnv(process.env, process.cwd());
+  const agentLogger = createAgentLoggerAdapter(logger, { runtime: 'agent-v4-demo' });
+  const provider = ProviderRegistry.createFromEnv(modelId, { logger });
   const toolManager = new DefaultToolManager();
   toolManager.registerTool(new BashTool());
   toolManager.registerTool(new WriteFileTool());
-  const agent = new StatelessAgent(provider, toolManager, { maxRetryCount: 2 });
+  const agent = new StatelessAgent(provider, toolManager, {
+    maxRetryCount: 2,
+    logger: agentLogger,
+  });
   const dbPath = resolveDbPath(process.env.AGENT_V4_DB_PATH);
   const store = createSqliteAgentAppStore(dbPath);
   const app = new AgentAppService({
@@ -166,6 +171,7 @@ async function main(): Promise<void> {
       console.log('[demo] usage not reported by provider');
     }
   } finally {
+    logger.close();
     await store.close();
   }
 }

@@ -293,4 +293,21 @@ describe('HTTPClient timeout behavior', () => {
     expect(error).toBeInstanceOf(LLMRetryableError);
     expect((error as LLMRetryableError).code).toBe('NETWORK_ERROR');
   });
+
+  it('should normalize bun-style unable to connect errors to LLMRetryableError', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      throw new Error('Unable to connect. Is the computer able to access the url?');
+    });
+
+    const client = new HTTPClient();
+
+    const error = await client.fetch('https://example.test/error').then(
+      () => null,
+      (err) => err
+    );
+
+    expect(error).toBeInstanceOf(LLMRetryableError);
+    expect((error as LLMRetryableError).code).toBe('NETWORK_ERROR');
+    expect((error as Error).message).toContain('Unable to connect');
+  });
 });

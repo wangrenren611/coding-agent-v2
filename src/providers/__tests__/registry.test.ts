@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { ProviderRegistry, MODEL_CONFIGS, ModelId, Models } from '../registry';
 import { OpenAICompatibleProvider } from '../openai-compatible';
 import { StandardAdapter } from '../adapters/standard';
+import { ResponsesAdapter } from '../adapters/responses';
 
 // Mock process.env
 const originalEnv = process.env;
@@ -57,6 +58,15 @@ describe('ProviderRegistry', () => {
 
     it('should use Anthropic messages endpoint for claude-opus-4.6', () => {
       expect(MODEL_CONFIGS['claude-opus-4.6'].endpointPath).toBe('/v1/messages');
+    });
+
+    it('should use responses endpoint for gpt-5.3 compatibility gateway', () => {
+      expect(MODEL_CONFIGS['gpt-5.3'].baseURL).toBe('https://gmncode.cn/v1');
+      expect(MODEL_CONFIGS['gpt-5.3'].endpointPath).toBe('/responses');
+      expect(MODEL_CONFIGS['gpt-5.3'].model).toBe('gpt-5.3-codex');
+      expect(MODEL_CONFIGS['gpt-5.3'].max_tokens).toBe(128 * 1000);
+      expect(MODEL_CONFIGS['gpt-5.3'].LLMMAX_TOKENS).toBe(400 * 1000);
+      expect(MODEL_CONFIGS['gpt-5.3'].features).toContain('reasoning');
     });
   });
 
@@ -111,6 +121,20 @@ describe('ProviderRegistry', () => {
 
       const provider = ProviderRegistry.createFromEnv('glm-5');
       expect(provider.adapter).toBeInstanceOf(StandardAdapter);
+    });
+
+    it('should create gpt-5.3 provider with gmn-compatible defaults', () => {
+      process.env.OPENAI_API_KEY = 'test-openai-key';
+      delete process.env.OPENAI_API_BASE;
+
+      const provider = ProviderRegistry.createFromEnv('gpt-5.3');
+
+      expect(provider.config.apiKey).toBe('test-openai-key');
+      expect(provider.config.baseURL).toBe('https://gmncode.cn/v1');
+      expect(provider.config.model).toBe('gpt-5.3-codex');
+      expect(provider.config.max_tokens).toBe(128 * 1000);
+      expect(provider.config.LLMMAX_TOKENS).toBe(400 * 1000);
+      expect(provider.adapter).toBeInstanceOf(ResponsesAdapter);
     });
 
     it('should use default baseURL when env var not set', () => {
