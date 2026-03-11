@@ -189,8 +189,6 @@ describe('runtime', () => {
         onToolResult: vi.fn(),
         onToolConfirm: vi.fn(),
         onUsage: vi.fn(),
-        onFinish: vi.fn(),
-        onError: vi.fn(),
       };
 
       const result = await runAgentPrompt('Test prompt', handlers);
@@ -206,8 +204,6 @@ describe('runtime', () => {
         onToolResult: vi.fn(),
         onToolConfirm: vi.fn(),
         onUsage: vi.fn(),
-        onFinish: vi.fn(),
-        onError: vi.fn(),
       };
 
       // 模拟工具确认
@@ -226,8 +222,6 @@ describe('runtime', () => {
         onToolResult: vi.fn(),
         onToolConfirm: vi.fn(),
         onUsage: vi.fn(),
-        onFinish: vi.fn(),
-        onError: vi.fn(),
       };
 
       const abortController = new AbortController();
@@ -249,8 +243,6 @@ describe('runtime', () => {
         onToolResult: vi.fn(),
         onToolConfirm: vi.fn(),
         onUsage: vi.fn(),
-        onFinish: vi.fn(),
-        onError: vi.fn(),
       };
 
       await expect(runAgentPrompt('Test prompt', handlers)).rejects.toThrow(

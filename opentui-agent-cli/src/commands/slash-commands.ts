@@ -1,4 +1,4 @@
-export type SlashCommandAction = 'help' | 'clear' | 'exit' | 'models' | 'unsupported';
+export type SlashCommandAction = 'help' | 'clear' | 'exit' | 'models' | 'files' | 'unsupported';
 
 export type SlashCommandDefinition = {
   name: string;
@@ -16,6 +16,7 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
   { name: 'init', description: 'create/update AGENTS.md', action: 'unsupported' },
   { name: 'mcps', description: 'Toggle MCPs', action: 'unsupported', aliases: ['mcp'] },
   { name: 'models', description: 'Switch model', action: 'models', aliases: ['model'] },
+  { name: 'files', description: 'Attach workspace files', action: 'files', aliases: ['file'] },
   { name: 'rename', description: 'Rename session', action: 'unsupported' },
   { name: 'review', description: 'Review changes', action: 'unsupported' },
   { name: 'sessions', description: 'Switch session', action: 'unsupported', aliases: ['session'] },

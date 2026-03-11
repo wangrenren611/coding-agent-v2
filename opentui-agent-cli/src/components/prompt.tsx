@@ -1,9 +1,12 @@
 import type { KeyEvent, PasteEvent, TextareaRenderable } from '@opentui/core';
 import { useCallback, useEffect, useRef } from 'react';
 
+import { FileMentionMenu } from './file-mention-menu';
 import { FooterHints } from './footer-hints';
 import { SlashCommandMenu } from './slash-command-menu';
 import type { SlashCommandDefinition } from '../commands/slash-commands';
+import type { PromptFileSelection } from '../files/types';
+import { useFileMentionMenu } from '../hooks/use-file-mention-menu';
 import { useSlashCommandMenu } from '../hooks/use-slash-command-menu';
 import { uiTheme } from '../ui/theme';
 
@@ -13,6 +16,9 @@ type PromptProps = {
   modelLabel: string;
   contextUsagePercent: number | null;
   value: string;
+  selectedFiles: PromptFileSelection[];
+  onAddSelectedFiles: (files: PromptFileSelection[]) => void;
+  onRemoveSelectedFile: (absolutePath: string) => void;
   onValueChange: (value: string) => void;
   onSlashCommandSelect?: (command: SlashCommandDefinition) => boolean;
   onSlashMenuVisibilityChange?: (visible: boolean) => void;
@@ -25,6 +31,9 @@ export const Prompt = ({
   modelLabel,
   contextUsagePercent,
   value,
+  selectedFiles,
+  onAddSelectedFiles,
+  onRemoveSelectedFile,
   onValueChange,
   onSlashCommandSelect,
   onSlashMenuVisibilityChange,
@@ -43,10 +52,18 @@ export const Prompt = ({
     onCommandSelected: onSlashCommandSelect,
     disabled: inputLocked,
   });
+  const fileMentionMenu = useFileMentionMenu({
+    value,
+    textareaRef,
+    selectedFiles,
+    onFilesSelected: onAddSelectedFiles,
+    onValueChange,
+    disabled: inputLocked,
+  });
 
   useEffect(() => {
-    onSlashMenuVisibilityChange?.(slashMenu.visible);
-  }, [onSlashMenuVisibilityChange, slashMenu.visible]);
+    onSlashMenuVisibilityChange?.(slashMenu.visible || fileMentionMenu.visible);
+  }, [fileMentionMenu.visible, onSlashMenuVisibilityChange, slashMenu.visible]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -92,6 +109,10 @@ export const Prompt = ({
         return;
       }
 
+      if (fileMentionMenu.handleKeyDown(event)) {
+        return;
+      }
+
       if (slashMenu.handleKeyDown(event)) {
         return;
       }
@@ -102,7 +123,7 @@ export const Prompt = ({
         submit();
       }
     },
-    [inputLocked, slashMenu, submit]
+    [fileMentionMenu, inputLocked, slashMenu, submit]
   );
 
   const handlePaste = useCallback((event: PasteEvent) => {
@@ -124,8 +145,15 @@ export const Prompt = ({
       paddingBottom={uiTheme.layout.promptPaddingBottom}
     >
       <box flexDirection="column" width="100%" gap={0} paddingX={promptAlignPaddingX}>
+        <FileMentionMenu
+          visible={fileMentionMenu.visible}
+          loading={fileMentionMenu.loading}
+          error={fileMentionMenu.error}
+          options={fileMentionMenu.options}
+          selectedIndex={fileMentionMenu.selectedIndex}
+        />
         <SlashCommandMenu
-          visible={slashMenu.visible}
+          visible={!fileMentionMenu.visible && slashMenu.visible}
           options={slashMenu.options}
           selectedIndex={slashMenu.selectedIndex}
         />
@@ -139,6 +167,23 @@ export const Prompt = ({
             paddingBottom={0}
             backgroundColor={uiTheme.inputBg}
           >
+            {selectedFiles.length > 0 ? (
+              <box flexDirection="column" gap={0} paddingBottom={1}>
+                <text fg={uiTheme.muted}>Attached files</text>
+                <box flexDirection="column">
+                  {selectedFiles.map(file => (
+                    <box key={file.absolutePath} flexDirection="row" justifyContent="space-between">
+                      <text fg={uiTheme.text} wrapMode="none">
+                        {file.relativePath}
+                      </text>
+                      <text fg={uiTheme.accent} onMouseUp={() => onRemoveSelectedFile(file.absolutePath)}>
+                        remove
+                      </text>
+                    </box>
+                  ))}
+                </box>
+              </box>
+            ) : null}
             <textarea
               ref={textareaRef}
               buffered={false}

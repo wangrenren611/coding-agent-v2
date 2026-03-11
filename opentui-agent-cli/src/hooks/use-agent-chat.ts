@@ -10,6 +10,7 @@ import type {
 } from '../agent/runtime/types';
 import { requestExit } from '../runtime/exit';
 import type { ChatTurn, ReplySegmentType } from '../types/chat';
+import type { PromptFileSelection } from '../files/types';
 import { buildAgentEventHandlers } from './agent-event-handlers';
 import {
   buildHelpSegments,
@@ -24,15 +25,21 @@ import {
   patchTurn,
   setReplyStatus,
 } from './turn-updater';
+import { buildPromptContent } from '../files/attachment-content';
+import { buildPromptDisplay } from '../files/prompt-display';
 
 export type UseAgentChatResult = {
   turns: ChatTurn[];
   inputValue: string;
+  selectedFiles: PromptFileSelection[];
   isThinking: boolean;
   modelLabel: string;
   contextUsagePercent: number | null;
   pendingToolConfirm: (AgentToolConfirmEvent & { selectedAction: 'approve' | 'deny' }) | null;
   setInputValue: (value: string) => void;
+  setSelectedFiles: (files: PromptFileSelection[]) => void;
+  appendSelectedFiles: (files: PromptFileSelection[]) => void;
+  removeSelectedFile: (absolutePath: string) => void;
   submitInput: () => void;
   stopActiveReply: () => void;
   clearInput: () => void;
@@ -94,21 +101,42 @@ const toReplyUsage = (
   };
 };
 
-export const resolveReplyStatus = (
-  completionReason: string
-): 'done' | 'error' => {
+export const resolveReplyStatus = (completionReason: string): 'done' | 'error' => {
   return completionReason === 'error' ? 'error' : 'done';
 };
 
 export const useAgentChat = (): UseAgentChatResult => {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [inputValue, setInputValue] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<PromptFileSelection[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const [modelLabel, setModelLabel] = useState(INITIAL_MODEL_LABEL);
   const [contextUsagePercent, setContextUsagePercent] = useState<number | null>(null);
   const [pendingToolConfirm, setPendingToolConfirm] = useState<
     (AgentToolConfirmEvent & { selectedAction: 'approve' | 'deny' }) | null
   >(null);
+
+  const removeSelectedFile = useCallback((absolutePath: string) => {
+    setSelectedFiles(current => current.filter(file => file.absolutePath !== absolutePath));
+  }, []);
+
+  const appendSelectedFiles = useCallback((files: PromptFileSelection[]) => {
+    if (files.length === 0) {
+      return;
+    }
+    setSelectedFiles(current => {
+      const seen = new Set(current.map(file => file.absolutePath));
+      const next = [...current];
+      for (const file of files) {
+        if (seen.has(file.absolutePath)) {
+          continue;
+        }
+        next.push(file);
+        seen.add(file.absolutePath);
+      }
+      return next;
+    });
+  }, []);
 
   const turnIdRef = useRef(1);
   const requestIdRef = useRef(0);
@@ -235,17 +263,20 @@ export const useAgentChat = (): UseAgentChatResult => {
     activeTurnIdRef.current = null;
     setIsThinking(false);
     setTurns([]);
+    setSelectedFiles([]);
     setContextUsagePercent(() => null);
   }, [resolvePendingToolConfirm]);
 
   const addTurn = useCallback(
-    (prompt: string, withStreamingReply = false): number => {
+    (prompt: string, withStreamingReply = false, files: PromptFileSelection[] = []): number => {
       const turnId = turnIdRef.current++;
+      const displayPrompt = buildPromptDisplay(prompt, files);
       setTurns(prev => [
         ...prev,
         {
           id: turnId,
-          prompt,
+          prompt: displayPrompt,
+          files: files.map(file => file.relativePath),
           createdAtMs: Date.now(),
           reply: withStreamingReply ? createStreamingReply(modelLabel) : undefined,
         },
@@ -307,15 +338,18 @@ export const useAgentChat = (): UseAgentChatResult => {
 
   const submitInput = useCallback(() => {
     const text = inputValue.trim();
-    if (!text || isThinking) {
+    const attachedFiles = selectedFiles;
+    if ((text.length === 0 && attachedFiles.length === 0) || isThinking) {
       return;
     }
 
     setInputValue('');
 
-    if (text.startsWith('/') && runCommand(text)) {
+    if (attachedFiles.length === 0 && text.startsWith('/') && runCommand(text)) {
       return;
     }
+
+    setSelectedFiles([]);
 
     void (async () => {
       const previousRun = activeRunPromiseRef.current;
@@ -328,7 +362,7 @@ export const useAgentChat = (): UseAgentChatResult => {
         });
       }
 
-      const turnId = addTurn(text, true);
+      const turnId = addTurn(text, true, attachedFiles);
       activeTurnIdRef.current = turnId;
       const currentRequestId = ++requestIdRef.current;
       const isCurrentRequest = () => currentRequestId === requestIdRef.current;
@@ -407,9 +441,12 @@ export const useAgentChat = (): UseAgentChatResult => {
         },
       };
 
-      const runPromise = runAgentPrompt(text, handlers, {
-        abortSignal: abortController.signal,
-      })
+      const runPromise = buildPromptContent(text, attachedFiles)
+        .then(promptContent =>
+          runAgentPrompt(promptContent, handlers, {
+            abortSignal: abortController.signal,
+          })
+        )
         .then(result => {
           if (!isCurrentRequest()) {
             return;
@@ -491,10 +528,11 @@ export const useAgentChat = (): UseAgentChatResult => {
       activeRunPromiseRef.current = trackedRunPromise;
       await trackedRunPromise;
     })();
-  }, [addTurn, appendEventLine, appendSegment, inputValue, isThinking, runCommand]);
+  }, [addTurn, appendEventLine, appendSegment, inputValue, isThinking, runCommand, selectedFiles]);
 
   const clearInput = useCallback(() => {
     setInputValue('');
+    setSelectedFiles([]);
   }, []);
 
   const setModelLabelDisplay = useCallback((label: string) => {
@@ -530,11 +568,15 @@ export const useAgentChat = (): UseAgentChatResult => {
   return {
     turns,
     inputValue,
+    selectedFiles,
     isThinking,
     modelLabel,
     contextUsagePercent,
     pendingToolConfirm,
     setInputValue,
+    setSelectedFiles,
+    appendSelectedFiles,
+    removeSelectedFile,
     submitInput,
     stopActiveReply,
     clearInput,

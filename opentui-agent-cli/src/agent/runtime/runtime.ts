@@ -31,6 +31,7 @@ import {
 } from './source-modules';
 import { ToolCallBuffer } from './tool-call-buffer';
 import { buildSystemPrompt } from '../../../../src/agent-v4/prompts/system';
+import type { MessageContent } from '../../../../src/providers';
 
 type RuntimeCore = {
   modelId: string;
@@ -536,7 +537,7 @@ const disposeRuntimeInstance = async () => {
 };
 
 export const runAgentPrompt = async (
-  prompt: string,
+  prompt: MessageContent,
   handlers: AgentEventHandlers,
   options: RunAgentPromptOptions = {}
 ): Promise<AgentRunResult> => {
@@ -594,7 +595,7 @@ export const runAgentPrompt = async (
         abortSignal: options.abortSignal,
       },
       {
-        onError: error => {
+        onError: (error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
           if (message) {
             streamedState.latestErrorMessage = message;

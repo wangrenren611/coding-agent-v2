@@ -2,6 +2,7 @@ import { uiTheme } from '../../ui/theme';
 
 type PromptCardProps = {
   prompt: string;
+  files?: string[];
   createdAtMs: number;
   isFirst?: boolean;
 };
@@ -15,7 +16,7 @@ const formatTime = (timestamp: number) => {
   });
 };
 
-export const PromptCard = ({ prompt, createdAtMs, isFirst = false }: PromptCardProps) => {
+export const PromptCard = ({ prompt, files = [], createdAtMs, isFirst = false }: PromptCardProps) => {
   return (
     <box flexDirection="row" marginTop={isFirst ? 0 : 1} marginBottom={1}>
       <box width={0.5} backgroundColor={uiTheme.accent} />
@@ -35,6 +36,18 @@ export const PromptCard = ({ prompt, createdAtMs, isFirst = false }: PromptCardP
         >
           {prompt}
         </text>
+        {files.length > 0 ? (
+          <box paddingTop={1} flexDirection="column">
+            <text fg={uiTheme.muted} attributes={uiTheme.typography.note}>
+              Files
+            </text>
+            {files.map(file => (
+              <text key={file} fg={uiTheme.text} attributes={uiTheme.typography.note} selectable={true}>
+                {file}
+              </text>
+            ))}
+          </box>
+        ) : null}
         <box paddingTop={1}>
           <text fg={uiTheme.muted} attributes={uiTheme.typography.note} selectable={true}>
             {formatTime(createdAtMs)}

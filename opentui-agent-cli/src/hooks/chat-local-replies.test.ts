@@ -64,6 +64,7 @@ describe('chat-local-replies', () => {
       expect(textSegment.content).toContain('/clear');
       expect(textSegment.content).toContain('/exit');
       expect(textSegment.content).toContain('/models');
+      expect(textSegment.content).toContain('/files');
       expect(textSegment.content).toContain('Keyboard shortcuts:');
     });
 
@@ -85,6 +86,7 @@ describe('chat-local-replies', () => {
       expect(textContent).toContain('/clear (/new) - clear all turns');
       expect(textContent).toContain('/exit (/quit /q) - exit app');
       expect(textContent).toContain('/models (/model) - open model selector');
+      expect(textContent).toContain('/files (/file) - attach workspace files');
     });
 
     it('should include keyboard shortcuts', () => {
@@ -93,6 +95,7 @@ describe('chat-local-replies', () => {
 
       expect(textContent).toContain('Esc - stop current response when the agent is thinking');
       expect(textContent).toContain('Ctrl+L - clear conversation panel');
+      expect(textContent).toContain('Use /files to attach local workspace files');
     });
   });
 

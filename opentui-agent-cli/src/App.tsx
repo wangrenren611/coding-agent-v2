@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 
 import { resolveSlashCommand, type SlashCommandDefinition } from './commands/slash-commands';
 import { ConversationPanel } from './components/conversation-panel';
+import { FilePickerDialog } from './components/file-picker-dialog';
 import { ModelPickerDialog } from './components/model-picker-dialog';
 import { Prompt } from './components/prompt';
 import { ToolConfirmDialog } from './components/tool-confirm-dialog';
 import { useAgentChat } from './hooks/use-agent-chat';
+import { useFilePicker } from './hooks/use-file-picker';
 import { useModelPicker } from './hooks/use-model-picker';
 import { requestExit } from './runtime/exit';
 import { copyTextToClipboard } from './runtime/clipboard';
@@ -22,6 +24,10 @@ export const App = () => {
     contextUsagePercent,
     pendingToolConfirm,
     setInputValue,
+    selectedFiles,
+    setSelectedFiles,
+    appendSelectedFiles,
+    removeSelectedFile,
     submitInput,
     stopActiveReply,
     clearInput,
@@ -35,6 +41,7 @@ export const App = () => {
   const modelPicker = useModelPicker({
     onModelChanged: setModelLabelDisplay,
   });
+  const filePicker = useFilePicker();
   const dimensions = useTerminalDimensions();
   const renderer = useRenderer();
   const [copyToastVisible, setCopyToastVisible] = useState(false);
@@ -93,6 +100,11 @@ export const App = () => {
       modelPicker.open();
       return;
     }
+    if (command?.action === 'files') {
+      setInputValue('');
+      filePicker.open(selectedFiles);
+      return;
+    }
 
     submitInput();
   };
@@ -101,6 +113,11 @@ export const App = () => {
     if (command.action === 'models') {
       setInputValue('');
       modelPicker.open();
+      return true;
+    }
+    if (command.action === 'files') {
+      setInputValue('');
+      filePicker.open(selectedFiles);
       return true;
     }
     return false;
@@ -115,6 +132,13 @@ export const App = () => {
     if (modelPicker.visible) {
       if (key.name === 'escape') {
         modelPicker.close();
+      }
+      return;
+    }
+
+    if (filePicker.visible) {
+      if (key.name === 'escape') {
+        filePicker.close();
       }
       return;
     }
@@ -172,10 +196,13 @@ export const App = () => {
       <ConversationPanel turns={turns} isThinking={isThinking} />
       <Prompt
         isThinking={isThinking}
-        disabled={modelPicker.visible || Boolean(pendingToolConfirm)}
+        disabled={modelPicker.visible || filePicker.visible || Boolean(pendingToolConfirm)}
         modelLabel={modelLabel}
         contextUsagePercent={contextUsagePercent}
         value={inputValue}
+        selectedFiles={selectedFiles}
+        onAddSelectedFiles={appendSelectedFiles}
+        onRemoveSelectedFile={removeSelectedFile}
         onValueChange={setInputValue}
         onSlashCommandSelect={handleSlashCommandSelect}
         onSlashMenuVisibilityChange={setSlashMenuVisible}
@@ -186,6 +213,24 @@ export const App = () => {
         viewportWidth={dimensions.width}
         viewportHeight={dimensions.height}
         request={pendingToolConfirm}
+      />
+      <FilePickerDialog
+        visible={filePicker.visible}
+        viewportWidth={dimensions.width}
+        viewportHeight={dimensions.height}
+        loading={filePicker.loading}
+        error={filePicker.error}
+        search={filePicker.search}
+        options={filePicker.options}
+        selectedIndex={filePicker.selectedIndex}
+        selectedPaths={filePicker.selectedPaths}
+        onSearchChange={filePicker.setSearch}
+        onSelectIndex={filePicker.setSelectedIndex}
+        onToggleSelected={filePicker.toggleSelectedIndex}
+        onConfirm={() => {
+          setSelectedFiles(filePicker.confirmSelected());
+        }}
+        onListKeyDown={filePicker.handleListKeyDown}
       />
       <ModelPickerDialog
         visible={modelPicker.visible}

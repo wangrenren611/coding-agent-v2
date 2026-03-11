@@ -146,12 +146,12 @@ describe('runAgentPrompt usage forwarding', () => {
       loadEnvFiles: vi.fn().mockResolvedValue([]),
       createLoggerFromEnv: vi.fn(() => loggerFromEnv),
       createAgentLoggerAdapter: vi.fn((logger: typeof loggerFromEnv) => ({
-        info: (message: string, context?: Record<string, unknown>, data?: unknown) =>
-          logger.info(message, context, data),
-        warn: (message: string, context?: Record<string, unknown>, data?: unknown) =>
-          logger.warn(message, context, data),
-        error: (message: string, error?: unknown, context?: Record<string, unknown>) =>
-          logger.error(message, error, context),
+        info: (message: string, _context?: Record<string, unknown>, _data?: unknown) =>
+          logger.info(message),
+        warn: (message: string, _context?: Record<string, unknown>, _data?: unknown) =>
+          logger.warn(message),
+        error: (message: string, _error?: unknown, _context?: Record<string, unknown>) =>
+          logger.error(message),
       })),
       StatelessAgent: FakeAgent,
       AgentAppService: FakeAppService,

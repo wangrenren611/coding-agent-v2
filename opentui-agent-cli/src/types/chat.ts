@@ -27,5 +27,6 @@ export type ChatTurn = {
   id: number;
   prompt: string;
   createdAtMs: number;
+  files?: string[];
   reply?: AssistantReply;
 };

@@ -1,6 +1,8 @@
 import { basename, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import type { MessageContent } from '../../../../src/providers';
+
 type ProviderModelConfig = {
   name: string;
   envApiKey: string;
@@ -64,7 +66,7 @@ export type AgentAppRunResultLike = {
 
 type AgentAppRunRequestLike = {
   conversationId: string;
-  userInput: string;
+  userInput: MessageContent;
   historyMessages?: AgentV4MessageLike[];
   systemPrompt?: string;
   maxSteps?: number;
@@ -103,6 +105,7 @@ type AgentAppRunCallbacksLike = {
   onEvent?: (event: CliEventEnvelopeLike) => void | Promise<void>;
   onContextUsage?: (usage: AgentAppContextUsageLike) => void | Promise<void>;
   onUsage?: (usage: AgentAppUsageLike) => void | Promise<void>;
+  onError?: (error: unknown) => void | Promise<void>;
 };
 
 export type AgentAppServiceLike = {

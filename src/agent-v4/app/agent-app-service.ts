@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { LLMGenerateOptions, Tool, Usage } from '../../providers';
+import type { LLMGenerateOptions, MessageContent, Tool, Usage } from '../../providers';
 import { StatelessAgent } from '../agent';
 import type { AgentLogContext, AgentLogger } from '../agent/logger';
 import type { AgentCallbacks, Message } from '../types';
@@ -35,7 +35,7 @@ interface ErrorEventPayload {
 
 export interface RunForegroundRequest {
   conversationId: string;
-  userInput: string;
+  userInput: MessageContent;
   executionId?: string;
   historyMessages?: Message[];
   systemPrompt?: string;
@@ -657,7 +657,7 @@ function normalizeUnknownError(error: unknown): ErrorEventPayload {
   };
 }
 
-function createUserMessage(content: string): Message {
+function createUserMessage(content: MessageContent): Message {
   return {
     messageId: createId('msg_usr_'),
     type: 'user',

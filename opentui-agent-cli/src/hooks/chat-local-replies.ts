@@ -8,7 +8,11 @@ export const extractErrorMessage = (error: unknown): string => {
   if (error instanceof Error) {
     return `${error.name}: ${error.message}`;
   }
-  return String(error);
+  try {
+    return String(error);
+  } catch {
+    return Object.prototype.toString.call(error);
+  }
 };
 
 export const buildHelpSegments = (turnId: number): LocalReplySegment[] => {
@@ -27,10 +31,14 @@ export const buildHelpSegments = (turnId: number): LocalReplySegment[] => {
         '/clear (/new) - clear all turns',
         '/exit (/quit /q) - exit app',
         '/models (/model) - open model selector',
+        '/files (/file) - attach workspace files',
+        'Type @/ to attach workspace files inline',
         '',
         'Keyboard shortcuts:',
         'Esc - stop current response when the agent is thinking',
         'Ctrl+L - clear conversation panel',
+        'Use /files to attach local workspace files',
+        'Use @/path to search and attach files inline',
       ].join('\n'),
     },
   ];

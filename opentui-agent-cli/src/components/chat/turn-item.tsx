@@ -26,7 +26,12 @@ const PendingReply = () => {
 export const TurnItem = ({ turn, index, isPending = false }: TurnItemProps) => {
   return (
     <box flexDirection="column">
-      <PromptCard prompt={turn.prompt} createdAtMs={turn.createdAtMs} isFirst={index === 0} />
+      <PromptCard
+        prompt={turn.prompt}
+        files={turn.files}
+        createdAtMs={turn.createdAtMs}
+        isFirst={index === 0}
+      />
       {turn.reply ? <AssistantReply reply={turn.reply} /> : null}
       {isPending && !turn.reply ? <PendingReply /> : null}
     </box>

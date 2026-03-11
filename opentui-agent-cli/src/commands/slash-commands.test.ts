@@ -35,6 +35,10 @@ describe('slash-commands', () => {
       const modelsCommand = resolveSlashCommand('/models');
       expect(modelsCommand?.name).toBe('models');
       expect(modelsCommand?.action).toBe('models');
+
+      const filesCommand = resolveSlashCommand('/files');
+      expect(filesCommand?.name).toBe('files');
+      expect(filesCommand?.action).toBe('files');
     });
 
     it('should resolve commands with aliases', () => {
@@ -61,6 +65,10 @@ describe('slash-commands', () => {
       const modelsAlias1 = resolveSlashCommand('/model');
       expect(modelsAlias1?.name).toBe('models');
       expect(modelsAlias1?.action).toBe('models');
+
+      const filesAlias1 = resolveSlashCommand('/file');
+      expect(filesAlias1?.name).toBe('files');
+      expect(filesAlias1?.action).toBe('files');
     });
 
     it('should resolve commands with extra text after command', () => {
@@ -72,6 +80,9 @@ describe('slash-commands', () => {
 
       const modelsCommand = resolveSlashCommand('/models with space');
       expect(modelsCommand?.name).toBe('models');
+
+      const filesCommand = resolveSlashCommand('/files pick');
+      expect(filesCommand?.name).toBe('files');
     });
 
     it('should be case insensitive', () => {
@@ -84,12 +95,16 @@ describe('slash-commands', () => {
 
       expect(resolveSlashCommand('/MODELS')?.name).toBe('models');
       expect(resolveSlashCommand('/Models')?.name).toBe('models');
+
+      expect(resolveSlashCommand('/FILES')?.name).toBe('files');
+      expect(resolveSlashCommand('/File')?.name).toBe('files');
     });
 
     it('should handle commands with leading/trailing spaces', () => {
       expect(resolveSlashCommand('  /help  ')?.name).toBe('help');
       expect(resolveSlashCommand('\t/clear\n')?.name).toBe('clear');
       expect(resolveSlashCommand('  /models  please')?.name).toBe('models');
+      expect(resolveSlashCommand('  /files  now')?.name).toBe('files');
     });
 
     it('should return unsupported commands', () => {
@@ -169,7 +184,9 @@ describe('slash-commands', () => {
         expect(command.name).toBeDefined();
         expect(command.description).toBeDefined();
         expect(command.action).toBeDefined();
-        expect(['help', 'clear', 'exit', 'models', 'unsupported']).toContain(command.action);
+        expect(['help', 'clear', 'exit', 'models', 'files', 'unsupported']).toContain(
+          command.action
+        );
       });
     });
 
@@ -191,6 +208,9 @@ describe('slash-commands', () => {
 
       const modelsCommand = SLASH_COMMANDS.find(cmd => cmd.name === 'models');
       expect(modelsCommand?.aliases).toEqual(['model']);
+
+      const filesCommand = SLASH_COMMANDS.find(cmd => cmd.name === 'files');
+      expect(filesCommand?.aliases).toEqual(['file']);
     });
   });
 });
