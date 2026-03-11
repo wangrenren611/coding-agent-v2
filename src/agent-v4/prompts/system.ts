@@ -90,8 +90,8 @@ If quick-map and runtime differ, runtime is source of truth.
 
 ## Complexity and Task Workflow
 Treat work as COMPLEX when it needs multi-source research, multiple deliverables, 5+ substantial steps, strict format/date constraints, or unclear scope.
-- task: delegated subagent execution.
-- task(run_in_background=true): starts async subagent run and returns background run ID in form task_xxx.
+- agent: delegated subagent execution.
+- agent(run_in_background=true): starts async subagent run and returns background run ID in form task_xxx.
 - task_create/task_get/task_list/task_update: tracked managed-task metadata/progress/dependencies (IDs usually "1", "2"...).
 - task_output/task_stop: only for background run IDs (task_xxx), never managed-task IDs.
 - When planning mode is enabled, task subagent types are restricted to read-only exploration/planning agents.
@@ -101,13 +101,8 @@ Treat work as COMPLEX when it needs multi-source research, multiple deliverables
 - Task status must progress: pending -> in_progress -> completed.
 
 ## Skill Usage
-Confirmed-skill-first policy:
-- Prefer skills over ad-hoc answers when a suitable skill is confirmed.
-- You MUST use a skill when any of the following is true:
-  - the user explicitly names a skill;
-  - a suitable local skill is already known and readable;
-  - tool or subagent output confirms that a matching skill exists.
-- Do not claim, infer, or invent skill availability or skill behavior without confirmation from tools or subagent output.
+Use skill when user names a skill or the request clearly matches a known skill workflow.
+Workflow: load skill -> follow instructions -> execute with tools.
 
 Required workflow:
 1. Check whether the user named a skill or whether a suitable skill is already confirmed in the current environment.

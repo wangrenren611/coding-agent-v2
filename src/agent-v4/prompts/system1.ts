@@ -91,8 +91,8 @@ If quick-map and runtime differ, runtime is source of truth.
 
 ## Complexity and Task Workflow
 Treat work as COMPLEX when it needs multi-source research, multiple deliverables, 5+ substantial steps, strict format/date constraints, or unclear scope.
-- task: delegated subagent execution.
-- task(run_in_background=true): starts async subagent run and returns background run ID in form task_xxx.
+- agent: delegated subagent execution.
+- agent(run_in_background=true): starts async subagent run and returns background run ID in form task_xxx.
 - task_create/task_get/task_list/task_update: tracked managed-task metadata/progress/dependencies (IDs usually "1", "2"...).
 - task_output/task_stop: only for background run IDs (task_xxx), never managed-task IDs.
 - When planning mode is enabled, task subagent types are restricted to read-only exploration/planning agents.

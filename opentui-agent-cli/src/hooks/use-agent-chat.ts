@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { resolveSlashCommand } from '../commands/slash-commands';
-import { getAgentModelAttachmentCapabilities, getAgentModelLabel, runAgentPrompt } from '../agent/runtime/runtime';
+import {
+  getAgentModelAttachmentCapabilities,
+  getAgentModelLabel,
+  runAgentPrompt,
+} from '../agent/runtime/runtime';
 import type {
   AgentContextUsageEvent,
   AgentToolConfirmDecision,

@@ -1,4 +1,5 @@
 import { uiTheme } from '../../ui/theme';
+import { getToolDisplayIcon, getToolDisplayName } from '../tool-display-config';
 import { CodeBlock } from './code-block';
 import type { ToolSegmentGroup } from './segment-groups';
 
@@ -180,28 +181,7 @@ const parseToolResult = (content?: string, data?: unknown): ParsedToolResult | n
 };
 
 const resolveToolIcon = (toolName: string): string => {
-  if (toolName === 'task' || toolName.startsWith('task_')) {
-    return '◉';
-  }
-  if (toolName === 'bash') {
-    return '$';
-  }
-  if (toolName === 'write' || toolName === 'edit') {
-    return '←';
-  }
-  if (toolName === 'read' || toolName === 'list') {
-    return '→';
-  }
-  if (toolName === 'grep' || toolName === 'glob') {
-    return '✱';
-  }
-  if (toolName === 'webfetch') {
-    return '%';
-  }
-  if (toolName === 'task') {
-    return '◉';
-  }
-  return '⚙';
+  return getToolDisplayIcon(toolName);
 };
 
 const mergeOutputLines = (
@@ -327,15 +307,7 @@ const resolveStructuredResultObject = (
 };
 
 const formatToolName = (toolName: string): string => {
-  if (toolName === 'task') {
-    return 'task run';
-  }
-
-  if (toolName.startsWith('task_')) {
-    return toolName.replace(/^task_/, 'task ').replace(/_/g, ' ');
-  }
-
-  return toolName;
+  return getToolDisplayName(toolName);
 };
 
 const truncate = (value: string, maxLength = 88): string => {
@@ -538,7 +510,7 @@ const buildTaskHeaderDetail = (
     ]);
   }
 
-  if (toolName === 'task') {
+  if (toolName === 'agent' || toolName === 'task') {
     const prompt = readString(args.prompt);
     const description = readString(args.description);
     return formatSummaryMeta([
@@ -628,7 +600,7 @@ const buildTaskResultSections = (
     return sections;
   }
 
-  if (toolName === 'task_output' || toolName === 'task') {
+  if (toolName === 'task_output' || toolName === 'task' || toolName === 'agent') {
     const run = readObject(payload.agent_run);
     if (run) {
       const summary = summarizeAgentRun(run, payload);
@@ -760,7 +732,7 @@ const buildSpecialToolPresentation = (
   parsedResult: ParsedToolResult | null
 ): SpecialToolPresentation | null => {
   const args = parsedUse?.args ?? parseJsonObject(parsedUse?.details);
-  if (toolName === 'task' || toolName.startsWith('task_')) {
+  if (toolName === 'agent' || toolName === 'task' || toolName.startsWith('task_')) {
     const sections = buildTaskResultSections(toolName, parsedResult);
 
     return {

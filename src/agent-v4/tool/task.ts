@@ -67,7 +67,7 @@ export interface TaskToolOptions {
 }
 
 export class TaskTool extends BaseTool<typeof schema> {
-  name = 'task';
+  name = 'agent';
   description = TASK_TOOL_DESCRIPTION;
   parameters = schema;
 

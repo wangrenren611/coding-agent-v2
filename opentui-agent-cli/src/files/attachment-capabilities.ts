@@ -14,13 +14,18 @@ export const DEFAULT_ATTACHMENT_MODEL_CAPABILITIES: AttachmentModelCapabilities 
 
 const normalizeFlag = (value: boolean | undefined): boolean => value === true;
 
-export const resolveAttachmentModelCapabilities = (modelConfig: {
-  modalities?: {
-    image?: boolean;
-    audio?: boolean;
-    video?: boolean;
-  };
-} | null | undefined): AttachmentModelCapabilities => {
+export const resolveAttachmentModelCapabilities = (
+  modelConfig:
+    | {
+        modalities?: {
+          image?: boolean;
+          audio?: boolean;
+          video?: boolean;
+        };
+      }
+    | null
+    | undefined
+): AttachmentModelCapabilities => {
   return {
     image: normalizeFlag(modelConfig?.modalities?.image),
     audio: normalizeFlag(modelConfig?.modalities?.audio),

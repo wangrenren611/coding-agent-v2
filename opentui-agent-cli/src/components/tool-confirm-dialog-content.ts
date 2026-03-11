@@ -1,4 +1,5 @@
 import type { AgentToolConfirmEvent } from '../agent/runtime/types';
+import { getToolHiddenArgumentKeys, getToolDisplayName } from './tool-display-config';
 
 export type ToolConfirmDialogContent = {
   summary: string;
@@ -102,20 +103,10 @@ const formatArgumentValue = (
   };
 };
 
-const REDUNDANT_ARGUMENT_KEYS: Partial<Record<string, string[]>> = {
-  bash: ['command', 'description'],
-  file_read: ['path'],
-  file_edit: ['path'],
-  write_file: ['path'],
-  glob: ['pattern', 'path'],
-  grep: ['pattern', 'path'],
-  task: ['subagent_type', 'description'],
-};
-
 const buildArgumentItems = (
   event: AgentToolConfirmEvent
 ): ToolConfirmDialogContent['argumentItems'] => {
-  const hiddenKeys = new Set(REDUNDANT_ARGUMENT_KEYS[event.toolName] ?? []);
+  const hiddenKeys = new Set(getToolHiddenArgumentKeys(event.toolName));
 
   return Object.entries(asRecord(event.args)).flatMap(([key, value]) => {
     if (hiddenKeys.has(key)) {
@@ -166,10 +157,13 @@ const buildSummary = (event: AgentToolConfirmEvent): { summary: string; detail?:
         detail: `Path: ${formatPathTarget(args.path)}`,
       };
     case 'task':
+    case 'agent': {
+      const displayName = getToolDisplayName(event.toolName).replace(/\s+run$/i, '');
       return {
-        summary: `Run task ${(readString(args.subagent_type) ?? 'agent').trim()}`,
+        summary: `Run ${displayName} ${(readString(args.subagent_type) ?? 'agent').trim()}`,
         detail: readString(args.description),
       };
+    }
     default:
       return { summary: `Call ${event.toolName}` };
   }

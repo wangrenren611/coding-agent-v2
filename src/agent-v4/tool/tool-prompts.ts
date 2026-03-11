@@ -68,22 +68,41 @@ Usage notes:
 - Provide plain text content directly, not Markdown code fences.
 - Avoid creating new documentation files unless the user explicitly asks.`;
 
-export const TASK_TOOL_DESCRIPTION = `The Task tool launches specialized subagents that autonomously handle complex work.
+export const TASK_TOOL_DESCRIPTION = `Launch a new agent to handle complex, multi-step tasks autonomously.
 
-Available subagent types:
-- Bash: terminal and command execution specialist.
-- general-purpose: broad multi-step research and implementation agent.
-- Explore: fast codebase exploration and discovery agent.
-- Plan: implementation planning and architecture strategy agent.
-- research-agent: long-form research and synthesis agent.
-- claude-code-guide: coding guidance and navigation focused agent.
-- find-skills: local skill lookup + installation guidance agent.
+The Agent tool launches specialized subagents that autonomously handle complex work. Each subagent type has a specific role and an explicit tool allowlist.
+
+Available subagent types and their default tools:
+- Bash: terminal and command execution specialist. Use for focused shell work. (Tools: bash)
+- general-purpose: broad multi-step research and implementation agent. Use when the task may require several rounds of searching, reading, editing, and verification. (Tools: bash, glob, grep, file_read, file_edit, write_file, skill)
+- Explore: fast codebase exploration and discovery agent. Use for open-ended codebase exploration, pattern-based file discovery, and multi-round keyword searches. (Tools: glob, grep, file_read, skill)
+- Plan: implementation planning and architecture strategy agent. Use when you need a concrete implementation plan, critical file list, risks, and trade-offs before editing code. (Tools: glob, grep, file_read, skill)
+- research-agent: long-form research and synthesis agent. Use when you need evidence collection and structured findings from local project context. (Tools: glob, grep, file_read, skill)
+- claude-code-guide: coding guidance and navigation focused agent. Use when you need concise, codebase-grounded implementation direction or file/navigation help. (Tools: glob, grep, file_read, skill)
+- find-skills: local skill lookup + installation guidance agent. Use to discover the right skill, prefer local skills first, and fall back to verified installation steps when needed. (Tools: skill, bash)
+
+When to use the Agent tool:
+- Complex, multi-step work that benefits from delegation.
+- Open-ended exploration or research that will likely take multiple searches.
+- Parallel, independent branches of investigation.
+- Broad codebase search when you are not confident a direct glob/grep query will find the right match in the first few tries.
+
+When NOT to use the Agent tool:
+- If you already know the file path, use file_read.
+- If you need a direct filename/pattern match, use glob.
+- If you need exact content search, use grep.
+- If you only need to inspect one file or a small known set of files, use direct tools instead.
 
 Usage notes:
-- Always include a short description (3-5 words) for the subagent run.
-- Use Task for open-ended exploration, parallel research branches, and multi-step workflows.
-- For direct needle queries, prefer direct tools first (glob/grep/file_read/file_edit).
-- Launch multiple task calls in parallel when work is independent.`;
+- Always include a short description (3-5 words) summarizing the subagent run.
+- Always set subagent_type explicitly to the agent you want.
+- Use foreground execution when you need the result before continuing.
+- Use run_in_background=true only when the work is genuinely independent.
+- For background runs, use task_output to retrieve status/output later and task_stop to cancel when needed.
+- Launch multiple task calls in parallel when the work is independent.
+- The subagent result is returned to you through the tool response; summarize relevant findings to the user.
+- Provide a clear prompt that states whether the subagent should research only or also make code changes.
+- For direct needle queries, prefer direct tools first (glob/grep/file_read/file_edit).`;
 
 export const TASK_CREATE_DESCRIPTION = `Use this tool to create a structured task list entry for the current coding session.
 
@@ -133,13 +152,7 @@ Usage:
 - Or provide task_id to resolve the linked agent run.
 - Optionally cancel linked planning tasks in the same call.`;
 
-export const TASK_OUTPUT_DESCRIPTION = `Retrieves output and status from a running or completed subagent execution.
-
-Usage:
-- Target by agent_id or linked task_id.
-- block=true waits for terminal status (default).
-- block=false returns immediate current status.
-- timeout_ms controls wait duration when blocking.`;
+export const TASK_OUTPUT_DESCRIPTION = `Retrieves output from a running or completed task (background shell, agent, or remote session) - Takes a task_id parameter identifying the task - Returns the task output along with status information - Use block=true (default) to wait for task completion - Use block=false for non-blocking check of current status - Task IDs can be found using the /tasks command - Works with all task types: background shells, async agents, and remote sessions`;
 
 export const SKILL_TOOL_BASE_DESCRIPTION = `Load a skill to get detailed task-specific instructions.
 Skills contain specialized workflows and reusable operational context.`;
