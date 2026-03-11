@@ -145,15 +145,19 @@ describe('AgentAppService', () => {
         {
           index: 0,
           choices: [{ index: 0, delta: { content: 'usage-demo' } }],
+        },
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+        },
+        {
+          index: 0,
+          choices: [],
           usage: {
             prompt_tokens: 120,
             completion_tokens: 30,
             total_tokens: 150,
           },
-        },
-        {
-          index: 0,
-          choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
         },
       ])
     );
@@ -232,6 +236,88 @@ describe('AgentAppService', () => {
       expectedContextUsage.contextUsagePercent,
       6
     );
+  });
+
+  it('forwards onContextUsage immediately before usage events', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi.fn().mockReturnValue(
+      toStream([
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { content: 'context-demo' } }],
+          usage: {
+            prompt_tokens: 42,
+            completion_tokens: 8,
+            total_tokens: 50,
+          },
+        },
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+        },
+      ])
+    );
+
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-app-service-context-'));
+    store = new SqliteAgentAppStore(path.join(tempDir, 'agent.db'));
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 2,
+      backoffConfig: { initialDelayMs: 1, maxDelayMs: 1, base: 2, jitter: false },
+    });
+    const app = new AgentAppService({
+      agent,
+      executionStore: store,
+      eventStore: store,
+      messageStore: store,
+    });
+
+    const callOrder: string[] = [];
+    const contextEvents: Array<{
+      stepIndex: number;
+      messageCount: number;
+      contextTokens: number;
+      contextLimitTokens: number;
+      contextUsagePercent: number;
+    }> = [];
+    const usageEvents: Array<{ stepIndex: number }> = [];
+
+    await app.runForeground(
+      {
+        conversationId: 'conv_context_usage',
+        executionId: 'exec_context_usage',
+        userInput: 'Show context',
+        maxSteps: 3,
+      },
+      {
+        onContextUsage: ((usage: {
+          stepIndex: number;
+          messageCount: number;
+          contextTokens: number;
+          contextLimitTokens: number;
+          contextUsagePercent: number;
+        }) => {
+          callOrder.push('context');
+          contextEvents.push(usage);
+        }) as (usage: {
+          stepIndex: number;
+          messageCount: number;
+          contextTokens: number;
+          contextLimitTokens: number;
+          contextUsagePercent: number;
+        }) => void,
+        onUsage: (usage) => {
+          callOrder.push('usage');
+          usageEvents.push({ stepIndex: usage.stepIndex });
+        },
+      } as Parameters<AgentAppService['runForeground']>[1]
+    );
+
+    expect(contextEvents).toHaveLength(1);
+    expect(usageEvents).toHaveLength(1);
+    expect(callOrder).toEqual(['context', 'usage']);
+    expect(contextEvents[0]?.stepIndex).toBe(1);
+    expect(contextEvents[0]?.messageCount).toBeGreaterThan(0);
   });
 
   it('maps aborted execution to CANCELLED terminal state', async () => {

@@ -6,7 +6,11 @@ export type ToolConfirmDialogContent = {
   reason?: string;
   requestedPath?: string;
   allowedDirectories: string[];
-  argumentsBlock?: string;
+  argumentItems: Array<{
+    label: string;
+    value: string;
+    multiline?: boolean;
+  }>;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> => {
@@ -36,6 +40,101 @@ const stringifyPretty = (value: unknown): string | undefined => {
 
 const formatPathTarget = (value: unknown, fallback = '.'): string => {
   return readString(value) ?? fallback;
+};
+
+const parseJsonLike = (value: unknown): unknown => {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  if (
+    trimmed.length < 2 ||
+    !(
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    )
+  ) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const humanizeKey = (key: string): string => {
+  return key
+    .split('_')
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
+const formatArgumentValue = (
+  value: unknown
+): { value: string; multiline?: boolean } | undefined => {
+  const normalized = parseJsonLike(value);
+
+  if (typeof normalized === 'string') {
+    return normalized.trim().length > 0
+      ? {
+          value: normalized,
+          multiline: normalized.includes('\n'),
+        }
+      : undefined;
+  }
+
+  if (typeof normalized === 'number' || typeof normalized === 'boolean') {
+    return { value: String(normalized) };
+  }
+
+  const pretty = stringifyPretty(normalized);
+  if (!pretty) {
+    return undefined;
+  }
+
+  return {
+    value: pretty,
+    multiline: true,
+  };
+};
+
+const REDUNDANT_ARGUMENT_KEYS: Partial<Record<string, string[]>> = {
+  bash: ['command', 'description'],
+  file_read: ['path'],
+  file_edit: ['path'],
+  write_file: ['path'],
+  glob: ['pattern', 'path'],
+  grep: ['pattern', 'path'],
+  task: ['subagent_type', 'description'],
+};
+
+const buildArgumentItems = (
+  event: AgentToolConfirmEvent
+): ToolConfirmDialogContent['argumentItems'] => {
+  const hiddenKeys = new Set(REDUNDANT_ARGUMENT_KEYS[event.toolName] ?? []);
+
+  return Object.entries(asRecord(event.args)).flatMap(([key, value]) => {
+    if (hiddenKeys.has(key)) {
+      return [];
+    }
+
+    const formatted = formatArgumentValue(value);
+    if (!formatted) {
+      return [];
+    }
+
+    return [
+      {
+        label: humanizeKey(key),
+        value: formatted.value,
+        multiline: formatted.multiline,
+      },
+    ];
+  });
 };
 
 const buildSummary = (event: AgentToolConfirmEvent): { summary: string; detail?: string } => {
@@ -72,10 +171,7 @@ const buildSummary = (event: AgentToolConfirmEvent): { summary: string; detail?:
         detail: readString(args.description),
       };
     default:
-      return {
-        summary: `Call ${event.toolName}`,
-        detail: stringifyPretty(args),
-      };
+      return { summary: `Call ${event.toolName}` };
   }
 };
 
@@ -91,6 +187,6 @@ export const buildToolConfirmDialogContent = (
     reason: readString(event.reason),
     requestedPath: readString(metadata.requestedPath),
     allowedDirectories: readStringArray(metadata.allowedDirectories),
-    argumentsBlock: stringifyPretty(event.args),
+    argumentItems: buildArgumentItems(event),
   };
 };

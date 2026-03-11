@@ -60,8 +60,8 @@ This example registers built-in file/shell tools:
   file_read / file_write / file_edit / file_stat
 
 Env:
-  AGENT_AUTO_CONFIRM_TOOLS=true   # 自动同意所有待确认工具调用
-  AGENT_AUTO_CONFIRM_TOOLS=false  # 自动拒绝所有待确认工具调用
+  AGENT_TOOL_CONFIRMATION_MODE=auto-approve  # 自动同意所有待确认工具调用
+  AGENT_TOOL_CONFIRMATION_MODE=auto-deny     # 自动拒绝所有待确认工具调用
 `);
 }
 
@@ -165,14 +165,14 @@ function createConsoleStreamPlugin(): Plugin {
 }
 
 function parseAutoConfirmDecision(): ToolConfirmDecision | undefined {
-  const raw = process.env.AGENT_AUTO_CONFIRM_TOOLS?.trim().toLowerCase();
+  const raw = process.env.AGENT_TOOL_CONFIRMATION_MODE?.trim().toLowerCase();
   if (!raw) {
     return undefined;
   }
-  if (raw === '1' || raw === 'true' || raw === 'yes' || raw === 'y') {
+  if (raw === 'auto-approve') {
     return 'approve';
   }
-  if (raw === '0' || raw === 'false' || raw === 'no' || raw === 'n') {
+  if (raw === 'auto-deny') {
     return 'deny';
   }
   return undefined;

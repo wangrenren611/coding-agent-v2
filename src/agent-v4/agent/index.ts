@@ -14,7 +14,6 @@ import { EventEmitter } from 'events';
 import {
   AgentAbortedError,
   AgentError,
-  ConfirmationTimeoutError,
   MaxRetriesError,
   TimeoutBudgetExceededError,
   UnknownError,
@@ -713,6 +712,7 @@ export class StatelessAgent extends EventEmitter {
     };
 
     let toolCalls: ToolCall[] = [];
+    let finished = false;
 
     for await (const chunk of stream) {
       this.throwIfAborted(abortSignal);
@@ -721,6 +721,10 @@ export class StatelessAgent extends EventEmitter {
 
       if (chunk.usage) {
         assistantMessage.usage = chunk.usage;
+      }
+
+      if (finished) {
+        continue;
       }
 
       if (typeof delta?.content === 'string') {
@@ -773,7 +777,7 @@ export class StatelessAgent extends EventEmitter {
         choices?.[0]?.finish_reason ||
         (delta as { finish_reason?: string } | undefined)?.finish_reason;
       if (finishReason) {
-        break;
+        finished = true;
       }
     }
 
@@ -838,23 +842,13 @@ export class StatelessAgent extends EventEmitter {
                 const abortHandler = () => {
                   if (!settled) {
                     settled = true;
-                    clearTimeout(timeout);
                     resolve({ approved: false, message: ABORTED_MESSAGE });
                   }
                 };
 
-                const timeout = setTimeout(() => {
-                  if (!settled) {
-                    settled = true;
-                    const err = new ConfirmationTimeoutError();
-                    resolve({ approved: false, message: err.message });
-                  }
-                }, 30000);
-
                 const cleanup = () => {
                   if (!settled) {
                     settled = true;
-                    clearTimeout(timeout);
                   }
                   abortSignal?.removeEventListener('abort', abortHandler);
                 };

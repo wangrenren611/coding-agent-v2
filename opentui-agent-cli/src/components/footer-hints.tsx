@@ -20,7 +20,7 @@ export const FooterHints = ({ isThinking, contextUsagePercent }: FooterHintsProp
   const contextUsageLabel =
     typeof contextUsagePercent === 'number' && Number.isFinite(contextUsagePercent)
       ? `${Math.max(0, Math.round(contextUsagePercent))}%`
-      : '0%';
+      : '--';
 
   useEffect(() => {
     if (!isThinking) {

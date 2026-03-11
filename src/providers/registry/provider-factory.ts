@@ -55,6 +55,8 @@ export class ProviderFactory {
       enableStreamUsage: overrides?.enableStreamUsage,
       tool_stream: overrides?.tool_stream ?? modelConfig.tool_stream,
       thinking: overrides?.thinking ?? modelConfig.thinking,
+      model_reasoning_effort:
+        overrides?.model_reasoning_effort ?? modelConfig.model_reasoning_effort,
     };
 
     const adapter = ProviderFactory.createAdapter(modelId, finalConfig.logger);

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { resolveSlashCommand } from '../commands/slash-commands';
 import { getAgentModelLabel, runAgentPrompt } from '../agent/runtime/runtime';
 import type {
+  AgentContextUsageEvent,
   AgentToolConfirmDecision,
   AgentToolConfirmEvent,
   AgentUsageEvent,
@@ -42,7 +43,7 @@ export type UseAgentChatResult = {
   rejectPendingToolConfirm: () => void;
 };
 
-const INITIAL_MODEL_LABEL = process.env.AGENT_MODEL?.trim() || 'glm-5';
+const INITIAL_MODEL_LABEL = process.env.AGENT_MODEL?.trim() || '';
 
 const normalizeTokenCount = (value: number | undefined): number | undefined => {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -228,7 +229,7 @@ export const useAgentChat = (): UseAgentChatResult => {
     activeTurnIdRef.current = null;
     setIsThinking(false);
     setTurns([]);
-    setContextUsagePercent(null);
+    setContextUsagePercent(() => null);
   }, [resolvePendingToolConfirm]);
 
   const addTurn = useCallback(
@@ -328,8 +329,6 @@ export const useAgentChat = (): UseAgentChatResult => {
       const abortController = new AbortController();
       activeAbortControllerRef.current = abortController;
 
-      // Reset context usage at the start of each request to avoid showing stale data
-      setContextUsagePercent(null);
       setIsThinking(true);
 
       const baseHandlers = buildAgentEventHandlers({
@@ -390,6 +389,15 @@ export const useAgentChat = (): UseAgentChatResult => {
               };
             })
           );
+        },
+        onContextUsage: (event: AgentContextUsageEvent) => {
+          if (!isCurrentRequest()) {
+            return;
+          }
+          const normalized = normalizeContextUsagePercent(event.contextUsagePercent);
+          if (normalized !== null) {
+            setContextUsagePercent(normalized);
+          }
         },
       };
 

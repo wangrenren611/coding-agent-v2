@@ -1,5 +1,6 @@
 import { isAbsolute, resolve as resolvePath } from 'node:path';
 import type {
+  AgentContextUsageEvent,
   AgentEventHandlers,
   AgentLoopEvent,
   AgentRunResult,
@@ -15,6 +16,7 @@ import type {
 import type { AgentModelOption, AgentModelSwitchResult } from './model-types';
 import { resolveToolConfirmDecision } from './tool-confirmation';
 import {
+  type AgentAppContextUsageLike,
   type AgentAppUsageLike,
   type AgentAppRunResultLike,
   type AgentAppServiceLike,
@@ -50,10 +52,10 @@ let runtimePromise: Promise<RuntimeCore> | null = null;
 let initializing = false;
 let preferredModelId = process.env.AGENT_MODEL?.trim() || undefined;
 
-const DEFAULT_MODEL = 'glm-5';
-const DEFAULT_MAX_STEPS = 200;
-const DEFAULT_MAX_RETRY_COUNT = 2;
-const DEFAULT_DB_PATH = '.agent-v4/agent.db';
+const DEFAULT_MODEL = 'qwen3.5-plus';
+const DEFAULT_MAX_STEPS = 10000;
+const DEFAULT_MAX_RETRY_COUNT = 10;
+const DEFAULT_DB_PATH = '/Users/wrr/.agent-v4/agent.db';
 
 const parsePositiveInt = (raw: string | undefined, fallback: number): number => {
   if (!raw || raw.trim().length === 0) {
@@ -153,6 +155,33 @@ const toUsageEventFromApp = (usage: AgentAppUsageLike): AgentUsageEvent => {
       typeof usage.contextUsagePercent === 'number' && Number.isFinite(usage.contextUsagePercent)
         ? Math.max(0, usage.contextUsagePercent)
         : undefined,
+  };
+};
+
+const toContextUsageEventFromApp = (
+  usage: AgentAppContextUsageLike
+): AgentContextUsageEvent | null => {
+  if (
+    typeof usage.stepIndex !== 'number' ||
+    !Number.isFinite(usage.stepIndex) ||
+    typeof usage.messageCount !== 'number' ||
+    !Number.isFinite(usage.messageCount) ||
+    typeof usage.contextTokens !== 'number' ||
+    !Number.isFinite(usage.contextTokens) ||
+    typeof usage.contextLimitTokens !== 'number' ||
+    !Number.isFinite(usage.contextLimitTokens) ||
+    typeof usage.contextUsagePercent !== 'number' ||
+    !Number.isFinite(usage.contextUsagePercent)
+  ) {
+    return null;
+  }
+
+  return {
+    stepIndex: Math.max(0, usage.stepIndex),
+    messageCount: Math.max(0, usage.messageCount),
+    contextTokens: Math.max(0, usage.contextTokens),
+    contextLimit: Math.max(0, usage.contextLimitTokens),
+    contextUsagePercent: Math.max(0, usage.contextUsagePercent),
   };
 };
 
@@ -545,6 +574,13 @@ export const runAgentPrompt = async (
         abortSignal: options.abortSignal,
       },
       {
+        onContextUsage: usage => {
+          const contextUsageEvent = toContextUsageEventFromApp(usage);
+          if (!contextUsageEvent) {
+            return;
+          }
+          safeInvoke(() => handlers.onContextUsage?.(contextUsageEvent));
+        },
         onUsage: usage => {
           const usageEvent = toUsageEventFromApp(usage);
           latestUsageEvent = usageEvent;

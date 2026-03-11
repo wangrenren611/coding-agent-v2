@@ -155,6 +155,24 @@ describe('ProviderRegistry', () => {
       expect(provider.config.tool_stream).toBe(true);
     });
 
+    it('should use model default model_reasoning_effort', () => {
+      process.env.OPENAI_API_KEY = 'test-openai-key';
+
+      const provider = ProviderRegistry.createFromEnv('gpt-5.3');
+
+      expect(provider.config.model_reasoning_effort).toBe('high');
+    });
+
+    it('should accept model_reasoning_effort override', () => {
+      process.env.OPENAI_API_KEY = 'test-openai-key';
+
+      const provider = ProviderRegistry.createFromEnv('gpt-5.3', {
+        model_reasoning_effort: 'medium',
+      });
+
+      expect(provider.config.model_reasoning_effort).toBe('medium');
+    });
+
     it('should allow max_tokens and LLMMAX_TOKENS overrides', () => {
       process.env.GLM_API_KEY = 'test-key';
 

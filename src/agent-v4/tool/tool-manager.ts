@@ -31,10 +31,13 @@ interface BashRule {
   message: string;
 }
 
+export type ToolConfirmationMode = 'manual' | 'auto-approve' | 'auto-deny';
+
 export interface ToolManagerConfig {
   enableBuiltInPolicy?: boolean;
   dangerousBashRules?: BashRule[];
   restrictedWritePathPrefixes?: string[];
+  confirmationMode?: ToolConfirmationMode;
 }
 
 const DEFAULT_DANGEROUS_BASH_RULES: BashRule[] = [
@@ -64,6 +67,23 @@ const DEFAULT_RESTRICTED_WRITE_PREFIXES = [
   '/private/etc',
 ];
 
+const TOOL_CONFIRMATION_MODE_ENV = 'AGENT_TOOL_CONFIRMATION_MODE';
+
+const normalizeConfirmationMode = (raw?: string): ToolConfirmationMode => {
+  if (!raw || raw.trim().length === 0) {
+    return 'manual';
+  }
+
+  const normalized = raw.trim().toLowerCase().replace(/_/g, '-');
+  if (normalized === 'manual' || normalized === 'auto-approve' || normalized === 'auto-deny') {
+    return normalized;
+  }
+
+  throw new Error(
+    `Invalid ${TOOL_CONFIRMATION_MODE_ENV}: "${raw}" (expected "manual", "auto-approve", or "auto-deny")`
+  );
+};
+
 export interface ToolManager {
   execute(toolCall: ToolCall, options?: ToolExecutionContext): Promise<ToolResult>;
   registerTool(tool: BaseTool): void;
@@ -79,6 +99,7 @@ export class DefaultToolManager implements ToolManager {
   private readonly enableBuiltInPolicy: boolean;
   private readonly dangerousBashRules: BashRule[];
   private readonly restrictedWritePathPrefixes: string[];
+  private readonly confirmationMode: ToolConfirmationMode;
 
   constructor(config: ToolManagerConfig = {}) {
     this.enableBuiltInPolicy = config.enableBuiltInPolicy ?? true;
@@ -86,6 +107,8 @@ export class DefaultToolManager implements ToolManager {
     this.restrictedWritePathPrefixes = (
       config.restrictedWritePathPrefixes ?? DEFAULT_RESTRICTED_WRITE_PREFIXES
     ).map((prefix) => path.resolve(prefix));
+    this.confirmationMode =
+      config.confirmationMode ?? normalizeConfirmationMode(process.env[TOOL_CONFIRMATION_MODE_ENV]);
   }
 
   async execute(toolCall: ToolCall, options: ToolExecutionContext): Promise<ToolResult> {
@@ -157,7 +180,26 @@ export class DefaultToolManager implements ToolManager {
     const needsConfirm = handler.shouldConfirm(validationResult.data) || Boolean(confirmDetails);
     let executionContext = options;
 
-    if (needsConfirm && options?.onConfirm) {
+    if (needsConfirm && this.confirmationMode === 'auto-deny') {
+      const err = new ToolDeniedError(
+        toolName,
+        `Denied by ${TOOL_CONFIRMATION_MODE_ENV}=auto-deny`
+      );
+      return {
+        success: false,
+        error: err,
+        output: err.message,
+      };
+    }
+
+    if (needsConfirm && this.confirmationMode === 'auto-approve') {
+      executionContext = {
+        ...options,
+        confirmationApproved: true,
+      };
+    }
+
+    if (needsConfirm && this.confirmationMode === 'manual' && options?.onConfirm) {
       const confirmInfo: ToolConfirmInfo = {
         toolCallId: toolCall.id,
         toolName,

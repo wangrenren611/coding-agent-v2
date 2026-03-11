@@ -799,8 +799,8 @@ function isPathAllowed(path: string): boolean {
 
 #### 3. 工具调用确认
 ```typescript
-// 默认需要用户确认
-if (process.env.AGENT_AUTO_CONFIRM_TOOLS !== 'true') {
+// 默认需要用户确认；可通过全局模式改为自动通过
+if (process.env.AGENT_TOOL_CONFIRMATION_MODE !== 'auto-approve') {
   const decision = await waitForUserConfirmation(toolCall);
   return decision; // 'approve' | 'deny'
 }

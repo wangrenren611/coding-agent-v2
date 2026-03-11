@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { BaseTool, ToolResult } from '../base-tool';
 import { DefaultToolManager } from '../tool-manager';
@@ -95,6 +95,16 @@ function createContext(partial?: Partial<ToolExecutionContext>): ToolExecutionCo
 }
 
 describe('DefaultToolManager', () => {
+  const originalConfirmationMode = process.env.AGENT_TOOL_CONFIRMATION_MODE;
+
+  afterEach(() => {
+    if (originalConfirmationMode === undefined) {
+      delete process.env.AGENT_TOOL_CONFIRMATION_MODE;
+      return;
+    }
+    process.env.AGENT_TOOL_CONFIRMATION_MODE = originalConfirmationMode;
+  });
+
   it('returns EmptyToolNameError when tool name is empty', async () => {
     const manager = new DefaultToolManager();
 
@@ -314,6 +324,63 @@ describe('DefaultToolManager', () => {
     expect(execSpy).toHaveBeenCalledOnce();
     expect(result.success).toBe(true);
     expect(result.output).toBe('no-confirm');
+  });
+
+  it('auto-approves confirmations from env without invoking callback', async () => {
+    process.env.AGENT_TOOL_CONFIRMATION_MODE = 'auto-approve';
+    const manager = new DefaultToolManager();
+    const tool = new ConfirmEchoTool();
+    const execSpy = vi.spyOn(tool, 'execute');
+    manager.registerTool(tool);
+
+    const onConfirm = vi.fn();
+    const result = await manager.execute(
+      {
+        id: 't7_auto_approve',
+        type: 'function',
+        index: 0,
+        function: { name: 'confirm-echo', arguments: '{"input":"approved-by-env"}' },
+      },
+      createContext({ onConfirm })
+    );
+
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(execSpy).toHaveBeenCalledOnce();
+    expect(execSpy.mock.calls[0]?.[1]?.confirmationApproved).toBe(true);
+    expect(result.success).toBe(true);
+    expect(result.output).toBe('approved-by-env');
+  });
+
+  it('auto-denies confirmations from env before invoking callback', async () => {
+    process.env.AGENT_TOOL_CONFIRMATION_MODE = 'auto-deny';
+    const manager = new DefaultToolManager();
+    manager.registerTool(new ConfirmEchoTool());
+
+    const onConfirm = vi.fn();
+    const result = await manager.execute(
+      {
+        id: 't7_auto_deny',
+        type: 'function',
+        index: 0,
+        function: { name: 'confirm-echo', arguments: '{"input":"denied-by-env"}' },
+      },
+      createContext({ onConfirm })
+    );
+
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(result.success).toBe(false);
+    expect(result.error).toBeInstanceOf(ToolDeniedError);
+    expect(result.output).toBe(
+      'Tool confirm-echo denied: Denied by AGENT_TOOL_CONFIRMATION_MODE=auto-deny'
+    );
+  });
+
+  it('throws for invalid confirmation mode env values', () => {
+    process.env.AGENT_TOOL_CONFIRMATION_MODE = 'sometimes';
+
+    expect(() => new DefaultToolManager()).toThrow(
+      'Invalid AGENT_TOOL_CONFIRMATION_MODE: "sometimes" (expected "manual", "auto-approve", or "auto-deny")'
+    );
   });
 
   it('wraps handler execution error with ToolExecutionError and emits stderr chunk', async () => {

@@ -136,6 +136,70 @@ describe('OpenAICompatibleProvider request options', () => {
     expect(requestBody.tool_stream).toBe(true);
   });
 
+  it('should use provider config model_reasoning_effort by default', async () => {
+    const provider = new OpenAICompatibleProvider({
+      apiKey: 'test-key',
+      baseURL: 'https://api.example.com',
+      model: 'gpt-4',
+      temperature: 0.7,
+      max_tokens: 2000,
+      LLMMAX_TOKENS: 8000,
+      model_reasoning_effort: 'high',
+    });
+
+    const fetchSpy = vi.spyOn(provider.httpClient, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 'test-id',
+        object: 'chat.completion',
+        created: 1234567890,
+        model: 'gpt-4',
+        choices: [
+          { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+        ],
+      }),
+    } as Response);
+
+    await provider.generate([{ role: 'user', content: 'hello' }]);
+
+    const requestBody = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(requestBody.model_reasoning_effort).toBe('high');
+  });
+
+  it('should allow request model_reasoning_effort to override provider default', async () => {
+    const provider = new OpenAICompatibleProvider({
+      apiKey: 'test-key',
+      baseURL: 'https://api.example.com',
+      model: 'gpt-4',
+      temperature: 0.7,
+      max_tokens: 2000,
+      LLMMAX_TOKENS: 8000,
+      model_reasoning_effort: 'medium',
+    });
+
+    const fetchSpy = vi.spyOn(provider.httpClient, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 'test-id',
+        object: 'chat.completion',
+        created: 1234567890,
+        model: 'gpt-4',
+        choices: [
+          { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+        ],
+      }),
+    } as Response);
+
+    await provider.generate([{ role: 'user', content: 'hello' }], {
+      model_reasoning_effort: 'high',
+    });
+
+    const requestBody = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(requestBody.model_reasoning_effort).toBe('high');
+  });
+
   it('should not send thinking flag in standard adapter request body', async () => {
     const provider = new OpenAICompatibleProvider({
       apiKey: 'test-key',

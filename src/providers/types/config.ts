@@ -53,4 +53,6 @@ export interface OpenAICompatibleConfig extends BaseProviderConfig {
   enableStreamUsage?: boolean;
   /** 默认是否启用工具流式输出（请求级可被 generate options 覆盖） */
   tool_stream?: boolean;
+  /** 默认推理强度（请求级可被 generate options 覆盖） */
+  model_reasoning_effort?: 'low' | 'medium' | 'high';
 }

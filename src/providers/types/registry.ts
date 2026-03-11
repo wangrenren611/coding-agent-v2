@@ -39,7 +39,9 @@ export type ModelId =
   | 'wr-claude-4.6'
   | 'qwen3.5-max'
   | 'qwen-minimax-2.5'
-  | 'deepseek-reasoner';
+  | 'deepseek-reasoner'
+  | 'gpt-5.3'
+  | 'gpt-5.4';
 
 /**
  * 模型配置
@@ -75,4 +77,5 @@ export interface ModelConfig {
   tool_stream?: boolean;
   thinking?: boolean;
   timeout?: number;
+  model_reasoning_effort?: 'low' | 'medium' | 'high';
 }

@@ -24,6 +24,7 @@ export const MODEL_DEFINITIONS: Record<ModelId, Omit<ModelConfig, 'apiKey'>> = {
     LLMMAX_TOKENS: 1000 * 1000,
     features: ['streaming', 'function-calling', 'vision'],
   },
+
   // GLM 系列
   'glm-4.7': {
     id: 'glm-4.7',
@@ -175,5 +176,33 @@ export const MODEL_DEFINITIONS: Record<ModelId, Omit<ModelConfig, 'apiKey'>> = {
     max_tokens: 16384,
     LLMMAX_TOKENS: 1000 * 1000,
     features: ['streaming', 'function-calling', 'vision'],
+  },
+  'gpt-5.3': {
+    id: 'gpt-5.3',
+    provider: 'openai',
+    name: 'GPT-5.3',
+    baseURL: '',
+    endpointPath: '/chat/completions',
+    envApiKey: 'OPENAI_API_KEY',
+    envBaseURL: 'OPENAI_API_BASE',
+    model: 'gpt-5.3-codex',
+    max_tokens: 10000,
+    LLMMAX_TOKENS: 200 * 1000,
+    model_reasoning_effort: 'high',
+    features: ['streaming', 'function-calling'],
+  },
+  'gpt-5.4': {
+    id: 'gpt-5.4',
+    provider: 'openai',
+    name: 'GPT-5.4',
+    baseURL: '',
+    endpointPath: '/chat/completions',
+    envApiKey: 'OPENAI_API_KEY',
+    envBaseURL: 'OPENAI_API_BASE',
+    model: 'gpt-5.4',
+    max_tokens: 10000,
+    LLMMAX_TOKENS: 200 * 1000,
+    model_reasoning_effort: 'high',
+    features: ['streaming', 'function-calling'],
   },
 };

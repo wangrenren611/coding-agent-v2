@@ -121,7 +121,7 @@ export const ToolConfirmDialog = ({
             </box>
           ) : null}
 
-          {content.argumentsBlock ? (
+          {content.argumentItems.length > 0 ? (
             <box flexGrow={1} paddingLeft={1} paddingRight={1}>
               <scrollbox
                 height="100%"
@@ -131,10 +131,26 @@ export const ToolConfirmDialog = ({
                 viewportOptions={{ backgroundColor: uiTheme.panel }}
                 contentOptions={{ backgroundColor: uiTheme.panel }}
               >
-                <box backgroundColor={uiTheme.panel} paddingX={1} paddingY={1}>
-                  <text fg={uiTheme.text} wrapMode="char" attributes={uiTheme.typography.code}>
-                    {content.argumentsBlock}
-                  </text>
+                <box
+                  backgroundColor={uiTheme.panel}
+                  paddingX={1}
+                  paddingY={1}
+                  gap={1}
+                  flexDirection="column"
+                >
+                  <text fg={uiTheme.muted}>Arguments</text>
+                  {content.argumentItems.map((item, index) => (
+                    <box key={`${item.label}:${index}`} flexDirection="column">
+                      <text fg={uiTheme.muted}>{item.label}</text>
+                      <text
+                        fg={uiTheme.text}
+                        wrapMode={item.multiline ? 'char' : 'word'}
+                        attributes={item.multiline ? uiTheme.typography.code : undefined}
+                      >
+                        {item.value}
+                      </text>
+                    </box>
+                  ))}
                 </box>
               </scrollbox>
             </box>

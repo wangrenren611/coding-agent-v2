@@ -91,8 +91,17 @@ export type AgentAppUsageLike = {
   contextUsagePercent?: number;
 };
 
+export type AgentAppContextUsageLike = {
+  stepIndex: number;
+  messageCount: number;
+  contextTokens: number;
+  contextLimitTokens: number;
+  contextUsagePercent: number;
+};
+
 type AgentAppRunCallbacksLike = {
   onEvent?: (event: CliEventEnvelopeLike) => void | Promise<void>;
+  onContextUsage?: (usage: AgentAppContextUsageLike) => void | Promise<void>;
   onUsage?: (usage: AgentAppUsageLike) => void | Promise<void>;
 };
 

@@ -10,6 +10,11 @@ type AssistantReplyProps = {
   reply: AssistantReplyType;
 };
 
+export type AssistantReplyUsageItem = {
+  icon: '↓' | '↑';
+  value: string;
+};
+
 const renderStatus = (status: AssistantReplyType['status']) => {
   if (status === 'streaming') {
     return 'streaming';
@@ -35,10 +40,31 @@ const formatTokenCount = (tokens: number): string => {
   if (tokens >= 1_000_000) {
     return `${(tokens / 1_000_000).toFixed(1)}M`;
   }
-  if (tokens >= 1_000) {
-    return `${(tokens / 1_000).toFixed(1)}k`;
+  return `${(tokens / 1_000).toFixed(1)}k`;
+};
+
+const normalizeUsageTokens = (tokens: number | undefined): string | undefined => {
+  if (typeof tokens !== 'number' || !Number.isFinite(tokens)) {
+    return undefined;
   }
-  return `${tokens}`;
+  return formatTokenCount(Math.max(0, Math.round(tokens)));
+};
+
+export const buildUsageItems = (
+  reply: Pick<AssistantReplyType, 'usagePromptTokens' | 'usageCompletionTokens'>
+): AssistantReplyUsageItem[] => {
+  const items: AssistantReplyUsageItem[] = [];
+  const promptTokens = normalizeUsageTokens(reply.usagePromptTokens);
+  const completionTokens = normalizeUsageTokens(reply.usageCompletionTokens);
+
+  if (promptTokens) {
+    items.push({ icon: '↓', value: promptTokens });
+  }
+  if (completionTokens) {
+    items.push({ icon: '↑', value: completionTokens });
+  }
+
+  return items;
 };
 
 export const AssistantReply = ({ reply }: AssistantReplyProps) => {
@@ -60,10 +86,7 @@ export const AssistantReply = ({ reply }: AssistantReplyProps) => {
   }, [reply.status]);
 
   const durationText = formatDurationSeconds(reply, nowMs);
-  const usageText =
-    typeof reply.usageTotalTokens === 'number' && Number.isFinite(reply.usageTotalTokens)
-      ? formatTokenCount(Math.max(0, Math.round(reply.usageTotalTokens)))
-      : undefined;
+  const usageItems = buildUsageItems(reply);
 
   return (
     <box flexDirection="column" gap={1}>
@@ -82,7 +105,12 @@ export const AssistantReply = ({ reply }: AssistantReplyProps) => {
           <span fg={uiTheme.accent}>▣</span> assistant
           <span fg={uiTheme.muted}> · {reply.modelLabel}</span>
           <span fg={uiTheme.muted}> · {durationText}s</span>
-          {usageText ? <span fg={uiTheme.muted}> · token {usageText}</span> : null}
+          {usageItems.map((item) => (
+            <span key={`${item.icon}:${item.value}`} fg={uiTheme.muted}>
+              {' · '}
+              {item.icon} {item.value}
+            </span>
+          ))}
           {status ? <span fg={uiTheme.muted}> · {status}</span> : null}
         </text>
       </box>

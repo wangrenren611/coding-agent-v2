@@ -64,6 +64,14 @@ export type AgentUsageEvent = {
   contextUsagePercent?: number;
 };
 
+export type AgentContextUsageEvent = {
+  stepIndex: number;
+  messageCount: number;
+  contextTokens: number;
+  contextLimit: number;
+  contextUsagePercent: number;
+};
+
 export type AgentEventHandlers = {
   onTextDelta?: (event: AgentTextDeltaEvent) => void;
   onTextComplete?: (text: string) => void;
@@ -77,6 +85,7 @@ export type AgentEventHandlers = {
   onStep?: (event: AgentStepEvent) => void;
   onLoop?: (event: AgentLoopEvent) => void;
   onStop?: (event: AgentStopEvent) => void;
+  onContextUsage?: (event: AgentContextUsageEvent) => void;
   onUsage?: (event: AgentUsageEvent) => void;
 };
 

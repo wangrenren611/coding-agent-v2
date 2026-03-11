@@ -219,6 +219,8 @@ export interface LLMGenerateOptions {
   stream?: boolean;
   /** 是否启用工具流式输出（与 stream 一致的布尔语义） */
   tool_stream?: boolean;
+  /** 推理强度（部分 Provider 支持） */
+  model_reasoning_effort?: 'low' | 'medium' | 'high';
   /** 流式输出选项 */
   stream_options?: StreamOptions;
   /** 中止信号 */

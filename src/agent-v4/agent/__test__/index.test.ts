@@ -205,6 +205,51 @@ describe('StatelessAgent', () => {
     });
   });
 
+  it('captures usage from a usage-only tail chunk after finish_reason', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi.fn().mockReturnValue(
+      toStream([
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { content: 'ok' } }],
+        },
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+        },
+        {
+          index: 0,
+          choices: [],
+          usage: {
+            prompt_tokens: 12,
+            completion_tokens: 8,
+            total_tokens: 20,
+          },
+        },
+      ])
+    );
+
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
+    const onMessage = vi.fn();
+
+    await collectEvents(agent.runStream(createInput(), { onMessage, onCheckpoint: vi.fn() }));
+
+    expect(onMessage).toHaveBeenCalledOnce();
+    expect(onMessage.mock.calls[0]?.[0]).toMatchObject({
+      role: 'assistant',
+      content: 'ok',
+      usage: {
+        prompt_tokens: 12,
+        completion_tokens: 8,
+        total_tokens: 20,
+      },
+    });
+  });
+
   it('passes abortSignal to llm generateStream config', async () => {
     const provider = createProvider();
     const manager = createToolManager();
@@ -1616,19 +1661,16 @@ describe('StatelessAgent', () => {
   });
 
   it('executeTool uses UnknownError message when tool fails without explicit error object', async () => {
-    vi.useFakeTimers();
     const provider = createProvider();
     const manager = createToolManager();
     manager.execute = vi.fn().mockImplementation(async (_toolCall, options) => {
       options.onChunk?.({ type: 'stdout', data: 'chunk-1' });
-      const decisionPromise = options.onConfirm?.({
+      const decision = await options.onConfirm?.({
         toolCallId: 'call_2',
         toolName: 'bash',
         arguments: '{}',
       });
-      await vi.advanceTimersByTimeAsync(30000);
-      const decision = await decisionPromise;
-      expect(decision).toEqual({ approved: false, message: 'Confirmation timeout' });
+      expect(decision).toEqual({ approved: true, message: 'approved' });
       return { success: false };
     });
 
@@ -1636,6 +1678,12 @@ describe('StatelessAgent', () => {
     const onMessage = vi.fn();
     const toolChunkSpy = vi.fn();
     agent.on('tool_chunk', toolChunkSpy);
+    agent.on(
+      'tool_confirm',
+      (info: { resolve: (decision: { approved: boolean; message?: string }) => void }) => {
+        info.resolve({ approved: true, message: 'approved' });
+      }
+    );
 
     const toolEvents = await collectEvents(
       (agent as unknown as AgentPrivate).executeTool(
