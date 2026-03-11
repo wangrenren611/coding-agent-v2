@@ -65,6 +65,8 @@ describe('AssistantSegment', () => {
     expect(markdownNode?.props?.content).toBe(segment.content);
     expect(markdownNode?.props?.streaming).toBe(false);
     expect(markdownNode?.props?.conceal).toBe(true);
+    expect(markdownNode?.props?.concealCode).toBe(false);
+    expect(typeof markdownNode?.props?.renderNode).toBe('function');
   });
 
   it('renders thinking segments with markdown renderable', () => {
@@ -80,6 +82,7 @@ describe('AssistantSegment', () => {
     expect(markdownNode).not.toBeNull();
     expect(markdownNode?.props?.content).toBe('_Thinking:_ 先整理一下结论。');
     expect(markdownNode?.props?.streaming).toBe(true);
+    expect(markdownNode?.props?.concealCode).toBe(false);
   });
 
   it('renders code segments with the OpenTUI code renderable', () => {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { resolveSlashCommand } from '../commands/slash-commands';
-import { getAgentModelLabel, runAgentPrompt } from '../agent/runtime/runtime';
+import { getAgentModelAttachmentCapabilities, getAgentModelLabel, runAgentPrompt } from '../agent/runtime/runtime';
 import type {
   AgentContextUsageEvent,
   AgentToolConfirmDecision,
@@ -25,6 +25,10 @@ import {
   patchTurn,
   setReplyStatus,
 } from './turn-updater';
+import {
+  DEFAULT_ATTACHMENT_MODEL_CAPABILITIES,
+  type AttachmentModelCapabilities,
+} from '../files/attachment-capabilities';
 import { buildPromptContent } from '../files/attachment-content';
 import { buildPromptDisplay } from '../files/prompt-display';
 
@@ -112,6 +116,9 @@ export const useAgentChat = (): UseAgentChatResult => {
   const [isThinking, setIsThinking] = useState(false);
   const [modelLabel, setModelLabel] = useState(INITIAL_MODEL_LABEL);
   const [contextUsagePercent, setContextUsagePercent] = useState<number | null>(null);
+  const [attachmentCapabilities, setAttachmentCapabilities] = useState<AttachmentModelCapabilities>(
+    DEFAULT_ATTACHMENT_MODEL_CAPABILITIES
+  );
   const [pendingToolConfirm, setPendingToolConfirm] = useState<
     (AgentToolConfirmEvent & { selectedAction: 'approve' | 'deny' }) | null
   >(null);
@@ -160,6 +167,13 @@ export const useAgentChat = (): UseAgentChatResult => {
       .then(label => {
         if (!disposed) {
           setModelLabel(label);
+        }
+      })
+      .catch(() => {});
+    void getAgentModelAttachmentCapabilities()
+      .then(capabilities => {
+        if (!disposed) {
+          setAttachmentCapabilities(capabilities);
         }
       })
       .catch(() => {});
@@ -441,7 +455,7 @@ export const useAgentChat = (): UseAgentChatResult => {
         },
       };
 
-      const runPromise = buildPromptContent(text, attachedFiles)
+      const runPromise = buildPromptContent(text, attachedFiles, attachmentCapabilities)
         .then(promptContent =>
           runAgentPrompt(promptContent, handlers, {
             abortSignal: abortController.signal,
@@ -528,7 +542,16 @@ export const useAgentChat = (): UseAgentChatResult => {
       activeRunPromiseRef.current = trackedRunPromise;
       await trackedRunPromise;
     })();
-  }, [addTurn, appendEventLine, appendSegment, inputValue, isThinking, runCommand, selectedFiles]);
+  }, [
+    addTurn,
+    appendEventLine,
+    appendSegment,
+    attachmentCapabilities,
+    inputValue,
+    isThinking,
+    runCommand,
+    selectedFiles,
+  ]);
 
   const clearInput = useCallback(() => {
     setInputValue('');
@@ -537,6 +560,11 @@ export const useAgentChat = (): UseAgentChatResult => {
 
   const setModelLabelDisplay = useCallback((label: string) => {
     setModelLabel(label);
+    void getAgentModelAttachmentCapabilities()
+      .then(capabilities => {
+        setAttachmentCapabilities(capabilities);
+      })
+      .catch(() => {});
   }, []);
 
   const setToolConfirmSelection = useCallback((selection: 'approve' | 'deny') => {

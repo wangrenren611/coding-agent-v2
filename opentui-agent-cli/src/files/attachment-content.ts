@@ -1,8 +1,14 @@
 import { readFile } from 'node:fs/promises';
-import { basename, extname } from 'node:path';
+import { extname } from 'node:path';
 
 import type { InputContentPart, MessageContent } from '../../../src/providers';
 import type { PromptFileSelection } from './types';
+import {
+  type AttachmentModelCapabilities,
+  isAudioSelection,
+  isImageSelection,
+  isVideoSelection,
+} from './attachment-capabilities';
 
 const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   '.gif': 'image/gif',
@@ -10,6 +16,24 @@ const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.png': 'image/png',
   '.webp': 'image/webp',
+};
+
+const VIDEO_MIME_BY_EXTENSION: Record<string, string> = {
+  '.avi': 'video/x-msvideo',
+  '.m4v': 'video/mp4',
+  '.mkv': 'video/x-matroska',
+  '.mov': 'video/quicktime',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+};
+
+const AUDIO_MIME_BY_EXTENSION: Record<string, string> = {
+  '.aac': 'audio/aac',
+  '.flac': 'audio/flac',
+  '.m4a': 'audio/mp4',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
+  '.wav': 'audio/wav',
 };
 
 const FALLBACK_FILE_MIME = 'application/octet-stream';
@@ -24,24 +48,17 @@ const formatFileFence = (path: string, content: string, truncated: boolean) => {
 
 const inferMimeType = (path: string) => {
   const extension = extname(path).toLowerCase();
-  return IMAGE_MIME_BY_EXTENSION[extension] ?? FALLBACK_FILE_MIME;
+  return (
+    IMAGE_MIME_BY_EXTENSION[extension] ??
+    VIDEO_MIME_BY_EXTENSION[extension] ??
+    AUDIO_MIME_BY_EXTENSION[extension] ??
+    FALLBACK_FILE_MIME
+  );
 };
 
 const isImageMimeType = (mimeType: string) => mimeType.startsWith('image/');
-
-const isProbablyText = (buffer: Uint8Array) => {
-  const sample = buffer.subarray(0, Math.min(buffer.length, 8000));
-  let suspicious = 0;
-  for (const value of sample) {
-    if (value === 0) {
-      return false;
-    }
-    if (value < 0x09 || (value > 0x0d && value < 0x20)) {
-      suspicious += 1;
-    }
-  }
-  return suspicious <= sample.length * 0.1;
-};
+const isAudioMimeType = (mimeType: string) => mimeType.startsWith('audio/');
+const isVideoMimeType = (mimeType: string) => mimeType.startsWith('video/');
 
 const toImagePart = (file: PromptFileSelection, buffer: Uint8Array): InputContentPart => {
   const mimeType = inferMimeType(file.relativePath);
@@ -66,30 +83,31 @@ const toTextPart = (file: PromptFileSelection, buffer: Uint8Array): InputContent
   };
 };
 
-const toBinaryParts = (file: PromptFileSelection, buffer: Uint8Array): InputContentPart[] => {
-  return [
-    {
-      type: 'text',
-      text: `Attached binary file: ${file.relativePath}`,
-    },
-    {
-      type: 'file',
-      file: {
-        filename: basename(file.relativePath),
-        file_data: Buffer.from(buffer).toString('base64'),
-      },
-    },
-  ];
+const toAudioTextPart = (file: PromptFileSelection): InputContentPart => {
+  return {
+    type: 'text',
+    text: `Attached audio: ${file.relativePath}`,
+  };
 };
 
-const toFileParts = async (file: PromptFileSelection): Promise<InputContentPart[]> => {
+const toVideoTextPart = (file: PromptFileSelection): InputContentPart => {
+  return {
+    type: 'text',
+    text: `Attached video: ${file.relativePath}`,
+  };
+};
+
+const toFileParts = async (
+  file: PromptFileSelection,
+  capabilities: AttachmentModelCapabilities
+): Promise<InputContentPart[]> => {
   const buffer = await readFile(file.absolutePath);
   if (buffer.byteLength > MAX_ATTACHMENT_BYTES) {
     throw new Error(`Attachment too large: ${file.relativePath}`);
   }
 
   const mimeType = inferMimeType(file.relativePath);
-  if (isImageMimeType(mimeType)) {
+  if (isImageMimeType(mimeType) && capabilities.image && isImageSelection(file)) {
     return [
       {
         type: 'text',
@@ -99,16 +117,21 @@ const toFileParts = async (file: PromptFileSelection): Promise<InputContentPart[
     ];
   }
 
-  if (isProbablyText(buffer)) {
-    return [toTextPart(file, buffer)];
+  if (isAudioMimeType(mimeType) && capabilities.audio && isAudioSelection(file)) {
+    return [toAudioTextPart(file)];
   }
 
-  return toBinaryParts(file, buffer);
+  if (isVideoMimeType(mimeType) && capabilities.video && isVideoSelection(file)) {
+    return [toVideoTextPart(file)];
+  }
+
+  return [toTextPart(file, buffer)];
 };
 
 export const buildPromptContent = async (
   prompt: string,
-  files: PromptFileSelection[]
+  files: PromptFileSelection[],
+  capabilities: AttachmentModelCapabilities
 ): Promise<MessageContent> => {
   if (files.length === 0) {
     return prompt;
@@ -123,7 +146,7 @@ export const buildPromptContent = async (
   }
 
   for (const file of files) {
-    parts.push(...(await toFileParts(file)));
+    parts.push(...(await toFileParts(file, capabilities)));
   }
 
   return parts;

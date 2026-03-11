@@ -69,6 +69,12 @@ export interface ModelConfig {
   LLMMAX_TOKENS: number;
   /** 支持的特性 */
   features: string[];
+  /** 多模态输入能力 */
+  modalities?: {
+    image?: boolean;
+    audio?: boolean;
+    video?: boolean;
+  };
   /** API 密钥（可选） */
   apiKey?: string;
   /** 温度（可选） */

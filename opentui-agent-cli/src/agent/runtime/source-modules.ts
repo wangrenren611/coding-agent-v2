@@ -9,6 +9,11 @@ type ProviderModelConfig = {
   provider?: string;
   model?: string;
   LLMMAX_TOKENS?: number;
+  modalities?: {
+    image?: boolean;
+    audio?: boolean;
+    video?: boolean;
+  };
 };
 
 export type ProviderRegistryLike = {

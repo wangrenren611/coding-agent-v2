@@ -8,12 +8,36 @@ import { FilePickerDialog } from './components/file-picker-dialog';
 import { ModelPickerDialog } from './components/model-picker-dialog';
 import { Prompt } from './components/prompt';
 import { ToolConfirmDialog } from './components/tool-confirm-dialog';
+import { isMediaSelection } from './files/attachment-capabilities';
+import type { PromptFileSelection } from './files/types';
 import { useAgentChat } from './hooks/use-agent-chat';
 import { useFilePicker } from './hooks/use-file-picker';
 import { useModelPicker } from './hooks/use-model-picker';
 import { requestExit } from './runtime/exit';
 import { copyTextToClipboard } from './runtime/clipboard';
 import { uiTheme } from './ui/theme';
+
+const appendFileTokens = (currentValue: string, files: PromptFileSelection[]) => {
+  if (files.length === 0) {
+    return currentValue;
+  }
+
+  const existingTokens = new Set(
+    currentValue.match(/@\/\S+/g) ?? []
+  );
+  const newTokens = files
+    .filter(file => !isMediaSelection(file))
+    .map(file => `@/${file.relativePath}`)
+    .filter(token => !existingTokens.has(token));
+
+  if (newTokens.length === 0) {
+    return currentValue;
+  }
+
+  const trimmed = currentValue.trimEnd();
+  const separator = trimmed.length > 0 ? ' ' : '';
+  return `${trimmed}${separator}${newTokens.join(' ')} `;
+};
 
 export const App = () => {
   const {
@@ -27,7 +51,6 @@ export const App = () => {
     selectedFiles,
     setSelectedFiles,
     appendSelectedFiles,
-    removeSelectedFile,
     submitInput,
     stopActiveReply,
     clearInput,
@@ -202,7 +225,6 @@ export const App = () => {
         value={inputValue}
         selectedFiles={selectedFiles}
         onAddSelectedFiles={appendSelectedFiles}
-        onRemoveSelectedFile={removeSelectedFile}
         onValueChange={setInputValue}
         onSlashCommandSelect={handleSlashCommandSelect}
         onSlashMenuVisibilityChange={setSlashMenuVisible}
@@ -228,7 +250,9 @@ export const App = () => {
         onSelectIndex={filePicker.setSelectedIndex}
         onToggleSelected={filePicker.toggleSelectedIndex}
         onConfirm={() => {
-          setSelectedFiles(filePicker.confirmSelected());
+          const confirmedFiles = filePicker.confirmSelected();
+          setSelectedFiles(confirmedFiles);
+          setInputValue(appendFileTokens(inputValue, confirmedFiles));
         }}
         onListKeyDown={filePicker.handleListKeyDown}
       />

@@ -23,6 +23,7 @@ export const MODEL_DEFINITIONS: Record<ModelId, Omit<ModelConfig, 'apiKey'>> = {
     max_tokens: 16384,
     LLMMAX_TOKENS: 1000 * 1000,
     features: ['streaming', 'function-calling', 'vision'],
+    modalities: { image: true },
   },
 
   // GLM 系列
@@ -38,6 +39,7 @@ export const MODEL_DEFINITIONS: Record<ModelId, Omit<ModelConfig, 'apiKey'>> = {
     max_tokens: 8000,
     LLMMAX_TOKENS: 200 * 1000,
     features: ['streaming', 'function-calling', 'vision'],
+    modalities: { image: true },
   },
   // GLM 系列
   'glm-5': {
@@ -52,6 +54,7 @@ export const MODEL_DEFINITIONS: Record<ModelId, Omit<ModelConfig, 'apiKey'>> = {
     max_tokens: 30000,
     LLMMAX_TOKENS: 200 * 1000,
     features: ['streaming', 'function-calling', 'vision'],
+    modalities: { image: true },
   },
   // MiniMax 系列
   'minimax-2.5': {
@@ -110,6 +113,7 @@ export const MODEL_DEFINITIONS: Record<ModelId, Omit<ModelConfig, 'apiKey'>> = {
     max_tokens: 10000,
     LLMMAX_TOKENS: 200 * 1000,
     features: ['streaming', 'function-calling'],
+        modalities: { image: true },
   },
   // Qwen 系列
   'qwen3.5-max': {
@@ -176,6 +180,7 @@ export const MODEL_DEFINITIONS: Record<ModelId, Omit<ModelConfig, 'apiKey'>> = {
     max_tokens: 16384,
     LLMMAX_TOKENS: 1000 * 1000,
     features: ['streaming', 'function-calling', 'vision'],
+    modalities: { image: true },
   },
   'gpt-5.3': {
     id: 'gpt-5.3',
@@ -190,6 +195,7 @@ export const MODEL_DEFINITIONS: Record<ModelId, Omit<ModelConfig, 'apiKey'>> = {
     LLMMAX_TOKENS: 400 * 1000,
     model_reasoning_effort: 'high',
     features: ['streaming', 'function-calling', 'reasoning'],
+    modalities: { image: true },
   },
   'gpt-5.4': {
     id: 'gpt-5.4',
@@ -204,5 +210,6 @@ export const MODEL_DEFINITIONS: Record<ModelId, Omit<ModelConfig, 'apiKey'>> = {
     LLMMAX_TOKENS: 200 * 1000,
     model_reasoning_effort: 'high',
     features: ['streaming', 'function-calling'],
+    modalities: { image: true },
   },
 };

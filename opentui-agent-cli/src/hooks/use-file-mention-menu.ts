@@ -1,8 +1,9 @@
 import type { KeyEvent, TextareaRenderable } from '@opentui/core';
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
-import { findTrailingFileMention, removeTrailingFileMention } from '../files/file-mention-query';
+import { findTrailingFileMention } from '../files/file-mention-query';
 import type { PromptFileSelection } from '../files/types';
+import { isMediaSelection } from '../files/attachment-capabilities';
 import { listWorkspaceFiles } from '../files/workspace-files';
 
 type UseFileMentionMenuParams = {
@@ -117,7 +118,9 @@ export const useFileMentionMenu = ({
       }
 
       onFilesSelected([selected]);
-      const nextValue = removeTrailingFileMention(value);
+      const nextValue = isMediaSelection(selected)
+        ? value.slice(0, mention.start)
+        : `${value.slice(0, mention.start)}@/${selected.relativePath} `;
       onValueChange(nextValue);
 
       const textarea = textareaRef.current;

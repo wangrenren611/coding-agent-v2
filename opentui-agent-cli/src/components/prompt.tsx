@@ -1,10 +1,15 @@
 import type { KeyEvent, PasteEvent, TextareaRenderable } from '@opentui/core';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { FileMentionMenu } from './file-mention-menu';
 import { FooterHints } from './footer-hints';
 import { SlashCommandMenu } from './slash-command-menu';
 import type { SlashCommandDefinition } from '../commands/slash-commands';
+import {
+  isAudioSelection,
+  isImageSelection,
+  isVideoSelection,
+} from '../files/attachment-capabilities';
 import type { PromptFileSelection } from '../files/types';
 import { useFileMentionMenu } from '../hooks/use-file-mention-menu';
 import { useSlashCommandMenu } from '../hooks/use-slash-command-menu';
@@ -18,7 +23,6 @@ type PromptProps = {
   value: string;
   selectedFiles: PromptFileSelection[];
   onAddSelectedFiles: (files: PromptFileSelection[]) => void;
-  onRemoveSelectedFile: (absolutePath: string) => void;
   onValueChange: (value: string) => void;
   onSlashCommandSelect?: (command: SlashCommandDefinition) => boolean;
   onSlashMenuVisibilityChange?: (visible: boolean) => void;
@@ -33,13 +37,19 @@ export const Prompt = ({
   value,
   selectedFiles,
   onAddSelectedFiles,
-  onRemoveSelectedFile,
   onValueChange,
   onSlashCommandSelect,
   onSlashMenuVisibilityChange,
   onSubmit,
 }: PromptProps) => {
   const textareaRef = useRef<TextareaRenderable | null>(null);
+  const mediaFiles = useMemo(
+    () =>
+      selectedFiles.filter(
+        file => isImageSelection(file) || isAudioSelection(file) || isVideoSelection(file)
+      ),
+    [selectedFiles]
+  );
   const inputLocked = isThinking || disabled;
   const promptAlignPaddingX =
     uiTheme.layout.conversationPaddingX +
@@ -167,21 +177,14 @@ export const Prompt = ({
             paddingBottom={0}
             backgroundColor={uiTheme.inputBg}
           >
-            {selectedFiles.length > 0 ? (
+            {mediaFiles.length > 0 ? (
               <box flexDirection="column" gap={0} paddingBottom={1}>
-                <text fg={uiTheme.muted}>Attached files</text>
-                <box flexDirection="column">
-                  {selectedFiles.map(file => (
-                    <box key={file.absolutePath} flexDirection="row" justifyContent="space-between">
-                      <text fg={uiTheme.text} wrapMode="none">
-                        {file.relativePath}
-                      </text>
-                      <text fg={uiTheme.accent} onMouseUp={() => onRemoveSelectedFile(file.absolutePath)}>
-                        remove
-                      </text>
-                    </box>
-                  ))}
-                </box>
+                <text fg={uiTheme.muted}>Media files</text>
+                {mediaFiles.map(file => (
+                  <text key={file.absolutePath} fg={uiTheme.accent} wrapMode="none">
+                    {file.relativePath}
+                  </text>
+                ))}
               </box>
             ) : null}
             <textarea

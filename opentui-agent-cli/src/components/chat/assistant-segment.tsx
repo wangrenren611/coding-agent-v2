@@ -14,6 +14,39 @@ const markdownTableOptions = {
   selectable: true,
 };
 
+type MarkdownTokenLike = {
+  type?: string;
+};
+
+type MarkdownRenderContextLike = {
+  defaultRender: () => unknown;
+};
+
+type TextBufferRenderableLike = {
+  fg?: string;
+  bg?: string;
+  selectionBg?: string;
+  selectionFg?: string;
+};
+
+const patchMarkdownCodeBlockRenderable = (
+  token: MarkdownTokenLike,
+  context: MarkdownRenderContextLike
+) => {
+  const renderable = context.defaultRender();
+  if (!renderable || token.type !== 'code') {
+    return renderable;
+  }
+
+  const textBufferRenderable = renderable as TextBufferRenderableLike;
+  textBufferRenderable.fg = uiTheme.text;
+  textBufferRenderable.bg = uiTheme.codeBlock.bg;
+  textBufferRenderable.selectionBg = uiTheme.codeBlock.selectionBg;
+  textBufferRenderable.selectionFg = uiTheme.codeBlock.selectionText;
+
+  return renderable;
+};
+
 const ThinkingSegment = ({ content, streaming }: { content: string; streaming: boolean }) => {
   const normalized = content.trim();
   if (!normalized) {
@@ -29,6 +62,8 @@ const ThinkingSegment = ({ content, streaming }: { content: string; streaming: b
           syntaxStyle={opencodeSubtleMarkdownSyntax}
           content={`_Thinking:_ ${normalized}`}
           conceal={true}
+          concealCode={false}
+          renderNode={patchMarkdownCodeBlockRenderable}
           tableOptions={markdownTableOptions}
         />
       </box>
@@ -38,7 +73,7 @@ const ThinkingSegment = ({ content, streaming }: { content: string; streaming: b
 
 const CodeSegment = ({ content }: { content: string }) => {
   return (
-    <box >
+    <box>
       <CodeBlock content={content} />
     </box>
   );
@@ -66,12 +101,14 @@ const TextSegment = ({ content, streaming }: { content: string; streaming: boole
   }
 
   return (
-    <box paddingLeft={3} >
+    <box paddingLeft={3}>
       <markdown
         streaming={streaming}
         syntaxStyle={opencodeMarkdownSyntax}
         content={normalized}
         conceal={true}
+        concealCode={false}
+        renderNode={patchMarkdownCodeBlockRenderable}
         tableOptions={markdownTableOptions}
       />
     </box>

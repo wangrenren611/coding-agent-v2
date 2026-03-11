@@ -32,6 +32,10 @@ import {
 import { ToolCallBuffer } from './tool-call-buffer';
 import { buildSystemPrompt } from '../../../../src/agent-v4/prompts/system';
 import type { MessageContent } from '../../../../src/providers';
+import type { AttachmentModelCapabilities } from '../../files/attachment-capabilities';
+import {
+  resolveAttachmentModelCapabilities,
+} from '../../files/attachment-capabilities';
 
 type RuntimeCore = {
   modelId: string;
@@ -764,6 +768,13 @@ export const runAgentPrompt = async (
 export const getAgentModelLabel = async (): Promise<string> => {
   const runtime = await getRuntime();
   return runtime.modelLabel;
+};
+
+export const getAgentModelAttachmentCapabilities = async (): Promise<AttachmentModelCapabilities> => {
+  const modules = await getSourceModules();
+  const modelId = await getAgentModelId();
+  const config = modules.ProviderRegistry.getModelConfig(modelId);
+  return resolveAttachmentModelCapabilities(config);
 };
 
 export const getAgentModelId = async (): Promise<string> => {
