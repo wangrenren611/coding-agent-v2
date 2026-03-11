@@ -1,3 +1,8 @@
+import {
+  isAudioSelection,
+  isImageSelection,
+  isVideoSelection,
+} from '../../files/attachment-capabilities';
 import { uiTheme } from '../../ui/theme';
 
 type PromptCardProps = {
@@ -17,6 +22,13 @@ const formatTime = (timestamp: number) => {
 };
 
 export const PromptCard = ({ prompt, files = [], createdAtMs, isFirst = false }: PromptCardProps) => {
+  const mediaFiles = files.filter(
+    file =>
+      isImageSelection({ relativePath: file, absolutePath: file, size: 0 }) ||
+      isAudioSelection({ relativePath: file, absolutePath: file, size: 0 }) ||
+      isVideoSelection({ relativePath: file, absolutePath: file, size: 0 })
+  );
+
   return (
     <box flexDirection="row" marginTop={isFirst ? 0 : 1} marginBottom={1}>
       <box width={0.5} backgroundColor={uiTheme.accent} />
@@ -36,12 +48,12 @@ export const PromptCard = ({ prompt, files = [], createdAtMs, isFirst = false }:
         >
           {prompt}
         </text>
-        {files.length > 0 ? (
+        {mediaFiles.length > 0 ? (
           <box paddingTop={1} flexDirection="column">
             <text fg={uiTheme.muted} attributes={uiTheme.typography.note}>
-              Files
+              Media files
             </text>
-            {files.map(file => (
+            {mediaFiles.map(file => (
               <text key={file} fg={uiTheme.text} attributes={uiTheme.typography.note} selectable={true}>
                 {file}
               </text>
