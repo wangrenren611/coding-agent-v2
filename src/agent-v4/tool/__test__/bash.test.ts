@@ -249,6 +249,33 @@ describe('BashTool', () => {
     expect(long.output).toContain('[... Output Truncated for Brevity ...]');
   });
 
+  it('sanitizes streamed chunks with split ANSI control sequences', () => {
+    const tool = new BashTool();
+    const helper = tool as unknown as {
+      createStreamChunkSanitizerState: () => {
+        mode: string;
+        awaitingStringTerminator: boolean;
+      };
+      sanitizeStreamChunk: (
+        output: string,
+        state: { mode: string; awaitingStringTerminator: boolean }
+      ) => string;
+    };
+
+    const state = helper.createStreamChunkSanitizerState();
+    const first = helper.sanitizeStreamChunk('\u001b[38;', state);
+    const second = helper.sanitizeStreamChunk('5;240mskills\u001b[0m\rline', state);
+    const third = helper.sanitizeStreamChunk('\u001b[999', state);
+    const fourth = helper.sanitizeStreamChunk('D Cloning repository', state);
+    const fifth = helper.sanitizeStreamChunk('\u001b]0;title\u0007done', state);
+
+    expect(first).toBe('');
+    expect(second).toBe('skills\nline');
+    expect(third).toBe('');
+    expect(fourth).toBe(' Cloning repository');
+    expect(fifth).toBe('done');
+  });
+
   it('resolves shell for linux and windows branches', () => {
     const tool = new BashTool();
     const toolAny = tool as unknown as {

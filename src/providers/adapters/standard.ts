@@ -106,6 +106,7 @@ export class StandardAdapter extends BaseAPIAdapter {
   getHeaders(apiKey: string): Headers {
     return new Headers({
       'Content-Type': 'application/json',
+      'User-Agent': 'RCode/1.0.0(cli)',
       Authorization: `Bearer ${apiKey}`,
     });
   }

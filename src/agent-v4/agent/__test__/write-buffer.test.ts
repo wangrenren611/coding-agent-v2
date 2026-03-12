@@ -12,6 +12,7 @@ import {
   loadWriteBufferSession,
   resolveBufferId,
 } from '../write-buffer';
+import { createConfiguredFileHistoryStore } from '../../storage/file-history-store';
 
 const tempDirs: string[] = [];
 
@@ -83,6 +84,88 @@ describe('write-buffer', () => {
 
     expect(content).toBe('part1part2');
     expect(finalized.status).toBe('finalized');
+  });
+
+  it('uses the env-configured write buffer directory by default', async () => {
+    const rootDir = await createTempDir();
+    const previousRoot = process.env.AGENT_STORAGE_ROOT;
+    const previousWriteBufferDir = process.env.AGENT_WRITE_BUFFER_DIR;
+
+    process.env.AGENT_STORAGE_ROOT = rootDir;
+    delete process.env.AGENT_WRITE_BUFFER_DIR;
+
+    try {
+      const session = await createWriteBufferSession({
+        messageId: 'msg_env_default',
+        toolCallId: 'tool_env_default',
+      });
+
+      expect(session.baseDir).toBe(path.join(rootDir, 'cache', 'write-buffer'));
+    } finally {
+      if (previousRoot === undefined) {
+        delete process.env.AGENT_STORAGE_ROOT;
+      } else {
+        process.env.AGENT_STORAGE_ROOT = previousRoot;
+      }
+      if (previousWriteBufferDir === undefined) {
+        delete process.env.AGENT_WRITE_BUFFER_DIR;
+      } else {
+        process.env.AGENT_WRITE_BUFFER_DIR = previousWriteBufferDir;
+      }
+    }
+  });
+
+  it('stores a historical snapshot before finalize overwrites an existing file', async () => {
+    const storageRoot = await createTempDir();
+    const baseDir = path.join(storageRoot, 'cache');
+    const outputDir = await createTempDir();
+    const targetPath = path.join(outputDir, 'history.txt');
+    const previousRoot = process.env.AGENT_STORAGE_ROOT;
+    const previousHistoryDir = process.env.AGENT_FILE_HISTORY_DIR;
+    const previousHistoryEnabled = process.env.AGENT_FILE_HISTORY_ENABLED;
+
+    process.env.AGENT_STORAGE_ROOT = storageRoot;
+    process.env.AGENT_FILE_HISTORY_DIR = path.join(storageRoot, 'history');
+    process.env.AGENT_FILE_HISTORY_ENABLED = 'true';
+
+    try {
+      await fs.writeFile(targetPath, 'old-version', 'utf8');
+      const session = await createWriteBufferSession({
+        messageId: 'msg_history',
+        toolCallId: 'tool_history',
+        targetPath,
+        baseDir,
+      });
+      await appendContent(session, 'new-version');
+
+      await finalizeWriteBufferSession(session);
+
+      const store = createConfiguredFileHistoryStore();
+      const versions = await store.listVersions(targetPath);
+
+      expect(await fs.readFile(targetPath, 'utf8')).toBe('new-version');
+      expect(versions).toHaveLength(1);
+
+      const restored = await store.restoreVersion(targetPath, versions[0].versionId);
+      expect(restored).toBe(true);
+      expect(await fs.readFile(targetPath, 'utf8')).toBe('old-version');
+    } finally {
+      if (previousRoot === undefined) {
+        delete process.env.AGENT_STORAGE_ROOT;
+      } else {
+        process.env.AGENT_STORAGE_ROOT = previousRoot;
+      }
+      if (previousHistoryDir === undefined) {
+        delete process.env.AGENT_FILE_HISTORY_DIR;
+      } else {
+        process.env.AGENT_FILE_HISTORY_DIR = previousHistoryDir;
+      }
+      if (previousHistoryEnabled === undefined) {
+        delete process.env.AGENT_FILE_HISTORY_ENABLED;
+      } else {
+        process.env.AGENT_FILE_HISTORY_ENABLED = previousHistoryEnabled;
+      }
+    }
   });
 
   it('marks session aborted and supports cleanup', async () => {

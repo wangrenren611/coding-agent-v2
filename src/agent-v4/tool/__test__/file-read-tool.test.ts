@@ -107,6 +107,20 @@ describe('FileReadTool', () => {
     expect(metadata.originalLength).toBe(5000);
   });
 
+  it('keeps a contiguous prefix when truncating content', async () => {
+    const targetPath = path.join(rootDir, 'prefix-only.txt');
+    const content =
+      Array.from({ length: 180 }, (_, index) => `line-${index + 1}`).join('\n') +
+      '\nTAIL_SENTINEL_END';
+    await fs.writeFile(targetPath, content, 'utf8');
+
+    const result = await tool.execute({ path: targetPath });
+    expect(result.success).toBe(true);
+    expect(result.output || '').toContain('[... Output Truncated ...]');
+    expect(result.output || '').toContain('line-1');
+    expect(result.output || '').not.toContain('TAIL_SENTINEL_END');
+  });
+
   it('rejects path outside allowed directories', async () => {
     const outsidePath = path.join(outsideDir, 'outside.txt');
     await fs.writeFile(outsidePath, 'blocked', 'utf8');

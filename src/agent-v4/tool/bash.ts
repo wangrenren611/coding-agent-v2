@@ -55,6 +55,13 @@ interface BackgroundExecutionResult {
   logPath: string;
 }
 
+type StreamEscapeParseMode = 'text' | 'escape' | 'csi' | 'osc' | 'dcs' | 'pm' | 'apc' | 'sos';
+
+interface StreamChunkSanitizerState {
+  mode: StreamEscapeParseMode;
+  awaitingStringTerminator: boolean;
+}
+
 export interface BashToolOptions {
   defaultTimeoutMs?: number;
   backgroundLogDir?: string;
@@ -273,6 +280,8 @@ export class BashTool extends BaseTool<typeof schema> {
       let output = '';
       let timedOut = false;
       let settled = false;
+      const stdoutSanitizerState = this.createStreamChunkSanitizerState();
+      const stderrSanitizerState = this.createStreamChunkSanitizerState();
 
       const child = spawn(shellPath, shellArgs, {
         cwd: process.cwd(),
@@ -310,10 +319,15 @@ export class BashTool extends BaseTool<typeof schema> {
       const emitChunk = (type: 'stdout' | 'stderr', chunk: Buffer) => {
         const text = chunk.toString('utf8');
         output += text;
+        const sanitizerState = type === 'stdout' ? stdoutSanitizerState : stderrSanitizerState;
+        const sanitized = this.sanitizeStreamChunk(text, sanitizerState);
+        if (!sanitized) {
+          return;
+        }
         void context?.onChunk?.({
           type,
-          data: text,
-          content: text,
+          data: sanitized,
+          content: sanitized,
         });
       };
 
@@ -461,18 +475,137 @@ export class BashTool extends BaseTool<typeof schema> {
     return env;
   }
 
+  private createStreamChunkSanitizerState(): StreamChunkSanitizerState {
+    return {
+      mode: 'text',
+      awaitingStringTerminator: false,
+    };
+  }
+
+  private stripStreamControlSequences(input: string, state: StreamChunkSanitizerState): string {
+    if (!input) {
+      return input;
+    }
+
+    let plainText = '';
+
+    for (let index = 0; index < input.length; index += 1) {
+      const char = input[index];
+      const code = input.charCodeAt(index);
+      if (!char || Number.isNaN(code)) {
+        continue;
+      }
+
+      if (state.mode === 'text') {
+        if (char === '\u001b') {
+          state.mode = 'escape';
+          state.awaitingStringTerminator = false;
+          continue;
+        }
+        if (code === 0x9b) {
+          state.mode = 'csi';
+          state.awaitingStringTerminator = false;
+          continue;
+        }
+        plainText += char;
+        continue;
+      }
+
+      if (state.mode === 'escape') {
+        if (char === '[') {
+          state.mode = 'csi';
+        } else if (char === ']') {
+          state.mode = 'osc';
+          state.awaitingStringTerminator = false;
+        } else if (char === 'P') {
+          state.mode = 'dcs';
+          state.awaitingStringTerminator = false;
+        } else if (char === '^') {
+          state.mode = 'pm';
+          state.awaitingStringTerminator = false;
+        } else if (char === '_') {
+          state.mode = 'apc';
+          state.awaitingStringTerminator = false;
+        } else if (char === 'X') {
+          state.mode = 'sos';
+          state.awaitingStringTerminator = false;
+        } else {
+          state.mode = 'text';
+          state.awaitingStringTerminator = false;
+        }
+        continue;
+      }
+
+      if (state.mode === 'csi') {
+        if (code >= 0x40 && code <= 0x7e) {
+          state.mode = 'text';
+          state.awaitingStringTerminator = false;
+        }
+        continue;
+      }
+
+      if (state.awaitingStringTerminator) {
+        if (char === '\\') {
+          state.mode = 'text';
+          state.awaitingStringTerminator = false;
+          continue;
+        }
+        state.awaitingStringTerminator = false;
+      }
+
+      if (code === 0x07 || code === 0x9c) {
+        state.mode = 'text';
+        continue;
+      }
+
+      if (char === '\u001b') {
+        state.awaitingStringTerminator = true;
+      }
+    }
+
+    return plainText;
+  }
+
+  private sanitizeStreamChunk(output: string, state: StreamChunkSanitizerState): string {
+    if (!output) {
+      return output;
+    }
+
+    let sanitized = this.stripStreamControlSequences(output, state);
+    sanitized = stripAnsi(sanitized);
+    sanitized = sanitized.replace(/\uFFFD/g, '');
+    sanitized = sanitized.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    sanitized = this.stripUnsupportedControlChars(sanitized);
+
+    return sanitized;
+  }
+
+  private stripUnsupportedControlChars(value: string): string {
+    if (!value) {
+      return value;
+    }
+
+    let normalized = '';
+    for (const char of value) {
+      const code = char.charCodeAt(0);
+      const isAllowedWhitespace = code === 0x09 || code === 0x0a;
+      const isPrintableAscii = code >= 0x20 && code <= 0x7e;
+      const isNonAscii = code >= 0x80;
+      if (isAllowedWhitespace || isPrintableAscii || isNonAscii) {
+        normalized += char;
+      }
+    }
+
+    return normalized;
+  }
+
   private sanitizeOutput(output: string): string {
     if (!output) {
       return output;
     }
 
-    let sanitized = stripAnsi(output);
-    sanitized = sanitized.replace(/\uFFFD/g, '');
-    const esc = String.fromCharCode(0x1b);
-    const ansiRegex = new RegExp(`${esc}\\[[0-9;]*[a-zA-Z]`, 'g');
-    sanitized = sanitized.replace(ansiRegex, '');
-    sanitized = sanitized.replace(/^\[[\d;]*m/gm, '');
-    sanitized = sanitized.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const streamState = this.createStreamChunkSanitizerState();
+    let sanitized = this.sanitizeStreamChunk(output, streamState);
     sanitized = sanitized.replace(/\n{3,}/g, '\n\n');
 
     return sanitized.trim();

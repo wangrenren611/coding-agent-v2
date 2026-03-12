@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "agent-browser": {
+      "source": "vercel-labs/agent-browser",
+      "sourceType": "github",
+      "computedHash": "7232a19fdb4b5abde1f3fe11f1ebd6bf76a4793acfc8bb2c2017701dfc62212b"
+    },
     "code-review-expert": {
       "source": "sanyuan0704/code-review-expert",
       "sourceType": "github",

@@ -58,10 +58,17 @@ describe('normalizeAllowedDirectories', () => {
   });
 
   it('normalizes multiple directories', () => {
-    const result = normalizeAllowedDirectories(['/tmp', '/var']);
-    expect(result).toHaveLength(2);
-    expect(result).toContain(fs.realpathSync('/tmp'));
-    expect(result).toContain(fs.realpathSync('/var'));
+    const tempDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'test1-'));
+    const tempDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'test2-'));
+    try {
+      const result = normalizeAllowedDirectories([tempDir1, tempDir2]);
+      expect(result).toHaveLength(2);
+      expect(result).toContain(fs.realpathSync(tempDir1));
+      expect(result).toContain(fs.realpathSync(tempDir2));
+    } finally {
+      fs.rmSync(tempDir1, { recursive: true });
+      fs.rmSync(tempDir2, { recursive: true });
+    }
   });
 
   it('expands home paths', () => {
@@ -80,7 +87,10 @@ describe('normalizeAllowedDirectories', () => {
 describe('resolveRequestedPath', () => {
   it('resolves absolute path', () => {
     const result = resolveRequestedPath('/absolute/path');
-    expect(result).toBe('/absolute/path');
+    // On Windows, path.resolve converts /absolute/path to D:\absolute\path
+    expect(path.isAbsolute(result)).toBe(true);
+    expect(result).toContain('absolute');
+    expect(result).toContain('path');
   });
 
   it('resolves relative path with default base', () => {
@@ -100,7 +110,9 @@ describe('resolveRequestedPath', () => {
 
   it('trims whitespace', () => {
     const result = resolveRequestedPath('  /path  ');
-    expect(result).toBe('/path');
+    // On Windows, path.resolve converts /path to D:\path
+    expect(path.isAbsolute(result)).toBe(true);
+    expect(result).toContain('path');
   });
 });
 
@@ -133,7 +145,8 @@ describe('normalizePathWithExistingAncestor', () => {
 
   it('handles root directory', () => {
     const result = normalizePathWithExistingAncestor('/');
-    expect(result).toBe('/');
+    // On Windows, root is 'D:\' not '/'
+    expect(path.isAbsolute(result)).toBe(true);
   });
 });
 

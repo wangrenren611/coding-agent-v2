@@ -65,7 +65,7 @@ let preferredModelId = readPreferredModelIdFromEnv();
 const DEFAULT_MODEL = 'qwen3.5-plus';
 const DEFAULT_MAX_STEPS = 10000;
 const DEFAULT_MAX_RETRY_COUNT = 10;
-const DEFAULT_DB_PATH = '/Users/wrr/.agent-v4/agent.db';
+const DEFAULT_DB_PATH = 'C:/Users/Administrator/.coding-agent/agent.db';
 
 const parsePositiveInt = (raw: string | undefined, fallback: number): number => {
   if (!raw || raw.trim().length === 0) {

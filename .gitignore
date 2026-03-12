@@ -60,3 +60,5 @@ logs
 
 .agent-v4
 .agent-v4/*
+/.agents/
+.agent-storage

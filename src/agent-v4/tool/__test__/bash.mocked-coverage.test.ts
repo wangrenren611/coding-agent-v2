@@ -300,7 +300,8 @@ describe('BashTool mocked branch coverage', () => {
       if (candidate === 'C:\\Tools\\Git\\cmd\\git.exe') {
         return true;
       }
-      return candidate.replaceAll('/', '\\').endsWith('Tools\\Git\\bin\\bash.exe');
+      // Return false for inferred bash.exe path to test probe miss
+      return false;
     });
     expect(helper.findGitBashPath()).toBeNull();
 

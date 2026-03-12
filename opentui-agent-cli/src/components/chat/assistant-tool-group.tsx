@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { uiTheme } from '../../ui/theme';
 import { getToolDisplayIcon, getToolDisplayName } from '../tool-display-config';
 import { CodeBlock } from './code-block';
@@ -38,6 +40,9 @@ type SpecialToolPresentation = {
   headerDetail?: string;
   sections: ToolSection[];
 };
+
+const COLLAPSIBLE_OUTPUT_LINES = 16;
+const COLLAPSIBLE_OUTPUT_LABELS = new Set(['output', 'error', 'result', 'details']);
 
 const asObjectLike = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -296,6 +301,18 @@ const resolveSectionLanguageHint = (
     return 'json';
   }
   return undefined;
+};
+
+const isCollapsibleResultSection = (section: ToolSection): boolean => {
+  if (section.tone !== 'code') {
+    return false;
+  }
+
+  if (!section.label) {
+    return false;
+  }
+
+  return COLLAPSIBLE_OUTPUT_LABELS.has(section.label.toLowerCase());
 };
 
 const resolveStructuredResultObject = (
@@ -756,6 +773,7 @@ const buildSpecialToolPresentation = (
 };
 
 export const AssistantToolGroup = ({ group }: AssistantToolGroupProps) => {
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const parsedUse = parseToolUse(group.use?.content, group.use?.data);
   const parsedResult = parseToolResult(group.result?.content, group.result?.data);
   const toolName = parsedUse?.name ?? parsedResult?.name ?? 'tool';
@@ -827,10 +845,13 @@ export const AssistantToolGroup = ({ group }: AssistantToolGroupProps) => {
             {sections.map((section, index) => {
               const content = normalizeToolDisplayText(section.content);
               const isCode = section.tone === 'code';
+              const sectionId = `${toolName}:section:${index}`;
+              const collapsible = isCollapsibleResultSection(section);
+              const expanded = Boolean(expandedSections[sectionId]);
 
               return (
                 <box
-                  key={`${toolName}:section:${index}`}
+                  key={sectionId}
                   flexDirection="column"
                   paddingBottom={index < sections.length - 1 ? 1 : 0}
                 >
@@ -847,6 +868,18 @@ export const AssistantToolGroup = ({ group }: AssistantToolGroupProps) => {
                         content={content}
                         label={section.label}
                         languageHint={resolveSectionLanguageHint(toolName, section)}
+                        collapsible={collapsible}
+                        collapsedLines={COLLAPSIBLE_OUTPUT_LINES}
+                        expanded={expanded}
+                        onToggleExpanded={() => {
+                          if (!collapsible) {
+                            return;
+                          }
+                          setExpandedSections(previous => ({
+                            ...previous,
+                            [sectionId]: !previous[sectionId],
+                          }));
+                        }}
                       />
                     </box>
                   ) : (

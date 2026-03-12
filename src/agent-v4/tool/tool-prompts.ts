@@ -175,3 +175,47 @@ When to use:
 - User asks "which skill should I use?".
 - Skill name is unknown but task intent is clear.
 - You need ranked skill suggestions before loading one manually.`;
+
+export const WEB_FETCH_TOOL_DESCRIPTION = `Fetches content from a URL with SSRF protection.
+
+Features:
+- Extract modes: text (plain text), markdown (simplified), html (raw)
+- SSRF protection blocks localhost, private IPs, and cloud metadata endpoints
+- Response size limit: 5MB
+- Configurable timeout (default 30s, max 120s)
+
+Usage notes:
+- url is required and must be a valid HTTP/HTTPS URL
+- extractMode defaults to 'text' for clean plain text extraction
+- maxChars limits output length (default 30000, max 100000)
+- Internal/private network addresses are blocked for security`;
+
+export const WEB_SEARCH_TOOL_DESCRIPTION = `Performs a web search using Tavily or Brave Search API.
+
+Requires one of these environment variables:
+- TAVILY_API_KEY for Tavily search
+- BRAVE_SEARCH_API_KEY for Brave Search
+
+Usage notes:
+- query is required (1-500 characters)
+- maxResults controls result count (1-10, default 5)
+- provider can be 'tavily', 'brave', or 'auto' (default)
+- 'auto' uses the first available API key
+
+Results include title, URL, snippet, and relevance score.`;
+
+export const LSP_TOOL_DESCRIPTION = `TypeScript Language Service operations for code intelligence.
+
+Supported operations:
+- goToDefinition: Jump to symbol definition
+- findReferences: Find all references to a symbol
+- hover: Get type information and documentation
+- documentSymbols: List all symbols in a file
+
+Usage notes:
+- filePath is required (absolute or relative path)
+- line and character are 1-based (editor-style)
+- line and character are required for goToDefinition, findReferences, and hover
+- Supports .ts, .tsx, .js, .jsx, .mjs, .cjs files
+- Uses TypeScript Compiler API for accurate results
+- Respects tsconfig.json when present`;

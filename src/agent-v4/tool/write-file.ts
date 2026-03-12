@@ -14,6 +14,12 @@ import {
 import { ToolExecutionError } from './error';
 import { WRITE_FILE_TOOL_DESCRIPTION } from './tool-prompts';
 import { assessPathAccess } from './path-security';
+import { createConfiguredFileHistoryStore, FileHistoryStore } from '../storage/file-history-store';
+import {
+  getWriteBufferCandidateDirs,
+  resolveWriteBufferBaseDir,
+} from '../storage/file-storage-config';
+import { writeTextFileWithHistory } from '../storage/file-write-service';
 
 const writeModeSchema = z.enum(['direct', 'finalize']);
 
@@ -35,6 +41,7 @@ interface WriteFileToolOptions {
   allowedDirectories?: string[];
   maxChunkBytes?: number;
   bufferBaseDir?: string;
+  historyStore?: FileHistoryStore;
 }
 
 interface WriteBufferInfo {
@@ -79,6 +86,7 @@ export class WriteFileTool extends BaseTool<typeof schema> {
   private readonly allowedDirectories: string[];
   private readonly maxChunkBytes: number;
   private readonly bufferBaseDir: string;
+  private readonly historyStore: FileHistoryStore;
 
   constructor(options: WriteFileToolOptions = {}) {
     super();
@@ -87,9 +95,8 @@ export class WriteFileTool extends BaseTool<typeof schema> {
     ).map((dir) => this.normalizeAllowedDirectory(dir));
     this.maxChunkBytes =
       options.maxChunkBytes && options.maxChunkBytes > 0 ? options.maxChunkBytes : 32768;
-    this.bufferBaseDir = path.resolve(
-      options.bufferBaseDir || path.join(process.cwd(), '.agent-cache', 'write-file')
-    );
+    this.bufferBaseDir = resolveWriteBufferBaseDir(options.bufferBaseDir);
+    this.historyStore = options.historyStore ?? createConfiguredFileHistoryStore();
     fs.mkdirSync(this.bufferBaseDir, { recursive: true });
   }
 
@@ -318,10 +325,10 @@ export class WriteFileTool extends BaseTool<typeof schema> {
   }
 
   private async writeAtomically(targetPath: string, content: string): Promise<void> {
-    await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
-    const tmpPath = `${targetPath}.tmp.${randomUUID().slice(0, 8)}`;
-    await fs.promises.writeFile(tmpPath, content, 'utf8');
-    await fs.promises.rename(tmpPath, targetPath);
+    await writeTextFileWithHistory(targetPath, content, {
+      source: 'write_file',
+      historyStore: this.historyStore,
+    });
   }
 
   private pointerPath(bufferId: string): string {
@@ -468,8 +475,7 @@ export class WriteFileTool extends BaseTool<typeof schema> {
   }
 
   private getCandidateBufferDirs(): string[] {
-    const defaultDir = path.resolve(process.cwd(), '.agent-cache', 'write-file');
-    return [...new Set([this.bufferBaseDir, defaultDir])];
+    return getWriteBufferCandidateDirs(this.bufferBaseDir);
   }
 
   private async readPointer(pointerPath: string): Promise<SessionPointer | null> {

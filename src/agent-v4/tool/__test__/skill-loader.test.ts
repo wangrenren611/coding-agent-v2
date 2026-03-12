@@ -202,6 +202,10 @@ description:
     });
 
     it('handles skill files that cannot be read', async () => {
+      // Skip on Windows as chmod doesn't work the same way
+      if (process.platform === 'win32') {
+        return;
+      }
       const unreadableDir = path.join(tempDir, 'unreadable');
       await fs.mkdir(unreadableDir, { recursive: true });
       const unreadableFile = path.join(unreadableDir, 'SKILL.md');

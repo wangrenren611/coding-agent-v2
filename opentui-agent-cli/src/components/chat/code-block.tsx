@@ -5,6 +5,10 @@ type CodeBlockProps = {
   content: string;
   label?: string;
   languageHint?: string;
+  collapsible?: boolean;
+  collapsedLines?: number;
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
 };
 
 const FILETYPE_BY_EXTENSION: Record<string, string> = {
@@ -185,13 +189,63 @@ const buildHeaderMeta = (content: string, filetype?: string): string | undefined
   return filetype;
 };
 
-export const CodeBlock = ({ content, label, languageHint }: CodeBlockProps) => {
+const DEFAULT_COLLAPSED_LINES = 16;
+
+const toContentLines = (value: string): string[] => {
+  if (!value) {
+    return [];
+  }
+
+  const trimmed = value.replace(/\n+$/, '');
+  if (!trimmed) {
+    return [];
+  }
+
+  return trimmed.split('\n');
+};
+
+const buildCollapsedContent = (
+  content: string,
+  lineLimit: number
+): { content: string; hiddenLines: number } => {
+  const lines = toContentLines(content);
+  if (lineLimit <= 0 || lines.length <= lineLimit) {
+    return {
+      content,
+      hiddenLines: 0,
+    };
+  }
+
+  return {
+    content: `${lines.slice(0, lineLimit).join('\n')}\n`,
+    hiddenLines: lines.length - lineLimit,
+  };
+};
+
+export const CodeBlock = ({
+  content,
+  label,
+  languageHint,
+  collapsible = false,
+  collapsedLines = DEFAULT_COLLAPSED_LINES,
+  expanded = false,
+  onToggleExpanded,
+}: CodeBlockProps) => {
   const normalized = content.replace(/\n+$/, '\n');
+  const collapsed = buildCollapsedContent(normalized, collapsedLines);
+  const isTruncated = collapsible && collapsed.hiddenLines > 0;
+  const renderedContent = isTruncated && !expanded ? collapsed.content : normalized;
   const filetype = inferCodeFiletype(normalized, languageHint);
-  const diffFiletype =
-    filetype === 'diff' ? inferFiletypeFromPath(extractDiffPath(normalized)) : undefined;
+  const isDiff = filetype === 'diff';
+  const shouldRenderDiff = isDiff && (!isTruncated || expanded);
+  const codeFiletype = isDiff ? 'diff' : filetype;
+  const diffFiletype = isDiff ? inferFiletypeFromPath(extractDiffPath(normalized)) : undefined;
   const headerLabel = label ?? 'code';
   const headerMeta = buildHeaderMeta(normalized, filetype);
+  const toggleHint = expanded
+    ? 'show less (click to collapse)'
+    : `... hidden ${collapsed.hiddenLines} lines (click to expand)`;
+  const clickHandler = isTruncated ? onToggleExpanded : undefined;
 
   return (
     <box
@@ -206,10 +260,10 @@ export const CodeBlock = ({ content, label, languageHint }: CodeBlockProps) => {
         {headerLabel}
         {headerMeta ? <span fg={uiTheme.codeBlock.language}> · {headerMeta}</span> : null}
       </text>
-      <box marginTop={1}>
-        {filetype === 'diff' ? (
+      <box marginTop={1} onMouseUp={clickHandler}>
+        {shouldRenderDiff ? (
           <diff
-            diff={normalized}
+            diff={renderedContent}
             view="unified"
             filetype={diffFiletype}
             fg={uiTheme.codeBlock.text}
@@ -234,8 +288,8 @@ export const CodeBlock = ({ content, label, languageHint }: CodeBlockProps) => {
           />
         ) : (
           <code
-            content={normalized}
-            filetype={filetype}
+            content={renderedContent}
+            filetype={codeFiletype}
             fg={uiTheme.codeBlock.text}
             syntaxStyle={opencodeMarkdownSyntax}
             wrapMode="char"
@@ -247,6 +301,13 @@ export const CodeBlock = ({ content, label, languageHint }: CodeBlockProps) => {
           />
         )}
       </box>
+      {isTruncated ? (
+        <box marginTop={1} onMouseUp={clickHandler}>
+          <text fg={uiTheme.muted} attributes={uiTheme.typography.note}>
+            {toggleHint}
+          </text>
+        </box>
+      ) : null}
     </box>
   );
 };

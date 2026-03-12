@@ -1,6 +1,9 @@
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
+import { resolveWriteBufferBaseDir } from '../storage/file-storage-config';
+import { createConfiguredFileHistoryStore } from '../storage/file-history-store';
+import { writeTextFileWithHistory } from '../storage/file-write-service';
 
 export interface WriteBufferSessionMeta {
   bufferId: string;
@@ -31,7 +34,9 @@ export interface AppendResult {
   updatedAt: number;
 }
 
-const DEFAULT_BASE_DIR = path.resolve(process.cwd(), '.agent-cache', 'write-file');
+function getDefaultBaseDir(): string {
+  return resolveWriteBufferBaseDir();
+}
 
 function safeSegment(input: string): string {
   return input.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -57,7 +62,7 @@ export async function createWriteBufferSession(
   input: CreateWriteBufferSessionInput
 ): Promise<WriteBufferSessionMeta> {
   const now = Date.now();
-  const baseDir = input.baseDir ? path.resolve(input.baseDir) : DEFAULT_BASE_DIR;
+  const baseDir = input.baseDir ? path.resolve(input.baseDir) : getDefaultBaseDir();
   const messageId = input.messageId?.trim() || `msg_${now}`;
   const bufferId = resolveBufferId(input.toolCallId);
   const uniqueSuffix = `${now}_${randomUUID().slice(0, 8)}`;
@@ -145,12 +150,11 @@ export async function finalizeWriteBufferSession(
   }
 
   const targetPath = path.resolve(session.targetPath);
-  await fs.mkdir(path.dirname(targetPath), { recursive: true });
-
-  const content = await fs.readFile(session.contentPath);
-  const targetTmp = `${targetPath}.tmp.${randomUUID().slice(0, 8)}`;
-  await fs.writeFile(targetTmp, content);
-  await fs.rename(targetTmp, targetPath);
+  const content = await fs.readFile(session.contentPath, 'utf8');
+  await writeTextFileWithHistory(targetPath, content, {
+    source: 'write_buffer_finalize',
+    historyStore: createConfiguredFileHistoryStore(),
+  });
 
   meta.targetPath = targetPath;
   meta.updatedAt = Date.now();

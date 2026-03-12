@@ -90,6 +90,49 @@ describe('CodeBlock', () => {
     expect(diffNode?.props?.showLineNumbers).toBe(true);
   });
 
+  it('falls back to code preview when a diff block is collapsed', () => {
+    const content = [
+      'diff --git a/src/a.ts b/src/a.ts',
+      '--- a/src/a.ts',
+      '+++ b/src/a.ts',
+      '@@ -1,2 +1,22 @@',
+      '-const oldValue = 1;',
+      '+const newValue = 1;',
+      ...Array.from({ length: 20 }, (_, index) => `+const line${index + 1} = ${index + 1};`),
+    ].join('\n');
+
+    const tree = CodeBlock({
+      label: 'output',
+      content,
+      collapsible: true,
+      expanded: false,
+    });
+
+    expect(findElementByType(tree, 'diff')).toBeNull();
+    expect(findElementByType(tree, 'code')).not.toBeNull();
+  });
+
+  it('renders diff component when a collapsed diff block is expanded', () => {
+    const content = [
+      'diff --git a/src/a.ts b/src/a.ts',
+      '--- a/src/a.ts',
+      '+++ b/src/a.ts',
+      '@@ -1,2 +1,22 @@',
+      '-const oldValue = 1;',
+      '+const newValue = 1;',
+      ...Array.from({ length: 20 }, (_, index) => `+const line${index + 1} = ${index + 1};`),
+    ].join('\n');
+
+    const tree = CodeBlock({
+      label: 'output',
+      content,
+      collapsible: true,
+      expanded: true,
+    });
+
+    expect(findElementByType(tree, 'diff')).not.toBeNull();
+  });
+
   it('renders regular snippets with the OpenTUI code component', () => {
     const tree = CodeBlock({
       label: 'arguments',
@@ -101,6 +144,40 @@ describe('CodeBlock', () => {
 
     expect(codeNode).not.toBeNull();
     expect(codeNode?.props?.filetype).toBe('json');
+  });
+
+  it('collapses long output to 16 lines by default when enabled', () => {
+    const content = Array.from({ length: 20 }, (_, index) => `line ${index + 1}`).join('\n');
+    const expected = `${Array.from({ length: 16 }, (_, index) => `line ${index + 1}`).join('\n')}\n`;
+
+    const tree = CodeBlock({
+      label: 'output',
+      content,
+      collapsible: true,
+      expanded: false,
+    });
+
+    const codeNode = findElementByType(tree, 'code');
+
+    expect(codeNode).not.toBeNull();
+    expect(codeNode?.props?.content).toBe(expected);
+  });
+
+  it('shows full output when expanded is true', () => {
+    const content = Array.from({ length: 20 }, (_, index) => `line ${index + 1}`).join('\n');
+    const expected = content;
+
+    const tree = CodeBlock({
+      label: 'output',
+      content,
+      collapsible: true,
+      expanded: true,
+    });
+
+    const codeNode = findElementByType(tree, 'code');
+
+    expect(codeNode).not.toBeNull();
+    expect(codeNode?.props?.content).toBe(expected);
   });
 
   it('does not treat diagnostic text followed by a diff as a diff block', () => {

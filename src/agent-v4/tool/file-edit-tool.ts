@@ -1,6 +1,5 @@
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { createTwoFilesPatch } from 'diff';
 import { z } from 'zod';
 import { BaseTool, ToolConfirmDetails, ToolResult } from './base-tool';
@@ -13,6 +12,8 @@ import {
 } from './path-security';
 import { FILE_EDIT_TOOL_DESCRIPTION } from './tool-prompts';
 import type { ToolExecutionContext } from './types';
+import { createConfiguredFileHistoryStore, FileHistoryStore } from '../storage/file-history-store';
+import { writeTextFileWithHistory } from '../storage/file-write-service';
 
 const fileEditSchema = z.object({
   oldText: z.string().describe('The exact text segment to replace'),
@@ -34,6 +35,7 @@ interface FileEdit {
 
 export interface FileEditToolOptions {
   allowedDirectories?: string[];
+  historyStore?: FileHistoryStore;
 }
 
 interface FileEditPayload {
@@ -121,10 +123,12 @@ export class FileEditTool extends BaseTool<typeof schema> {
   parameters = schema;
 
   private readonly allowedDirectories: string[];
+  private readonly historyStore: FileHistoryStore;
 
   constructor(options: FileEditToolOptions = {}) {
     super();
     this.allowedDirectories = normalizeAllowedDirectories(options.allowedDirectories);
+    this.historyStore = options.historyStore ?? createConfiguredFileHistoryStore();
   }
 
   override shouldConfirm(): boolean {
@@ -207,10 +211,10 @@ export class FileEditTool extends BaseTool<typeof schema> {
   }
 
   private async writeAtomically(targetPath: string, content: string): Promise<void> {
-    await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    const tempPath = `${targetPath}.tmp.${randomUUID().slice(0, 8)}`;
-    await fs.writeFile(tempPath, content, 'utf8');
-    await fs.rename(tempPath, targetPath);
+    await writeTextFileWithHistory(targetPath, content, {
+      source: 'file_edit',
+      historyStore: this.historyStore,
+    });
   }
 
   private createEtag(content: string): string {

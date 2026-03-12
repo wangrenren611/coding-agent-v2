@@ -304,23 +304,23 @@ export abstract class BaseTool<T extends ToolParameterSchema = ToolParameterSche
   abstract description: string;
   abstract parameters: T;
 
-  shouldConfirm(_args: z.infer<T>): boolean {
+  shouldConfirm(_args: z.input<T>): boolean {
     return false;
   }
 
-  getConfirmDetails(_args: z.infer<T>): ToolConfirmDetails | null {
+  getConfirmDetails(_args: z.input<T>): ToolConfirmDetails | null {
     return null;
   }
 
-  getConcurrencyMode(_args: z.infer<T>): ToolConcurrencyMode {
+  getConcurrencyMode(_args: z.input<T>): ToolConcurrencyMode {
     return 'exclusive';
   }
 
-  getConcurrencyLockKey(_args: z.infer<T>): string | undefined {
+  getConcurrencyLockKey(_args: z.input<T>): string | undefined {
     return undefined;
   }
 
-  abstract execute(args: z.infer<T>, context?: ToolExecutionContext): Promise<ToolResult>;
+  abstract execute(args: z.input<T>, context?: ToolExecutionContext): Promise<ToolResult>;
 
   safeValidateArgs(
     args: Record<string, unknown>

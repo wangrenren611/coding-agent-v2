@@ -4,6 +4,23 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { FileEditTool } from '../file-edit-tool';
 import { FileReadTool } from '../file-read-tool';
+import { FileHistoryStore } from '../../storage/file-history-store';
+import type { FileStorageConfig } from '../../storage/file-storage-config';
+
+function createHistoryStore(rootDir: string): FileHistoryStore {
+  const config: FileStorageConfig = {
+    rootDir,
+    writeBufferDir: path.join(rootDir, 'cache', 'write-buffer'),
+    historyDir: path.join(rootDir, 'history'),
+    historyEnabled: true,
+    historyMaxPerFile: 20,
+    historyMaxAgeDays: 14,
+    historyMaxTotalBytes: 1024 * 1024,
+    legacyWriteBufferDir: path.join(rootDir, '.agent-cache', 'write-file'),
+  };
+
+  return new FileHistoryStore({ config });
+}
 
 describe('FileEditTool', () => {
   let rootDir: string;
@@ -49,6 +66,30 @@ describe('FileEditTool', () => {
     const readBack = await readTool.execute({ path: targetPath });
     expect(readBack.success).toBe(true);
     expect(readBack.output).toContain('value = 2');
+  });
+
+  it('stores the previous file version before applying edits', async () => {
+    const historyStore = createHistoryStore(rootDir);
+    editTool = new FileEditTool({
+      allowedDirectories: [rootDir],
+      historyStore,
+    });
+
+    const targetPath = path.join(rootDir, 'history-edit.txt');
+    await fs.writeFile(targetPath, 'const value = 1;\n', 'utf8');
+
+    const result = await editTool.execute({
+      path: targetPath,
+      edits: [{ oldText: 'value = 1', newText: 'value = 2' }],
+    });
+
+    expect(result.success).toBe(true);
+    const versions = await historyStore.listVersions(targetPath);
+    expect(versions).toHaveLength(1);
+
+    const restored = await historyStore.restoreVersion(targetPath, versions[0].versionId);
+    expect(restored).toBe(true);
+    expect(await fs.readFile(targetPath, 'utf8')).toBe('const value = 1;\n');
   });
 
   it('returns no-change metadata when replacement is identical', async () => {

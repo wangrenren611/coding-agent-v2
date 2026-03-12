@@ -182,10 +182,8 @@ export class FileReadTool extends BaseTool<typeof schema> {
       return { output: input, truncated: false };
     }
 
-    const marker = '[... Output Truncated ...]';
-    const separator = '\n\n';
-    const reserved = marker.length + separator.length * 2;
-    const available = this.maxOutputLength - reserved;
+    const marker = '\n\n[... Output Truncated ...]';
+    const available = this.maxOutputLength - marker.length;
     if (available <= 20) {
       return {
         output: input.slice(0, this.maxOutputLength),
@@ -193,14 +191,14 @@ export class FileReadTool extends BaseTool<typeof schema> {
       };
     }
 
-    const headLength = Math.floor(available / 2);
-    const tailLength = available - headLength;
+    const head = input.slice(0, available);
+    const tailLineBreak = head.lastIndexOf('\n');
+    const safeTailBreakThreshold = Math.floor(available * 0.6);
+    const trimmedHead =
+      tailLineBreak > safeTailBreakThreshold ? head.slice(0, tailLineBreak) : head;
 
     return {
-      output:
-        input.slice(0, headLength) +
-        `${separator}${marker}${separator}` +
-        input.slice(Math.max(0, input.length - tailLength)),
+      output: `${trimmedHead}${marker}`,
       truncated: true,
     };
   }
