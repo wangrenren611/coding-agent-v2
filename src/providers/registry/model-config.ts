@@ -221,7 +221,7 @@ export const MODEL_DEFINITIONS: Record<ModelId, Omit<ModelConfig, 'apiKey'>> = {
     envApiKey: 'OPENROUTER_API_KEY',
     envBaseURL: 'OPENROUTER_API_BASE',
     model: 'openrouter/hunter-alpha',
-    max_tokens: 32*10,
+    max_tokens: 32 * 10,
     LLMMAX_TOKENS: 1000 * 1000,
     model_reasoning_effort: 'high',
     features: ['streaming', 'function-calling'],
