@@ -239,4 +239,38 @@ describe('ResponsesAdapter', () => {
       total_tokens: 12,
     });
   });
+
+  it('should convert response.failed events into standard stream error chunks', async () => {
+    const adapter = new ResponsesAdapter({
+      defaultModel: 'glm-5',
+    });
+
+    const sse = [
+      'event: response.created\n',
+      'data: {"type":"response.created","response":{"id":"resp_failed","model":"glm-5","created_at":1762675000}}\n\n',
+      'event: response.failed\n',
+      'data: {"type":"response.failed","error":{"code":"upstream_timeout","type":"server_error","message":"temporary upstream timeout"}}\n\n',
+    ].join('');
+
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(sse));
+        controller.close();
+      },
+    });
+
+    const chunks = await collectChunks(adapter.parseStreamAsync!(stream.getReader()));
+
+    expect(chunks).toEqual([
+      {
+        id: 'resp_failed',
+        index: 0,
+        error: {
+          code: 'upstream_timeout',
+          type: 'server_error',
+          message: 'temporary upstream timeout',
+        },
+      },
+    ]);
+  });
 });

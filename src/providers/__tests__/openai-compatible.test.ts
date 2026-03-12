@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OpenAICompatibleProvider } from '../openai-compatible';
+import { ResponsesAdapter } from '../adapters/responses';
 import { StandardAdapter } from '../adapters/standard';
 import { LLMBadRequestError, LLMPermanentError, LLMRetryableError } from '../types';
 import type { Chunk, LLMGenerateOptions, LLMRequestMessage } from '../types';
@@ -482,6 +483,52 @@ describe('OpenAICompatibleProvider', () => {
       await expect(
         collectChunks(provider.generateStream([{ role: 'user', content: 'Hi' }]))
       ).rejects.toBeInstanceOf(LLMRetryableError);
+    });
+
+    it('should classify responses response.failed events as retryable upstream errors', async () => {
+      const responsesProvider = new OpenAICompatibleProvider(
+        {
+          apiKey: 'test-api-key',
+          baseURL: 'https://api.example.com',
+          model: 'glm-5',
+          temperature: 0.7,
+          max_tokens: 2000,
+          LLMMAX_TOKENS: 8000,
+          timeout: 30000,
+          maxRetries: 3,
+        },
+        new ResponsesAdapter({ defaultModel: 'glm-5' })
+      );
+
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              [
+                'event: response.created\n',
+                'data: {"type":"response.created","response":{"id":"resp_failed","model":"glm-5","created_at":1762675000}}\n\n',
+                'event: response.failed\n',
+                'data: {"type":"response.failed","error":{"code":"upstream_timeout","type":"server_error","message":"temporary upstream timeout"}}\n\n',
+              ].join('')
+            )
+          );
+          controller.close();
+        },
+      });
+
+      vi.spyOn(responsesProvider.httpClient, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: stream,
+      } as Response);
+
+      await expect(
+        collectChunks(responsesProvider.generateStream([{ role: 'user', content: 'Hi' }]))
+      ).rejects.toMatchObject({
+        name: 'LLMRetryableError',
+        code: 'upstream_timeout',
+        message: 'temporary upstream timeout (chunk: resp_failed)',
+      });
     });
   });
 
