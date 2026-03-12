@@ -113,7 +113,7 @@ export const MODEL_DEFINITIONS: Record<ModelId, Omit<ModelConfig, 'apiKey'>> = {
     max_tokens: 10000,
     LLMMAX_TOKENS: 200 * 1000,
     features: ['streaming', 'function-calling'],
-        modalities: { image: true },
+    modalities: { image: true },
   },
   // Qwen 系列
   'qwen3.5-max': {

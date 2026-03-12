@@ -80,7 +80,7 @@ export class HTTPClient {
         method,
         url,
         hasSignal: Boolean(upstreamSignal),
-        header:JSON.stringify(options),
+        header: JSON.stringify(options),
       });
 
       const response = await fetch(url, {

@@ -115,7 +115,9 @@ interface ResponsesCompletedResponse {
     id?: string;
     created_at?: number;
     model?: string;
-    output?: Array<ResponsesOutputMessageItem | ResponsesOutputFunctionCallItem | { type?: string }>;
+    output?: Array<
+      ResponsesOutputMessageItem | ResponsesOutputFunctionCallItem | { type?: string }
+    >;
     usage?: ResponsesUsage;
   };
 }
@@ -552,7 +554,8 @@ export class ResponsesAdapter extends BaseAPIAdapter {
       }
 
       const outputIndex = this.readNumber(data.output_index) ?? 0;
-      const toolCallId = this.readString(item.call_id) || this.readString(item.id) || `call_${outputIndex}`;
+      const toolCallId =
+        this.readString(item.call_id) || this.readString(item.id) || `call_${outputIndex}`;
       const name = this.readString(item.name) || '';
       state.toolCalls.set(outputIndex, { id: toolCallId, name });
 
@@ -635,7 +638,17 @@ export class ResponsesAdapter extends BaseAPIAdapter {
     if (type === 'response.failed') {
       const error = data.error as Record<string, unknown> | undefined;
       const message = this.readString(error?.message) || 'Responses stream failed';
-      throw new Error(message);
+      const errorCode = this.readString(error?.code);
+      const errorType = this.readString(error?.type) || 'response.failed';
+      return {
+        id: state.responseId,
+        index: 0,
+        error: {
+          code: errorCode,
+          type: errorType,
+          message,
+        },
+      };
     }
 
     return null;

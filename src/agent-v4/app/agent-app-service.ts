@@ -46,6 +46,7 @@ export interface RunForegroundRequest {
   timeoutBudgetMs?: number;
   llmTimeoutRatio?: number;
   contextLimitTokens?: number;
+  modelLabel?: string;
 }
 
 export interface RunForegroundUsage {
@@ -203,6 +204,13 @@ export class AgentAppService {
         await callbacks?.onContextUsage?.(contextUsage);
       },
       onMessage: async (message) => {
+        // 添加模型信息到消息的 metadata 中
+        if (request.modelLabel && message.role === 'assistant') {
+          message.metadata = {
+            ...message.metadata,
+            modelLabel: request.modelLabel,
+          };
+        }
         emittedMessages.push(message);
         await appendAndProject('assistant_message', {
           message,

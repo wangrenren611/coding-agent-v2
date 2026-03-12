@@ -595,6 +595,7 @@ export const runAgentPrompt = async (
         systemPrompt: buildSystemPrompt({ directory: runtime.workspaceRoot }),
         maxSteps: runtime.maxSteps,
         abortSignal: options.abortSignal,
+        modelLabel: runtime.modelLabel,
       },
       {
         onError: (error: unknown) => {

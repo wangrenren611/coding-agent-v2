@@ -3,11 +3,7 @@ import * as path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WriteFileTool } from '../write-file';
-import {
-  appendContent,
-  appendRawArgs,
-  createWriteBufferSession,
-} from '../../agent/write-buffer';
+import { appendContent, appendRawArgs, createWriteBufferSession } from '../../agent/write-buffer';
 
 const tempDirs: string[] = [];
 

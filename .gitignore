@@ -40,6 +40,8 @@ dist
 .agent-cache/*
 /web/.next/
 /web/.next/*
+/agent-monitor/.next/
+/agent-monitor/.next/*
 # data/*
 src/cli-tui/.coding-agent
 test-agent
