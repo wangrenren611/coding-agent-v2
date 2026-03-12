@@ -157,6 +157,22 @@ describe('normalizeError', () => {
     expect(result).toBeInstanceOf(AgentUpstreamRetryableError);
   });
 
+  it('infers network retryable errors from message when code is missing', () => {
+    const error = new LLMRetryableError(
+      'Network connection lost. (chunk: gen-1773295956-gHGwhy1zWdrqK3KOjVOl)'
+    );
+    const result = normalizeError(error, abortedMessage);
+
+    expect(result).toBeInstanceOf(AgentUpstreamNetworkError);
+  });
+
+  it('infers timeout retryable errors from message when code is missing', () => {
+    const error = new LLMRetryableError('Request timed out while streaming response');
+    const result = normalizeError(error, abortedMessage);
+
+    expect(result).toBeInstanceOf(AgentUpstreamTimeoutError);
+  });
+
   it('converts LLMPermanentError to AgentUpstreamPermanentError', () => {
     const error = new LLMPermanentError('permanent');
     const result = normalizeError(error, abortedMessage);

@@ -102,4 +102,28 @@ describe('CodeBlock', () => {
     expect(codeNode).not.toBeNull();
     expect(codeNode?.props?.filetype).toBe('json');
   });
+
+  it('does not treat diagnostic text followed by a diff as a diff block', () => {
+    const content = [
+      "Error parsing diff: Hunk at line 5 contained invalid line Line 2');",
+      'Index: /tmp/task-errors.test.ts',
+      '===================================================================',
+      '--- /tmp/task-errors.test.ts original',
+      '+++ /tmp/task-errors.test.ts modified',
+      '@@ -1 +1 @@',
+      '-a',
+      '+b',
+    ].join('\n');
+
+    expect(looksLikeDiff(content)).toBe(false);
+    expect(inferCodeFiletype(content)).toBeUndefined();
+
+    const tree = CodeBlock({
+      label: 'output',
+      content,
+    });
+
+    expect(findElementByType(tree, 'diff')).toBeNull();
+    expect(findElementByType(tree, 'code')).not.toBeNull();
+  });
 });

@@ -56,7 +56,11 @@ type RunAgentPromptOptions = {
 
 let runtimePromise: Promise<RuntimeCore> | null = null;
 let initializing = false;
-let preferredModelId = process.env.AGENT_MODEL?.trim() || undefined;
+const readPreferredModelIdFromEnv = (): string | undefined => {
+  return process.env.AGENT_MODEL?.trim() || undefined;
+};
+
+let preferredModelId = readPreferredModelIdFromEnv();
 
 const DEFAULT_MODEL = 'qwen3.5-plus';
 const DEFAULT_MAX_STEPS = 10000;
@@ -720,12 +724,6 @@ export const runAgentPrompt = async (
             case 'error': {
               const message = readString(payload.message);
               streamedState.latestErrorMessage = message;
-              const stopEvent: AgentStopEvent = {
-                reason: 'error',
-                message,
-              };
-              safeInvoke(() => handlers.onStop?.(stopEvent));
-              streamedState.stopEmitted = true;
               break;
             }
             default:
@@ -837,4 +835,5 @@ export const switchAgentModel = async (modelId: string): Promise<AgentModelSwitc
 
 export const disposeAgentRuntime = async (): Promise<void> => {
   await disposeRuntimeInstance();
+  preferredModelId = readPreferredModelIdFromEnv();
 };

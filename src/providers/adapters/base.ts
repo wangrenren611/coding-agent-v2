@@ -13,6 +13,7 @@ import type {
   MessageContent,
   Role,
   Chunk,
+  ToolCall,
 } from '../types';
 
 export abstract class BaseAPIAdapter {
@@ -90,7 +91,7 @@ export abstract class BaseAPIAdapter {
       }
 
       if (item.tool_calls !== undefined && item.tool_calls !== null) {
-        message.tool_calls = item.tool_calls;
+        message.tool_calls = item.tool_calls as ToolCall[];
       }
 
       cleaned.push(message);

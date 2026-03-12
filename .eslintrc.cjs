@@ -23,4 +23,12 @@ module.exports = {
     ],
   },
   ignorePatterns: ['dist', 'node_modules', '*.js'],
+  overrides: [
+    {
+      files: ['**/__test__/**/*.ts', '**/__test__/**/*.tsx', '**/*.test.ts', '**/*.test.tsx'],
+      rules: {
+        '@typescript-eslint/no-explicit-any': 'off',
+      },
+    },
+  ],
 };

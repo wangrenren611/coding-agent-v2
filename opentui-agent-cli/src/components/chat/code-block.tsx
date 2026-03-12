@@ -55,6 +55,19 @@ export const looksLikeDiff = (value: string): boolean => {
     return false;
   }
 
+  const firstLine = normalized.split('\n', 1)[0]?.trim();
+  if (
+    !firstLine ||
+    !(
+      firstLine.startsWith('diff --git ') ||
+      firstLine.startsWith('Index: ') ||
+      firstLine.startsWith('--- ') ||
+      firstLine.startsWith('@@ ')
+    )
+  ) {
+    return false;
+  }
+
   if (DIFF_HEADER_PATTERNS.some(pattern => pattern.test(normalized))) {
     return (
       /^@@ /m.test(normalized) ||

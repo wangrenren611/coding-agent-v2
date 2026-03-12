@@ -128,6 +128,7 @@ export interface LLMResponseMessage extends BaseLLMMessage {
  */
 export interface LLMRequestMessage extends BaseLLMMessage {
   tool_call_id?: string;
+  tool_calls?: ToolCall[];
 }
 
 /**

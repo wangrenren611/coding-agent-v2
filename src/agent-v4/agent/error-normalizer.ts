@@ -109,6 +109,13 @@ function mapRetryableProviderError(error: LLMRetryableError): AgentError {
   if (isServerCode(providerCode)) {
     return new AgentUpstreamServerError(error.message);
   }
+  const inferredKind = inferRetryableKindFromMessage(error.message);
+  if (inferredKind === 'timeout') {
+    return new AgentUpstreamTimeoutError(error.message);
+  }
+  if (inferredKind === 'network') {
+    return new AgentUpstreamNetworkError(error.message);
+  }
   return new AgentUpstreamRetryableError(error.message);
 }
 
@@ -150,4 +157,27 @@ function normalizeProviderCode(code: string | undefined): string {
 
 function isServerCode(code: string): boolean {
   return /^SERVER_\d{3}$/.test(code);
+}
+
+function inferRetryableKindFromMessage(
+  message: string | undefined
+): 'network' | 'timeout' | undefined {
+  if (typeof message !== 'string') {
+    return undefined;
+  }
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  if (/\b(timeout|timed out|body timeout|request timeout|deadline exceeded)\b/.test(normalized)) {
+    return 'timeout';
+  }
+  if (
+    /\b(network|connection|socket|econnreset|econnrefused|enotfound|ehostunreach|etimedout|dns)\b/.test(
+      normalized
+    )
+  ) {
+    return 'network';
+  }
+  return undefined;
 }
