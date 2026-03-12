@@ -33,15 +33,21 @@ Usage:
 - Use Task for broad open-ended search workflows that need many iterative rounds.
 - Ripgrep regex semantics apply. Escape literals when needed.`;
 
-export const FILE_READ_TOOL_DESCRIPTION = `Read a UTF-8 text file from the local filesystem.
+export const FILE_READ_TOOL_DESCRIPTION = `Reads a file from the local filesystem. You can access any file directly by using this tool.
+Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
 
 Usage:
-- path can be absolute or relative.
-- startLine and endLine are optional 1-based inclusive bounds.
-- By default, reads the full file content.
-- This tool only reads files (not directories).
-- For directory listing or shell-level inspection, use bash.
-- Large output may be truncated for safety.`;
+- The filePath parameter must be an absolute path, not a relative path
+- By default, it reads up to 1000 lines starting from the beginning of the file
+- You can optionally specify a startLine (0-based) and limit (number of lines to read) for line-based slicing
+- startLine: The line number to start reading from (0-based, defaults to 0)
+- limit: The number of lines to read (defaults to 1000)
+- Any lines longer than 2000 characters will be truncated
+- Results are returned using cat -n format, with line numbers starting at 1
+- You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful.
+- If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents.
+- You can read image files using this tool.
+`;
 
 export const FILE_EDIT_TOOL_DESCRIPTION = `Apply one or more old/new text replacements to a single file and return a unified diff.
 

@@ -15,18 +15,18 @@ import type { ToolExecutionContext } from './types';
 const schema = z
   .object({
     path: z.string().min(1).describe('The absolute or relative path to the file'),
-    startLine: z
+    // 起始行号（0-based）
+    startLine: z.coerce
       .number()
-      .int()
-      .min(1)
-      .optional()
-      .describe('The line number to start reading from (1-based, defaults to 1)'),
-    endLine: z
+      .min(0)
+      .describe('The line number to start reading from (0-based)')
+      .optional(),
+    // 读取行数
+    limit: z.coerce
       .number()
-      .int()
       .min(1)
-      .optional()
-      .describe('The ending line number to read to (1-based, inclusive)'),
+      .describe('The number of lines to read (defaults to 1000)')
+      .optional(),
   })
   .strict();
 
@@ -55,7 +55,7 @@ export class FileReadTool extends BaseTool<typeof schema> {
     super();
     this.allowedDirectories = normalizeAllowedDirectories(options.allowedDirectories);
     this.maxOutputLength =
-      options.maxOutputLength && options.maxOutputLength > 0 ? options.maxOutputLength : 30000;
+      options.maxOutputLength && options.maxOutputLength > 0 ? options.maxOutputLength : 2000;
   }
 
   override getConcurrencyMode(): 'parallel-safe' {
@@ -83,22 +83,18 @@ export class FileReadTool extends BaseTool<typeof schema> {
   }
 
   async execute(args: z.infer<typeof schema>, context?: ToolExecutionContext): Promise<ToolResult> {
-    if (
-      typeof args.startLine === 'number' &&
-      typeof args.endLine === 'number' &&
-      args.endLine < args.startLine
-    ) {
-      const message = 'FILE_READ_INVALID_LINE_RANGE: endLine must be >= startLine';
+    const limit = args.limit ?? 1000;
+    if (limit < 1) {
+      const message = 'FILE_READ_INVALID_LIMIT: limit must be >= 1';
       return {
         success: false,
         output: message,
         error: new ToolExecutionError(message),
         metadata: {
-          error: 'FILE_READ_INVALID_LINE_RANGE',
-          message: 'endLine must be greater than or equal to startLine',
+          error: 'FILE_READ_INVALID_LIMIT',
+          message: 'limit must be greater than or equal to 1',
           path: args.path,
-          startLine: args.startLine,
-          endLine: args.endLine,
+          limit,
         },
       };
     }
@@ -118,7 +114,7 @@ export class FileReadTool extends BaseTool<typeof schema> {
       }
 
       const fullContent = await fs.readFile(validatedPath, 'utf8');
-      const slicedContent = this.sliceContentByLines(fullContent, args.startLine, args.endLine);
+      const slicedContent = this.sliceContentByLines(fullContent, args.startLine, limit);
       const truncatedResult = this.truncateOutput(slicedContent);
 
       const payload: FileReadPayload = {
@@ -161,8 +157,8 @@ export class FileReadTool extends BaseTool<typeof schema> {
     return `FILE_READ_FAILED: ${message}`;
   }
 
-  private sliceContentByLines(content: string, startLine?: number, endLine?: number): string {
-    if (startLine === undefined && endLine === undefined) {
+  private sliceContentByLines(content: string, startLine?: number, limit?: number): string {
+    if (startLine === undefined && limit === undefined) {
       return content;
     }
 
@@ -172,8 +168,8 @@ export class FileReadTool extends BaseTool<typeof schema> {
       lines.pop();
     }
 
-    const start = Math.max((startLine ?? 1) - 1, 0);
-    const endExclusive = endLine === undefined ? lines.length : Math.min(endLine, lines.length);
+    const start = Math.max(startLine ?? 0, 0);
+    const endExclusive = limit === undefined ? lines.length : Math.min(start + limit, lines.length);
     if (start >= lines.length || endExclusive <= start) {
       return '';
     }

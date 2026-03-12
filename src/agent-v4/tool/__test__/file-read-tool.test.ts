@@ -30,7 +30,7 @@ describe('FileReadTool', () => {
     const result = await tool.execute({ path: targetPath });
 
     expect(result.success).toBe(true);
-    expect(result.output).toBe('hello\nworld\n');
+    expect(result.output).toBe('hello\nworld');
 
     const metadata = result.metadata as {
       path: string;
@@ -50,11 +50,11 @@ describe('FileReadTool', () => {
     const result = await tool.execute({
       path: targetPath,
       startLine: 2,
-      endLine: 3,
+      limit: 3,
     });
 
     expect(result.success).toBe(true);
-    expect(result.output).toBe('line-2\nline-3');
+    expect(result.output).toBe('line-3\nline-4');
   });
 
   it('supports open-ended line slicing', async () => {
@@ -63,28 +63,30 @@ describe('FileReadTool', () => {
 
     const toEnd = await tool.execute({
       path: targetPath,
-      startLine: 3,
+      startLine: 2,
     });
     expect(toEnd.success).toBe(true);
     expect(toEnd.output).toBe('line-3\nline-4');
 
     const fromStart = await tool.execute({
       path: targetPath,
-      endLine: 2,
+      limit: 2,
     });
     expect(fromStart.success).toBe(true);
     expect(fromStart.output).toBe('line-1\nline-2');
   });
 
-  it('rejects invalid line range', async () => {
+  it('rejects invalid limit', async () => {
+    const targetPath = path.join(rootDir, 'x.txt');
+    await fs.writeFile(targetPath, 'content', 'utf8');
+
     const result = await tool.execute({
-      path: path.join(rootDir, 'x.txt'),
-      startLine: 5,
-      endLine: 1,
+      path: targetPath,
+      limit: 0,
     });
 
     expect(result.success).toBe(false);
-    expect(result.output).toContain('FILE_READ_INVALID_LINE_RANGE');
+    expect(result.output).toContain('FILE_READ_INVALID_LIMIT');
   });
 
   it('truncates oversized content', async () => {
@@ -150,7 +152,7 @@ describe('FileReadTool', () => {
     const result = await tool.execute({
       path: targetPath,
       startLine: 99,
-      endLine: 120,
+      limit: 10,
     });
 
     expect(result.success).toBe(true);
