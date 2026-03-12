@@ -141,6 +141,8 @@ describe('runAgentPrompt context usage forwarding', () => {
       WriteFileTool: FakeTool,
       FileReadTool: FakeTool,
       FileEditTool: FakeTool,
+      FileHistoryListTool: FakeTool,
+      FileHistoryRestoreTool: FakeTool,
       GlobTool: FakeTool,
       GrepTool: FakeTool,
       SkillTool: FakeTool,

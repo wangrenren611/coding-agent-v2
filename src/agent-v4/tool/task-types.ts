@@ -30,9 +30,9 @@ export const SUBAGENT_TYPE_VALUES = [
   'Bash',
   'general-purpose',
   'Explore',
+  'Restore',
   'Plan',
   'research-agent',
-  'claude-code-guide',
   'find-skills',
 ] as const;
 

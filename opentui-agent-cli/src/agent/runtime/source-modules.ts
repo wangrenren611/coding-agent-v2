@@ -74,6 +74,7 @@ type AgentAppRunRequestLike = {
   userInput: MessageContent;
   historyMessages?: AgentV4MessageLike[];
   systemPrompt?: string;
+  tools?: Array<{ type: string; function: Record<string, unknown> }>;
   maxSteps?: number;
   contextLimitTokens?: number;
   abortSignal?: AbortSignal;
@@ -176,6 +177,8 @@ export type SourceModules = {
   WriteFileTool: ToolCtor;
   FileReadTool: ToolCtor;
   FileEditTool: ToolCtor;
+  FileHistoryListTool: ToolCtor;
+  FileHistoryRestoreTool: ToolCtor;
   GlobTool: ToolCtor;
   GrepTool: ToolCtor;
   SkillTool: ToolCtor;
@@ -232,6 +235,8 @@ const loadSourceModules = async (): Promise<SourceModules> => {
     writeToolMod,
     fileReadToolMod,
     fileEditToolMod,
+    fileHistoryListToolMod,
+    fileHistoryRestoreToolMod,
     globToolMod,
     grepToolMod,
     skillToolMod,
@@ -255,6 +260,8 @@ const loadSourceModules = async (): Promise<SourceModules> => {
     import(toModuleUrl(resolve(repoRoot, 'src/agent-v4/tool/write-file.ts'))),
     import(toModuleUrl(resolve(repoRoot, 'src/agent-v4/tool/file-read-tool.ts'))),
     import(toModuleUrl(resolve(repoRoot, 'src/agent-v4/tool/file-edit-tool.ts'))),
+    import(toModuleUrl(resolve(repoRoot, 'src/agent-v4/tool/file-history-list.ts'))),
+    import(toModuleUrl(resolve(repoRoot, 'src/agent-v4/tool/file-history-restore.ts'))),
     import(toModuleUrl(resolve(repoRoot, 'src/agent-v4/tool/glob.ts'))),
     import(toModuleUrl(resolve(repoRoot, 'src/agent-v4/tool/grep.ts'))),
     import(toModuleUrl(resolve(repoRoot, 'src/agent-v4/tool/skill-tool.ts'))),
@@ -286,6 +293,11 @@ const loadSourceModules = async (): Promise<SourceModules> => {
     WriteFileTool: getRequiredExport<ToolCtor>(writeToolMod, 'WriteFileTool'),
     FileReadTool: getRequiredExport<ToolCtor>(fileReadToolMod, 'FileReadTool'),
     FileEditTool: getRequiredExport<ToolCtor>(fileEditToolMod, 'FileEditTool'),
+    FileHistoryListTool: getRequiredExport<ToolCtor>(fileHistoryListToolMod, 'FileHistoryListTool'),
+    FileHistoryRestoreTool: getRequiredExport<ToolCtor>(
+      fileHistoryRestoreToolMod,
+      'FileHistoryRestoreTool'
+    ),
     GlobTool: getRequiredExport<ToolCtor>(globToolMod, 'GlobTool'),
     GrepTool: getRequiredExport<ToolCtor>(grepToolMod, 'GrepTool'),
     SkillTool: getRequiredExport<ToolCtor>(skillToolMod, 'SkillTool'),

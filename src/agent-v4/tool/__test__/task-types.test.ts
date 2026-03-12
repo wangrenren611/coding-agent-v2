@@ -49,6 +49,7 @@ describe('constants', () => {
     expect(SUBAGENT_TYPE_VALUES).toContain('Bash');
     expect(SUBAGENT_TYPE_VALUES).toContain('general-purpose');
     expect(SUBAGENT_TYPE_VALUES).toContain('Explore');
+    expect(SUBAGENT_TYPE_VALUES).toContain('Restore');
     expect(SUBAGENT_TYPE_VALUES).toContain('Plan');
   });
 

@@ -26,20 +26,26 @@ import type { AgentEventHandlers } from './types';
 
 const buildMockModules = () => {
   class FakeToolManager {
-    registerTool = vi.fn();
-    getTools = vi.fn(() => []);
+    private readonly tools: unknown[] = [];
+
+    registerTool = vi.fn((tool: unknown) => {
+      this.tools.push(tool);
+    });
+
+    getTools = vi.fn(() => this.tools);
   }
 
-  class FakeTool {
-    toToolSchema() {
-      return {
-        type: 'function',
-        function: {
-          name: 'fake_tool',
-        },
-      };
-    }
-  }
+  const createNamedTool = (name: string) =>
+    class NamedFakeTool {
+      toToolSchema() {
+        return {
+          type: 'function',
+          function: {
+            name,
+          },
+        };
+      }
+    };
 
   class FakeAgent {
     on = vi.fn();
@@ -47,11 +53,14 @@ const buildMockModules = () => {
   }
 
   class FakeAppService {
+    static lastRequest: unknown;
+
     async listContextMessages() {
       return [];
     }
 
-    async runForeground() {
+    async runForeground(request: unknown) {
+      FakeAppService.lastRequest = request;
       return {
         executionId: 'exec_runtime',
         conversationId: 'conv_runtime',
@@ -94,20 +103,22 @@ const buildMockModules = () => {
       close: vi.fn().mockResolvedValue(undefined),
     }),
     DefaultToolManager: FakeToolManager,
-    BashTool: FakeTool,
-    WriteFileTool: FakeTool,
-    FileReadTool: FakeTool,
-    FileEditTool: FakeTool,
-    GlobTool: FakeTool,
-    GrepTool: FakeTool,
-    SkillTool: FakeTool,
-    TaskTool: FakeTool,
-    TaskCreateTool: FakeTool,
-    TaskGetTool: FakeTool,
-    TaskListTool: FakeTool,
-    TaskUpdateTool: FakeTool,
-    TaskStopTool: FakeTool,
-    TaskOutputTool: FakeTool,
+    BashTool: createNamedTool('bash'),
+    WriteFileTool: createNamedTool('write_file'),
+    FileReadTool: createNamedTool('file_read'),
+    FileEditTool: createNamedTool('file_edit'),
+    FileHistoryListTool: createNamedTool('file_history_list'),
+    FileHistoryRestoreTool: createNamedTool('file_history_restore'),
+    GlobTool: createNamedTool('glob'),
+    GrepTool: createNamedTool('grep'),
+    SkillTool: createNamedTool('skill'),
+    TaskTool: createNamedTool('agent'),
+    TaskCreateTool: createNamedTool('task_create'),
+    TaskGetTool: createNamedTool('task_get'),
+    TaskListTool: createNamedTool('task_list'),
+    TaskUpdateTool: createNamedTool('task_update'),
+    TaskStopTool: createNamedTool('task_stop'),
+    TaskOutputTool: createNamedTool('task_output'),
     TaskStore: class {},
     RealSubagentRunnerAdapter: class {},
   };
@@ -192,5 +203,25 @@ describe('runtime', () => {
         modelLabel: 'GLM-5',
       })
     );
+  });
+
+  it('hides file history tools from the parent agent tool list', async () => {
+    const modules = buildMockModules();
+    const appServiceClass = modules.AgentAppService as {
+      lastRequest?: { tools?: Array<{ function?: { name?: string } }> };
+    };
+    mockGetSourceModules.mockResolvedValue(
+      modules as unknown as Awaited<ReturnType<typeof sourceModules.getSourceModules>>
+    );
+
+    await runAgentPrompt('Test prompt', {});
+
+    const toolNames =
+      appServiceClass.lastRequest?.tools?.map(tool => tool.function?.name).filter(Boolean) || [];
+
+    expect(toolNames).toContain('file_read');
+    expect(toolNames).toContain('file_edit');
+    expect(toolNames).not.toContain('file_history_list');
+    expect(toolNames).not.toContain('file_history_restore');
   });
 });

@@ -103,6 +103,11 @@ export class FileHistoryStore {
 
     const snapshotPath = this.resolveSnapshotPath(version.snapshotFile);
     const content = await fs.readFile(snapshotPath, 'utf8');
+    await this.snapshotBeforeWrite({
+      targetPath: path.resolve(targetPath),
+      nextContent: content,
+      source: 'file_history_restore',
+    });
     await writeTextFileAtomically(path.resolve(targetPath), content);
     return true;
   }

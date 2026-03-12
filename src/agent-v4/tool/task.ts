@@ -35,9 +35,9 @@ const schema = z
         'Bash',
         'general-purpose',
         'Explore',
+        'Restore',
         'Plan',
         'research-agent',
-        'claude-code-guide',
         'find-skills',
       ])
       .describe('The type of specialized agent to use for this task'),

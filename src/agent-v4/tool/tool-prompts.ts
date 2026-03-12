@@ -61,6 +61,27 @@ Notes:
 - If oldText is not found, the tool returns EDIT_CONFLICT so you can re-read and retry.
 - This is preferred over write_file for precise incremental edits to existing files.`;
 
+export const FILE_HISTORY_LIST_TOOL_DESCRIPTION = `Lists saved historical versions for a file.
+
+Use this when:
+- You want to see whether a previous version is available before restoring.
+- You need a versionId for a later file_history_restore call.
+
+Notes:
+- Results are ordered newest-first.
+- Each entry includes versionId, createdAt, size, and source.`;
+
+export const FILE_HISTORY_RESTORE_TOOL_DESCRIPTION = `Restores a file from previously saved history.
+
+Use this when:
+- You need to roll back a file to a prior saved version.
+- The user asks to restore the previous or a specific old version.
+
+Usage notes:
+- Provide path and, optionally, versionId.
+- If versionId is omitted, the latest saved version is restored.
+- Restoring also preserves the current file content as a new history snapshot before overwrite.`;
+
 export const WRITE_FILE_TOOL_DESCRIPTION = `Writes file content to the local filesystem.
 
 Behavior:
@@ -82,9 +103,9 @@ Available subagent types and their default tools:
 - Bash: terminal and command execution specialist. Use for focused shell work. (Tools: bash)
 - general-purpose: broad multi-step research and implementation agent. Use when the task may require several rounds of searching, reading, editing, and verification. (Tools: bash, glob, grep, file_read, file_edit, write_file, skill)
 - Explore: fast codebase exploration and discovery agent. Use for open-ended codebase exploration, pattern-based file discovery, and multi-round keyword searches. (Tools: glob, grep, file_read, skill)
+- Restore: focused rollback agent for restoring a file from saved history when the parent agent already knows the target path. (Tools: glob, file_read, file_history_list, file_history_restore)
 - Plan: implementation planning and architecture strategy agent. Use when you need a concrete implementation plan, critical file list, risks, and trade-offs before editing code. (Tools: glob, grep, file_read, skill)
 - research-agent: long-form research and synthesis agent. Use when you need evidence collection and structured findings from local project context. (Tools: glob, grep, file_read, skill)
-- claude-code-guide: coding guidance and navigation focused agent. Use when you need concise, codebase-grounded implementation direction or file/navigation help. (Tools: glob, grep, file_read, skill)
 - find-skills: local skill lookup + installation guidance agent. Use to discover the right skill, prefer local skills first, and fall back to verified installation steps when needed. (Tools: skill, bash)
 
 When to use the Agent tool:

@@ -41,6 +41,7 @@ type RuntimeCore = {
   maxSteps: number;
   conversationId: string;
   workspaceRoot: string;
+  parentTools: Array<{ type: string; function: { name?: string } }>;
   agent: StatelessAgentLike;
   appService: AgentAppServiceLike;
   appStore: AgentAppStoreLike;
@@ -66,6 +67,7 @@ const DEFAULT_MODEL = 'qwen3.5-plus';
 const DEFAULT_MAX_STEPS = 10000;
 const DEFAULT_MAX_RETRY_COUNT = 10;
 const DEFAULT_DB_PATH = 'C:/Users/Administrator/.coding-agent/agent.db';
+const PARENT_HIDDEN_TOOL_NAMES = new Set(['file_history_list', 'file_history_restore']);
 
 const parsePositiveInt = (raw: string | undefined, fallback: number): number => {
   if (!raw || raw.trim().length === 0) {
@@ -365,6 +367,16 @@ const createRuntime = async (): Promise<RuntimeCore> => {
     })
   );
   toolManager.registerTool(
+    new modules.FileHistoryListTool({
+      allowedDirectories: [workspaceRoot],
+    })
+  );
+  toolManager.registerTool(
+    new modules.FileHistoryRestoreTool({
+      allowedDirectories: [workspaceRoot],
+    })
+  );
+  toolManager.registerTool(
     new modules.GlobTool({
       allowedDirectories: [workspaceRoot],
     })
@@ -403,8 +415,8 @@ const createRuntime = async (): Promise<RuntimeCore> => {
     messageStore: appStore,
   });
 
-  const resolveSubagentToolSchemas = (allowedTools?: string[]) => {
-    const allSchemas = toolManager
+  const collectToolSchemas = () =>
+    toolManager
       .getTools()
       .map(tool => {
         const schema = tool?.toToolSchema?.();
@@ -414,6 +426,17 @@ const createRuntime = async (): Promise<RuntimeCore> => {
         return schema;
       })
       .filter((schema): schema is { type: string; function: { name?: string } } => Boolean(schema));
+
+  const resolveToolSchemas = (allowedTools?: string[], hiddenToolNames?: Set<string>) => {
+    const allSchemas = toolManager
+      ? collectToolSchemas().filter(schema => {
+          const name = schema.function?.name;
+          if (typeof name !== 'string') {
+            return false;
+          }
+          return !hiddenToolNames?.has(name);
+        })
+      : [];
 
     if (!allowedTools || allowedTools.length === 0) {
       return allSchemas;
@@ -425,6 +448,9 @@ const createRuntime = async (): Promise<RuntimeCore> => {
       return typeof name === 'string' && allowed.has(name);
     });
   };
+
+  const resolveSubagentToolSchemas = (allowedTools?: string[]) =>
+    resolveToolSchemas(allowedTools, undefined);
 
   const taskRunner = new modules.RealSubagentRunnerAdapter({
     store: taskStore,
@@ -481,6 +507,8 @@ const createRuntime = async (): Promise<RuntimeCore> => {
     })
   );
 
+  const parentTools = resolveToolSchemas(undefined, PARENT_HIDDEN_TOOL_NAMES);
+
   return {
     modules,
     modelId,
@@ -488,6 +516,7 @@ const createRuntime = async (): Promise<RuntimeCore> => {
     maxSteps,
     conversationId,
     workspaceRoot,
+    parentTools,
     agent,
     appService,
     appStore,
@@ -597,6 +626,7 @@ export const runAgentPrompt = async (
         userInput: prompt,
         historyMessages: historyMessages as AgentV4MessageLike[],
         systemPrompt: buildSystemPrompt({ directory: runtime.workspaceRoot }),
+        tools: runtime.parentTools,
         maxSteps: runtime.maxSteps,
         abortSignal: options.abortSignal,
         modelLabel: runtime.modelLabel,

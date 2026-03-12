@@ -6,9 +6,9 @@ const ALL_TYPES: SubagentType[] = [
   'Bash',
   'general-purpose',
   'Explore',
+  'Restore',
   'Plan',
   'research-agent',
-  'claude-code-guide',
   'find-skills',
 ];
 
@@ -49,5 +49,20 @@ describe('task-subagent-config', () => {
     expect(config.systemPrompt).toContain('load the **`find-skills`** skill');
     expect(config.systemPrompt).toContain('Use `bash` only for the required installation command');
     expect(config.systemPrompt).toContain('retry using the `skill` tool');
+  });
+
+  it('defines Restore as a narrow rollback workflow using explicit file paths', () => {
+    const config = getTaskSubagentConfig('Restore');
+
+    expect(config.tools).toEqual([
+      'glob',
+      'file_read',
+      'file_history_list',
+      'file_history_restore',
+    ]);
+    expect(config.systemPrompt).toContain('file restoration specialist');
+    expect(config.systemPrompt).toContain('Prefer exact absolute file paths');
+    expect(config.systemPrompt).toContain('Do not use file_edit or write_file');
+    expect(config.systemPrompt).toContain('file_history_restore');
   });
 });

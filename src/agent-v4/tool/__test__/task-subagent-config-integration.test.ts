@@ -136,4 +136,41 @@ describe('task subagent config integration', () => {
     expect(firstCapture.systemPrompt).toContain('Check local skills first');
     expect(firstCapture.systemPrompt).toContain('load the **`find-skills`** skill');
   });
+
+  it('injects Restore defaults and absolute-path rollback prompt', async () => {
+    const captured: Array<{ allowedTools?: string[]; systemPrompt?: string }> = [];
+    const runner: SubagentRunnerAdapter = {
+      start: async (_ns, input) => {
+        captured.push({
+          allowedTools: input.allowedTools,
+          systemPrompt: input.systemPrompt,
+        });
+        return makeRun('agent-restore-config');
+      },
+      poll: async () => null,
+      cancel: async () => null,
+    };
+
+    const tool = new TaskTool({ store, runner });
+    const result = await tool.execute({
+      namespace: 'ns4',
+      subagent_type: 'Restore',
+      prompt: 'restore D:\\work\\coding-agent-v2\\src\\agent-v4\\tool\\write-file.ts',
+      run_in_background: true,
+    });
+
+    expect(result.success).toBe(true);
+    const firstCapture = captured[0];
+    if (!firstCapture) {
+      throw new Error('expected captured task config');
+    }
+    expect(firstCapture.allowedTools).toEqual([
+      'glob',
+      'file_read',
+      'file_history_list',
+      'file_history_restore',
+    ]);
+    expect(firstCapture.systemPrompt).toContain('absolute file paths');
+    expect(firstCapture.systemPrompt).toContain('Do not use file_edit or write_file');
+  });
 });

@@ -7,8 +7,19 @@ export interface TaskSubagentConfig {
 
 const TOOLSET = {
   bash: ['bash'],
-  readOnly: ['glob', 'grep', 'file_read', 'skill'],
-  general: ['bash', 'glob', 'grep', 'file_read', 'file_edit', 'write_file', 'skill'],
+  readOnly: ['glob', 'grep', 'file_read', 'file_history_list', 'skill'],
+  restore: ['glob', 'file_read', 'file_history_list', 'file_history_restore'],
+  general: [
+    'bash',
+    'glob',
+    'grep',
+    'file_read',
+    'file_edit',
+    'write_file',
+    'file_history_list',
+    'file_history_restore',
+    'skill',
+  ],
   findSkills: ['skill', 'bash'],
 } as const;
 
@@ -20,13 +31,27 @@ Prefer non-interactive commands and always surface stderr on failure.`,
 Use tools pragmatically, verify key changes, and keep responses concise and evidence-based.`,
   Explore: `You are a codebase exploration specialist.
 Use glob/grep/file_read to find relevant implementation details quickly and accurately.`,
+  Restore: `You are a file restoration specialist.
+Your job is to restore one or more files from saved history with minimal risk.
+
+Workflow:
+1. Prefer exact absolute file paths provided by the parent agent.
+2. If the parent already gave an absolute path, do not search broadly unless the path fails.
+3. Use file_history_list to inspect available saved versions for that file.
+4. Unless the parent specifies a versionId, restore the latest saved version.
+5. Use file_history_restore to perform the rollback.
+6. Read the file after restoring to confirm the content changed as expected.
+
+Rules:
+- Prefer absolute file paths.
+- If only a file path is needed and the parent supplied one, that is sufficient.
+- Do not use file_edit or write_file.
+- Do not modify unrelated files.
+- Report exactly which file path was restored and which versionId was used.`,
   Plan: `You are a planning specialist.
 Produce concrete implementation plans with clear steps, risks, and acceptance criteria.`,
   'research-agent': `You are a research-focused subagent.
 Collect evidence from available files and synthesize concise, structured findings.`,
-  'claude-code-guide': `You are a coding guidance and navigation specialist.
-Help the parent agent find the right files, patterns, and implementation direction quickly.
-Prefer concise, codebase-grounded guidance over broad speculation.`,
   'find-skills': `
 ## Role
 You are a **Skill Discovery and Installation Specialist**.
@@ -80,6 +105,10 @@ const TASK_SUBAGENT_CONFIGS: Record<SubagentType, TaskSubagentConfig> = {
     tools: [...TOOLSET.readOnly],
     systemPrompt: SYSTEM_PROMPTS.Explore,
   },
+  Restore: {
+    tools: [...TOOLSET.restore],
+    systemPrompt: SYSTEM_PROMPTS.Restore,
+  },
   Plan: {
     tools: [...TOOLSET.readOnly],
     systemPrompt: SYSTEM_PROMPTS.Plan,
@@ -87,10 +116,6 @@ const TASK_SUBAGENT_CONFIGS: Record<SubagentType, TaskSubagentConfig> = {
   'research-agent': {
     tools: [...TOOLSET.readOnly],
     systemPrompt: SYSTEM_PROMPTS['research-agent'],
-  },
-  'claude-code-guide': {
-    tools: [...TOOLSET.readOnly],
-    systemPrompt: SYSTEM_PROMPTS['claude-code-guide'],
   },
   'find-skills': {
     tools: [...TOOLSET.findSkills],
