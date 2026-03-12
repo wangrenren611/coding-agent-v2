@@ -4,7 +4,6 @@ import {
   extractErrorMessage,
   buildHelpSegments,
   buildUnsupportedSegments,
-  type LocalReplySegment,
 } from './chat-local-replies';
 
 describe('chat-local-replies', () => {

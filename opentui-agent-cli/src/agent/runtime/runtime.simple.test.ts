@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 
 // 简单测试runtime模块的基础功能
 describe('runtime module exports', () => {
