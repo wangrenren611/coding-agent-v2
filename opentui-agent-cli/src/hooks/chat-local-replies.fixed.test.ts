@@ -50,14 +50,14 @@ describe('chat-local-replies', () => {
       expect(segments).toHaveLength(2);
 
       // 检查第一个segment（thinking）
-      const thinkingSegment = segments[0];
+      const thinkingSegment = segments[0]!;
       expect(thinkingSegment.id).toBe(`${turnId}:thinking`);
       expect(thinkingSegment.type).toBe('thinking');
       expect(thinkingSegment.content).toBeString();
       expect(thinkingSegment.content).toContain('OpenTUI Agent CLI');
 
       // 检查第二个segment（text）
-      const textSegment = segments[1];
+      const textSegment = segments[1]!;
       expect(textSegment.id).toBe(`${turnId}:text`);
       expect(textSegment.type).toBe('text');
       expect(textSegment.content).toBeString();
@@ -68,15 +68,15 @@ describe('chat-local-replies', () => {
       const segments1 = buildHelpSegments(1);
       const segments2 = buildHelpSegments(2);
 
-      expect(segments1[0].id).toBe('1:thinking');
-      expect(segments1[1].id).toBe('1:text');
-      expect(segments2[0].id).toBe('2:thinking');
-      expect(segments2[1].id).toBe('2:text');
+      expect(segments1[0]!.id).toBe('1:thinking');
+      expect(segments1[1]!.id).toBe('1:text');
+      expect(segments2[0]!.id).toBe('2:thinking');
+      expect(segments2[1]!.id).toBe('2:text');
     });
 
     it('should include all command information', () => {
       const segments = buildHelpSegments(1);
-      const textContent = segments[1].content;
+      const textContent = segments[1]!.content;
 
       expect(textContent).toContain('/help (/commands) - show help');
       expect(textContent).toContain('/clear (/new) - clear all turns');
@@ -94,12 +94,12 @@ describe('chat-local-replies', () => {
       expect(segments).toBeArray();
       expect(segments).toHaveLength(2);
 
-      const thinkingSegment = segments[0];
+      const thinkingSegment = segments[0]!;
       expect(thinkingSegment.id).toBe(`${turnId}:thinking`);
       expect(thinkingSegment.type).toBe('thinking');
       expect(thinkingSegment.content).toContain(commandName);
 
-      const textSegment = segments[1];
+      const textSegment = segments[1]!;
       expect(textSegment.id).toBe(`${turnId}:text`);
       expect(textSegment.type).toBe('text');
       expect(textSegment.content).toContain(`/${commandName}`);
@@ -110,7 +110,7 @@ describe('chat-local-replies', () => {
 
       for (const command of testCases) {
         const segments = buildUnsupportedSegments(1, command);
-        const textContent = segments[1].content;
+        const textContent = segments[1]!.content;
 
         expect(textContent).toContain(`/${command}`);
       }

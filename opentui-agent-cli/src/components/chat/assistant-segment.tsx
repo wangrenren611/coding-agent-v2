@@ -57,7 +57,6 @@ const ThinkingSegment = ({ content, streaming }: { content: string; streaming: b
           syntaxStyle={opencodeSubtleMarkdownSyntax}
           content={`_Thinking:_ ${normalized}`}
           conceal={true}
-          concealCode={false}
           renderNode={patchMarkdownCodeBlockRenderable}
           tableOptions={markdownTableOptions}
         />
@@ -102,7 +101,6 @@ const TextSegment = ({ content, streaming }: { content: string; streaming: boole
         syntaxStyle={opencodeMarkdownSyntax}
         content={normalized}
         conceal={true}
-        concealCode={false}
         renderNode={patchMarkdownCodeBlockRenderable}
         tableOptions={markdownTableOptions}
       />

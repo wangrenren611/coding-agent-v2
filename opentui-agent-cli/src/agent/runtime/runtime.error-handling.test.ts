@@ -29,7 +29,7 @@ describe('runAgentPrompt error handling', () => {
   let buildModules: (
     AppServiceClass: new () => {
       listContextMessages: () => Promise<unknown[]>;
-      runForeground: (...args: unknown[]) => Promise<unknown>;
+      runForeground: (...args: any[]) => Promise<unknown>;
     }
   ) => Awaited<ReturnType<typeof sourceModules.getSourceModules>>;
 

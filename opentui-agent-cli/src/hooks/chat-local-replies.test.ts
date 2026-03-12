@@ -47,14 +47,14 @@ describe('chat-local-replies', () => {
       expect(segments).toHaveLength(2);
 
       // 检查第一个segment（thinking）
-      const thinkingSegment = segments[0];
+      const thinkingSegment = segments[0]!;
       expect(thinkingSegment.id).toBe(`${turnId}:thinking`);
       expect(thinkingSegment.type).toBe('thinking');
       expect(thinkingSegment.content).toBeString();
       expect(thinkingSegment.content).toContain('OpenTUI Agent CLI');
 
       // 检查第二个segment（text）
-      const textSegment = segments[1];
+      const textSegment = segments[1]!;
       expect(textSegment.id).toBe(`${turnId}:text`);
       expect(textSegment.type).toBe('text');
       expect(textSegment.content).toBeString();
@@ -71,15 +71,15 @@ describe('chat-local-replies', () => {
       const segments1 = buildHelpSegments(1);
       const segments2 = buildHelpSegments(2);
 
-      expect(segments1[0].id).toBe('1:thinking');
-      expect(segments1[1].id).toBe('1:text');
-      expect(segments2[0].id).toBe('2:thinking');
-      expect(segments2[1].id).toBe('2:text');
+      expect(segments1[0]!.id).toBe('1:thinking');
+      expect(segments1[1]!.id).toBe('1:text');
+      expect(segments2[0]!.id).toBe('2:thinking');
+      expect(segments2[1]!.id).toBe('2:text');
     });
 
     it('should include all command information', () => {
       const segments = buildHelpSegments(1);
-      const textContent = segments[1].content;
+      const textContent = segments[1]!.content;
 
       expect(textContent).toContain('/help (/commands) - show help');
       expect(textContent).toContain('/clear (/new) - clear all turns');
@@ -90,7 +90,7 @@ describe('chat-local-replies', () => {
 
     it('should include keyboard shortcuts', () => {
       const segments = buildHelpSegments(1);
-      const textContent = segments[1].content;
+      const textContent = segments[1]!.content;
 
       expect(textContent).toContain('Esc - stop current response when the agent is thinking');
       expect(textContent).toContain('Ctrl+L - clear conversation panel');
@@ -108,7 +108,7 @@ describe('chat-local-replies', () => {
       expect(segments).toHaveLength(2);
 
       // 检查thinking segment
-      const thinkingSegment = segments[0];
+      const thinkingSegment = segments[0]!;
       expect(thinkingSegment.id).toBe(`${turnId}:thinking`);
       expect(thinkingSegment.type).toBe('thinking');
       expect(thinkingSegment.content).toBeString();
@@ -116,7 +116,7 @@ describe('chat-local-replies', () => {
       expect(thinkingSegment.content).toContain('not implemented');
 
       // 检查text segment
-      const textSegment = segments[1];
+      const textSegment = segments[1]!;
       expect(textSegment.id).toBe(`${turnId}:text`);
       expect(textSegment.type).toBe('text');
       expect(textSegment.content).toBeString();
@@ -134,7 +134,7 @@ describe('chat-local-replies', () => {
 
       for (const testCase of testCases) {
         const segments = buildUnsupportedSegments(1, testCase.command);
-        const textContent = segments[1].content;
+        const textContent = segments[1]!.content;
 
         expect(textContent).toContain(`/${testCase.command}`);
       }
@@ -144,10 +144,10 @@ describe('chat-local-replies', () => {
       const segments1 = buildUnsupportedSegments(1, 'export');
       const segments2 = buildUnsupportedSegments(2, 'export');
 
-      expect(segments1[0].id).toBe('1:thinking');
-      expect(segments1[1].id).toBe('1:text');
-      expect(segments2[0].id).toBe('2:thinking');
-      expect(segments2[1].id).toBe('2:text');
+      expect(segments1[0]!.id).toBe('1:thinking');
+      expect(segments1[1]!.id).toBe('1:text');
+      expect(segments2[0]!.id).toBe('2:thinking');
+      expect(segments2[1]!.id).toBe('2:text');
     });
   });
 });

@@ -142,10 +142,23 @@ export class TaskStore {
 
   private async writeNamespaceState(namespace: string, state: TaskNamespaceState): Promise<void> {
     const filePath = this.getNamespaceFilePath(namespace);
+    const dirPath = path.dirname(filePath);
+    await fs.mkdir(dirPath, { recursive: true });
     const tmpPath = `${filePath}.tmp.${randomUUID().slice(0, 8)}`;
     const json = `${JSON.stringify(state, null, 2)}\n`;
     await fs.writeFile(tmpPath, json, 'utf8');
-    await fs.rename(tmpPath, filePath);
+
+    try {
+      await fs.rename(tmpPath, filePath);
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code === 'EPERM' && process.platform === 'win32') {
+        await fs.copyFile(tmpPath, filePath);
+        await fs.unlink(tmpPath).catch(() => undefined);
+        return;
+      }
+      throw error;
+    }
   }
 
   private async acquireNamespaceLock(namespace: string): Promise<void> {

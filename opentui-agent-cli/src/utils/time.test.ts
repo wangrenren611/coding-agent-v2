@@ -2,6 +2,19 @@ import { describe, expect, it } from 'vitest';
 
 import { createTimeLabel } from './time';
 
+class MockDate extends Date {
+  constructor(private readonly value: Date) {
+    super(value.getTime());
+  }
+
+  override toLocaleTimeString(
+    locales?: Intl.LocalesArgument,
+    options?: Intl.DateTimeFormatOptions
+  ): string {
+    return this.value.toLocaleTimeString(locales, options);
+  }
+}
+
 describe('createTimeLabel', () => {
   it('should return time in HH:MM:SS format', () => {
     // 模拟一个固定的日期来测试格式
@@ -12,13 +25,13 @@ describe('createTimeLabel', () => {
     global.Date = class extends originalDate {
       constructor() {
         super();
-        return mockDate;
+        return new MockDate(mockDate);
       }
 
-      static now() {
+      static override now() {
         return mockDate.getTime();
       }
-    } as any;
+    } as unknown as DateConstructor;
 
     try {
       const timeLabel = createTimeLabel();
@@ -38,13 +51,13 @@ describe('createTimeLabel', () => {
     global.Date = class extends originalDate {
       constructor() {
         super();
-        return mockDate;
+        return new MockDate(mockDate);
       }
 
-      static now() {
+      static override now() {
         return mockDate.getTime();
       }
-    } as any;
+    } as unknown as DateConstructor;
 
     try {
       const timeLabel = createTimeLabel();
@@ -63,13 +76,13 @@ describe('createTimeLabel', () => {
     global.Date = class extends originalDate {
       constructor() {
         super();
-        return mockDate;
+        return new MockDate(mockDate);
       }
 
-      static now() {
+      static override now() {
         return mockDate.getTime();
       }
-    } as any;
+    } as unknown as DateConstructor;
 
     try {
       const timeLabel = createTimeLabel();
@@ -85,10 +98,12 @@ describe('createTimeLabel', () => {
     const originalToLocaleTimeString = Date.prototype.toLocaleTimeString;
 
     let calledWithLocale = '';
-    Date.prototype.toLocaleTimeString = function (locale, options) {
-      calledWithLocale = locale as string;
-      // 调用原始方法或返回模拟值
-      return originalToLocaleTimeString.call(this, locale, options);
+    Date.prototype.toLocaleTimeString = function (
+      locales?: Intl.LocalesArgument,
+      options?: Intl.DateTimeFormatOptions
+    ): string {
+      calledWithLocale = Array.isArray(locales) ? (locales[0] ?? '') : (locales ?? '');
+      return originalToLocaleTimeString.call(this, locales, options);
     };
 
     try {
@@ -104,9 +119,12 @@ describe('createTimeLabel', () => {
     // 保存原始方法
     const originalToLocaleTimeString = Date.prototype.toLocaleTimeString;
 
-    let calledWithOptions: any = {};
-    Date.prototype.toLocaleTimeString = function (locale, options) {
-      calledWithOptions = options;
+    let calledWithOptions: Intl.DateTimeFormatOptions = {};
+    Date.prototype.toLocaleTimeString = function (
+      _locales?: Intl.LocalesArgument,
+      options?: Intl.DateTimeFormatOptions
+    ): string {
+      calledWithOptions = options ?? {};
       return '00:00:00'; // 返回模拟值
     };
 
