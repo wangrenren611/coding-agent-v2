@@ -23,7 +23,7 @@ export const registerTerminalBackgroundRestore = (restore: (() => void) | null) 
 };
 
 export const hardResetTerminal = () => {
-  if (!process.stdout.isTTY) {
+  if (!globalThis.process.stdout.isTTY) {
     return;
   }
 
@@ -32,9 +32,12 @@ export const hardResetTerminal = () => {
     terminalBackgroundRestore = null;
     restore?.();
 
-    process.stdout.write(TERMINAL_RESET_SEQUENCE);
-    if (process.stdin.isTTY && typeof process.stdin.setRawMode === 'function') {
-      process.stdin.setRawMode(false);
+    globalThis.process.stdout.write(TERMINAL_RESET_SEQUENCE);
+    if (
+      globalThis.process.stdin.isTTY &&
+      typeof globalThis.process.stdin.setRawMode === 'function'
+    ) {
+      globalThis.process.stdin.setRawMode(false);
     }
   } catch {
     // Ignore errors during terminal reset
@@ -42,6 +45,7 @@ export const hardResetTerminal = () => {
 };
 
 export const initExitRuntime = (renderer: CliRenderer) => {
+  hasCleanedUp = false;
   rendererRef = renderer;
 };
 
@@ -63,11 +67,11 @@ export const requestExit = (exitCode = 0) => {
   }
 
   hardResetTerminal();
-  process.exit(exitCode);
+  globalThis.process.exit(exitCode);
 };
 
 export const bindExitGuards = () => {
-  process.once('SIGINT', () => requestExit(0));
-  process.once('SIGTERM', () => requestExit(0));
-  process.once('exit', hardResetTerminal);
+  globalThis.process.once('SIGINT', () => requestExit(0));
+  globalThis.process.once('SIGTERM', () => requestExit(0));
+  globalThis.process.once('exit', hardResetTerminal);
 };

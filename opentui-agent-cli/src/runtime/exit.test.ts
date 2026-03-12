@@ -42,6 +42,8 @@ describe('exit module', () => {
     mockProcess.once.mockClear();
     mockProcess.exit.mockClear();
     mockConsoleError.mockClear();
+    mockProcess.stdout.isTTY = true;
+    mockProcess.stdin.isTTY = true;
 
     // 替换全局对象
     global.process = mockProcess as any;
@@ -131,11 +133,13 @@ describe('exit module', () => {
     });
 
     it('should exit with specified code', () => {
+      initExitRuntime(null as unknown as CliRenderer);
       requestExit(1);
       expect(mockProcess.exit).toHaveBeenCalledWith(1);
     });
 
     it('should not exit twice if already cleaned up', () => {
+      initExitRuntime(null as unknown as CliRenderer);
       // 第一次调用
       requestExit(0);
       expect(mockProcess.exit).toHaveBeenCalledTimes(1);

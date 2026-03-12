@@ -317,7 +317,12 @@ describe('BashTool mocked branch coverage', () => {
 
   it('covers terminateChildProcess windows catch and unix fallback catch paths', () => {
     const tool = new BashTool();
-    const helper = tool as unknown as { terminateChildProcess: (child: any) => void };
+    type KillableChild = {
+      pid?: number;
+      killed: boolean;
+      kill: (signal?: string) => boolean;
+    };
+    const helper = tool as unknown as { terminateChildProcess: (child: KillableChild) => void };
 
     setPlatform('win32');
     spawnMock.mockImplementationOnce(() => {
@@ -334,7 +339,7 @@ describe('BashTool mocked branch coverage', () => {
     const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => {
       throw new Error('kill failed');
     });
-    const child = {
+    const child: KillableChild = {
       pid: 200,
       killed: false,
       kill: vi.fn(() => {

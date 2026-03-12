@@ -18,8 +18,12 @@ import * as sourceModules from './source-modules';
 import type { AgentContextUsageEvent, AgentEventHandlers } from './types';
 
 describe('runAgentPrompt context usage forwarding', () => {
-  const mockGetSourceModules = vi.mocked(sourceModules.getSourceModules);
-  const mockResolveWorkspaceRoot = vi.mocked(sourceModules.resolveWorkspaceRoot);
+  const mockGetSourceModules = sourceModules.getSourceModules as unknown as ReturnType<
+    typeof vi.fn
+  >;
+  const mockResolveWorkspaceRoot = sourceModules.resolveWorkspaceRoot as unknown as ReturnType<
+    typeof vi.fn
+  >;
   const originalApiKey = process.env.TEST_API_KEY;
 
   beforeEach(() => {

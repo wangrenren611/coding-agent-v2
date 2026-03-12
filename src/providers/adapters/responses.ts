@@ -99,6 +99,14 @@ interface ResponsesOutputFunctionCallItem {
   arguments?: string;
 }
 
+const isResponsesOutputMessageItem = (
+  item: ResponsesOutputMessageItem | ResponsesOutputFunctionCallItem | { type?: string }
+): item is ResponsesOutputMessageItem => item.type === 'message';
+
+const isResponsesOutputFunctionCallItem = (
+  item: ResponsesOutputMessageItem | ResponsesOutputFunctionCallItem | { type?: string }
+): item is ResponsesOutputFunctionCallItem => item.type === 'function_call';
+
 interface ResponsesUsage {
   input_tokens?: number;
   output_tokens?: number;
@@ -447,7 +455,7 @@ export class ResponsesAdapter extends BaseAPIAdapter {
     const toolCalls: ToolCall[] = [];
 
     for (const item of output) {
-      if (item.type === 'message') {
+      if (isResponsesOutputMessageItem(item)) {
         for (const part of item.content ?? []) {
           if (part.type === 'output_text' && typeof part.text === 'string') {
             texts.push(part.text);
@@ -455,7 +463,7 @@ export class ResponsesAdapter extends BaseAPIAdapter {
         }
       }
 
-      if (item.type === 'function_call') {
+      if (isResponsesOutputFunctionCallItem(item)) {
         toolCalls.push({
           id: item.call_id || item.id || `call_${toolCalls.length}`,
           type: 'function',

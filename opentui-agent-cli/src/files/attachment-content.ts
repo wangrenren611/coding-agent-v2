@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 
-import type { InputContentPart, MessageContent } from '../../../src/providers';
+import type { InputContentPart, MessageContent } from '../types/message-content';
 import type { PromptFileSelection } from './types';
 import {
   type AttachmentModelCapabilities,

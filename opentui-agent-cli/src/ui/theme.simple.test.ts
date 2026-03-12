@@ -19,19 +19,19 @@ describe('theme module', () => {
   it('should switch to dark theme', () => {
     applyUiThemeMode('dark');
 
-    expect(uiTheme.bg).toBe('#0a0a0a');
-    expect(uiTheme.surface).toBe('#141414');
-    expect(uiTheme.text).toBe('#eeeeee');
-    expect(uiTheme.accent).toBe('#fab283');
+    expect(uiTheme.bg).toBe('#09090b');
+    expect(uiTheme.surface).toBe('#18181b');
+    expect(uiTheme.text).toBe('#fafafa');
+    expect(uiTheme.accent).toBe('#8e51ff');
   });
 
   it('should switch to light theme', () => {
     applyUiThemeMode('light');
 
-    expect(uiTheme.bg).toBe('#eceff3');
+    expect(uiTheme.bg).toBe('#ffffff');
     expect(uiTheme.surface).toBe('#ffffff');
-    expect(uiTheme.text).toBe('#1f2530');
-    expect(uiTheme.accent).toBe('#0b67d7');
+    expect(uiTheme.text).toBe('#09090b');
+    expect(uiTheme.accent).toBe('#7f22fe');
   });
 
   it('should create independent theme objects', () => {

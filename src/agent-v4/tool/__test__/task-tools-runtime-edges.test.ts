@@ -9,7 +9,7 @@ import { TaskStopTool } from '../task-stop';
 import { TaskStore } from '../task-store';
 import { TaskTool } from '../task';
 import type { SubagentRunnerAdapter } from '../task-runner-adapter';
-import type { AgentRunEntity, TaskEntity } from '../task-types';
+import type { AgentRunEntity, TaskEntity, TaskNamespaceState } from '../task-types';
 import type { ToolExecutionContext } from '../types';
 
 function parseOutput<T>(output: string | undefined): T {
@@ -210,8 +210,11 @@ describe('task tool runtime edge branches', () => {
         updatedAt: 0,
         schemaVersion: 1 as const,
       }),
-      updateState: async (_ns: string | undefined, updater: (state: any) => any) => {
-        const state = {
+      updateState: async (
+        _ns: string | undefined,
+        updater: (state: TaskNamespaceState) => unknown
+      ) => {
+        const state: TaskNamespaceState = {
           namespace: 'fake',
           tasks: {},
           agentRuns: {},

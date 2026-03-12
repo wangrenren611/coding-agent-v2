@@ -117,12 +117,12 @@ export const AssistantReply = ({ reply }: AssistantReplyProps) => {
           </text>
         </box>
       ) : null}
-      <box flexDirection="row" gap={1} paddingLeft={3} >
+      <box flexDirection="row" gap={1} paddingLeft={3}>
         <text fg={uiTheme.muted} attributes={uiTheme.typography.muted}>
           <span fg={uiTheme.accent}>▣</span> assistant
           <span fg={uiTheme.muted}> · {reply.modelLabel}</span>
           <span fg={uiTheme.muted}> · {durationText}s</span>
-          {usageItems.map((item) => (
+          {usageItems.map(item => (
             <span key={`${item.icon}:${item.value}`} fg={uiTheme.muted}>
               {' · '}
               {item.icon} {item.value}

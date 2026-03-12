@@ -1,3 +1,6 @@
+import type { RenderNodeContext, Renderable } from '@opentui/core';
+import type { Token } from 'marked';
+
 import type { ReplySegment } from '../../types/chat';
 import { opencodeMarkdownSyntax, opencodeSubtleMarkdownSyntax } from '../../ui/opencode-markdown';
 import { uiTheme } from '../../ui/theme';
@@ -14,15 +17,7 @@ const markdownTableOptions = {
   selectable: true,
 };
 
-type MarkdownTokenLike = {
-  type?: string;
-};
-
-type MarkdownRenderContextLike = {
-  defaultRender: () => unknown;
-};
-
-type TextBufferRenderableLike = {
+type TextBufferRenderableLike = Renderable & {
   fg?: string;
   bg?: string;
   selectionBg?: string;
@@ -30,9 +25,9 @@ type TextBufferRenderableLike = {
 };
 
 const patchMarkdownCodeBlockRenderable = (
-  token: MarkdownTokenLike,
-  context: MarkdownRenderContextLike
-) => {
+  token: Token,
+  context: RenderNodeContext
+): Renderable | null => {
   const renderable = context.defaultRender();
   if (!renderable || token.type !== 'code') {
     return renderable;

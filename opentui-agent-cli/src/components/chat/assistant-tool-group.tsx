@@ -804,7 +804,7 @@ export const AssistantToolGroup = ({ group }: AssistantToolGroupProps) => {
           : 'running';
 
   return (
-    <box flexDirection="column" >
+    <box flexDirection="column">
       <box paddingLeft={3}>
         <text fg={uiTheme.text} attributes={uiTheme.typography.note} wrapMode="word">
           <span fg={uiTheme.accent}>{icon}</span>{' '}

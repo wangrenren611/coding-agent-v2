@@ -26,7 +26,10 @@ class EchoTool extends BaseTool<typeof schema> {
     return false;
   }
 
-  async execute(args: z.infer<typeof schema>): Promise<ToolResult> {
+  async execute(
+    args: z.infer<typeof schema>,
+    _context?: ToolExecutionContext
+  ): Promise<ToolResult> {
     return {
       success: true,
       output: args.input,
@@ -77,7 +80,10 @@ class SafeBashTool extends BaseTool<typeof bashSchema> {
   description = 'bash command';
   parameters = bashSchema;
 
-  async execute(args: z.infer<typeof bashSchema>): Promise<ToolResult> {
+  async execute(
+    args: z.infer<typeof bashSchema>,
+    _context?: ToolExecutionContext
+  ): Promise<ToolResult> {
     return {
       success: true,
       output: args.command,
@@ -262,7 +268,7 @@ describe('DefaultToolManager', () => {
   });
 
   it('returns ToolDeniedError when user rejects confirmation', async () => {
-    const manager = new DefaultToolManager();
+    const manager = new DefaultToolManager({ confirmationMode: 'manual' });
     manager.registerTool(new ConfirmEchoTool());
 
     const onConfirm = vi.fn().mockResolvedValue({ approved: false, message: 'deny' });
@@ -283,7 +289,7 @@ describe('DefaultToolManager', () => {
   });
 
   it('executes after confirmation approval', async () => {
-    const manager = new DefaultToolManager();
+    const manager = new DefaultToolManager({ confirmationMode: 'manual' });
     const tool = new ConfirmEchoTool();
     const execSpy = vi.spyOn(tool, 'execute');
     manager.registerTool(tool);

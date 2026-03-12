@@ -1,7 +1,7 @@
 import type { SkillFrontmatter } from './types';
 
 const FRONTMATTER_REGEX = /^---\s*\n([\s\S]*?)\n---/;
-const FILE_REF_REGEX = /(?<![`\w])@(\.{0,2}[\/\\]?[^\s`,.*!?()]+(?:\.[^\s`,.*!?()]+)+)/g;
+const FILE_REF_REGEX = /(?<![`\w])@(\.{0,2}[/\\]?[^\s`,.*!?()]+(?:\.[^\s`,.*!?()]+)+)/g;
 const SHELL_COMMAND_REGEX = /!`([^`]+)`/g;
 
 export function parseFrontmatter(content: string): SkillFrontmatter | null {

@@ -76,7 +76,7 @@ describe('outside workspace confirmation', () => {
     const outsidePath = path.join(outsideDir, 'note.txt');
     await fs.writeFile(outsidePath, 'outside content', 'utf8');
 
-    const manager = new DefaultToolManager();
+    const manager = new DefaultToolManager({ confirmationMode: 'manual' });
     manager.registerTool(new FileReadTool({ allowedDirectories: [workspaceDir] }));
 
     const onConfirm = vi.fn().mockResolvedValue({ approved: true });
@@ -96,7 +96,7 @@ describe('outside workspace confirmation', () => {
     const outsidePath = path.join(outsideDir, 'note.txt');
     await fs.writeFile(outsidePath, 'outside content', 'utf8');
 
-    const manager = new DefaultToolManager();
+    const manager = new DefaultToolManager({ confirmationMode: 'manual' });
     manager.registerTool(new FileReadTool({ allowedDirectories: [workspaceDir] }));
 
     const onConfirm = vi.fn().mockResolvedValue({ approved: false, message: 'deny outside path' });
@@ -116,7 +116,7 @@ describe('outside workspace confirmation', () => {
     const outsidePath = path.join(outsideDir, 'edit.txt');
     await fs.writeFile(outsidePath, 'const value = 1;\n', 'utf8');
 
-    const manager = new DefaultToolManager();
+    const manager = new DefaultToolManager({ confirmationMode: 'manual' });
     manager.registerTool(new FileEditTool({ allowedDirectories: [workspaceDir] }));
 
     const onConfirm = vi.fn().mockResolvedValue({ approved: true });
@@ -139,7 +139,7 @@ describe('outside workspace confirmation', () => {
     const bufferDir = await createTempDir('agent-v4-confirm-buffer-');
     const outsidePath = path.join(outsideDir, 'write.txt');
 
-    const manager = new DefaultToolManager();
+    const manager = new DefaultToolManager({ confirmationMode: 'manual' });
     manager.registerTool(
       new WriteFileTool({
         allowedDirectories: [workspaceDir],
@@ -168,7 +168,7 @@ describe('outside workspace confirmation', () => {
     const outsideDir = await createTempDir('agent-v4-confirm-outside-');
     await fs.writeFile(path.join(outsideDir, 'sandbox-note.txt'), 'marker', 'utf8');
 
-    const manager = new DefaultToolManager();
+    const manager = new DefaultToolManager({ confirmationMode: 'manual' });
     manager.registerTool(new GlobTool({ allowedDirectories: [workspaceDir] }));
 
     const onConfirm = vi.fn().mockResolvedValue({ approved: true });
@@ -193,7 +193,7 @@ describe('outside workspace confirmation', () => {
     await fs.writeFile(path.join(outsideDir, 'sandbox-note.txt'), 'sandbox marker\n', 'utf8');
     const mockRgPath = await createMockRipgrep();
 
-    const manager = new DefaultToolManager();
+    const manager = new DefaultToolManager({ confirmationMode: 'manual' });
     manager.registerTool(new GrepTool({ allowedDirectories: [workspaceDir], rgPath: mockRgPath }));
 
     const onConfirm = vi.fn().mockResolvedValue({ approved: true });

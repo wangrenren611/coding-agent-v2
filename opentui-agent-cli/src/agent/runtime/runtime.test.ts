@@ -1,9 +1,7 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import type { AgentEventHandlers } from './types';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// 模拟依赖
 vi.mock('./tool-confirmation', () => ({
-  resolveToolConfirmDecision: vi.fn(),
+  resolveToolConfirmDecision: vi.fn().mockResolvedValue({ approved: true, message: 'Approved' }),
 }));
 
 vi.mock('./source-modules', () => ({
@@ -12,242 +10,187 @@ vi.mock('./source-modules', () => ({
 }));
 
 vi.mock('../../../../src/agent-v4/prompts/system', () => ({
-  buildSystemPrompt: vi.fn(),
+  buildSystemPrompt: vi.fn(() => 'Test system prompt'),
 }));
 
-// 导入被测试模块
 import {
-  runAgentPrompt,
-  getAgentModelLabel,
-  getAgentModelId,
-  listAgentModels,
-  switchAgentModel,
   disposeAgentRuntime,
+  getAgentModelId,
+  getAgentModelLabel,
+  listAgentModels,
+  runAgentPrompt,
+  switchAgentModel,
 } from './runtime';
+import * as sourceModules from './source-modules';
+import type { AgentEventHandlers } from './types';
+
+const buildMockModules = () => {
+  class FakeToolManager {
+    registerTool = vi.fn();
+    getTools = vi.fn(() => []);
+  }
+
+  class FakeTool {
+    toToolSchema() {
+      return {
+        type: 'function',
+        function: {
+          name: 'fake_tool',
+        },
+      };
+    }
+  }
+
+  class FakeAgent {
+    on = vi.fn();
+    off = vi.fn();
+  }
+
+  class FakeAppService {
+    async listContextMessages() {
+      return [];
+    }
+
+    async runForeground() {
+      return {
+        executionId: 'exec_runtime',
+        conversationId: 'conv_runtime',
+        messages: [
+          {
+            messageId: 'msg_assistant',
+            role: 'assistant',
+            type: 'assistant-text',
+            content: 'done',
+          },
+        ],
+        finishReason: 'stop' as const,
+        steps: 1,
+        run: {},
+      };
+    }
+  }
+
+  return {
+    ProviderRegistry: {
+      getModelIds: () => ['glm-5', 'claude-3.5-sonnet'],
+      getModelConfig: (modelId: string) => ({
+        name: modelId === 'glm-5' ? 'GLM-5' : 'Claude 3.5 Sonnet',
+        envApiKey: 'TEST_API_KEY',
+        provider: modelId === 'glm-5' ? 'zhipu' : 'anthropic',
+        model: modelId,
+      }),
+      createFromEnv: () => ({}),
+    },
+    loadEnvFiles: vi.fn().mockResolvedValue([]),
+    createLoggerFromEnv: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() })),
+    createAgentLoggerAdapter: vi.fn((logger: Record<string, unknown>) => ({
+      info: typeof logger.info === 'function' ? logger.info.bind(logger) : undefined,
+      warn: typeof logger.warn === 'function' ? logger.warn.bind(logger) : undefined,
+      error: typeof logger.error === 'function' ? logger.error.bind(logger) : undefined,
+    })),
+    StatelessAgent: FakeAgent,
+    AgentAppService: FakeAppService,
+    createSqliteAgentAppStore: () => ({
+      close: vi.fn().mockResolvedValue(undefined),
+    }),
+    DefaultToolManager: FakeToolManager,
+    BashTool: FakeTool,
+    WriteFileTool: FakeTool,
+    FileReadTool: FakeTool,
+    FileEditTool: FakeTool,
+    GlobTool: FakeTool,
+    GrepTool: FakeTool,
+    SkillTool: FakeTool,
+    TaskTool: FakeTool,
+    TaskCreateTool: FakeTool,
+    TaskGetTool: FakeTool,
+    TaskListTool: FakeTool,
+    TaskUpdateTool: FakeTool,
+    TaskStopTool: FakeTool,
+    TaskOutputTool: FakeTool,
+    TaskStore: class {},
+    RealSubagentRunnerAdapter: class {},
+  };
+};
 
 describe('runtime', () => {
-  const mockResolveToolConfirmDecision = vi.mocked(
-    require('./tool-confirmation').resolveToolConfirmDecision
-  );
-  const mockGetSourceModules = vi.mocked(require('./source-modules').getSourceModules);
-  const mockResolveWorkspaceRoot = vi.mocked(require('./source-modules').resolveWorkspaceRoot);
-  const mockBuildSystemPrompt = vi.mocked(
-    require('../../../../src/agent-v4/prompts/system').buildSystemPrompt
-  );
+  const mockGetSourceModules = sourceModules.getSourceModules as unknown as ReturnType<
+    typeof vi.fn
+  >;
+  const mockResolveWorkspaceRoot = sourceModules.resolveWorkspaceRoot as unknown as ReturnType<
+    typeof vi.fn
+  >;
+  const originalApiKey = process.env.TEST_API_KEY;
 
   beforeEach(() => {
     vi.clearAllMocks();
-
-    // 默认模拟
+    process.env.TEST_API_KEY = 'test-key';
     mockResolveWorkspaceRoot.mockReturnValue('/test/workspace');
-    mockBuildSystemPrompt.mockReturnValue('Test system prompt');
+    mockGetSourceModules.mockResolvedValue(buildMockModules());
+  });
 
-    // 模拟SourceModules
-    const mockModules = {
-      loadEnvFiles: vi.fn().mockResolvedValue(undefined),
-      agent: {
-        on: vi.fn(),
-        off: vi.fn(),
+  afterEach(async () => {
+    await disposeAgentRuntime();
+    if (originalApiKey === undefined) {
+      delete process.env.TEST_API_KEY;
+    } else {
+      process.env.TEST_API_KEY = originalApiKey;
+    }
+  });
+
+  it('returns the active model label', async () => {
+    await expect(getAgentModelLabel()).resolves.toBe('GLM-5');
+  });
+
+  it('returns the active model id', async () => {
+    await expect(getAgentModelId()).resolves.toBe('glm-5');
+  });
+
+  it('lists models with current selection', async () => {
+    await expect(listAgentModels()).resolves.toEqual([
+      {
+        id: 'claude-3.5-sonnet',
+        name: 'Claude 3.5 Sonnet',
+        provider: 'anthropic',
+        apiKeyEnv: 'TEST_API_KEY',
+        configured: true,
+        current: false,
       },
-      appService: {
-        listContextMessages: vi.fn().mockResolvedValue([]),
-        runForeground: vi.fn().mockResolvedValue({ success: true }),
-        listModels: vi.fn().mockResolvedValue([
-          { id: 'glm-5', name: 'GLM-5' },
-          { id: 'claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
-        ]),
-        switchModel: vi.fn().mockResolvedValue({ success: true }),
-        getCurrentModelId: vi.fn().mockResolvedValue('glm-5'),
-        getCurrentModelLabel: vi.fn().mockResolvedValue('GLM-5'),
+      {
+        id: 'glm-5',
+        name: 'GLM-5',
+        provider: 'zhipu',
+        apiKeyEnv: 'TEST_API_KEY',
+        configured: true,
+        current: true,
       },
-      appStore: {
-        close: vi.fn().mockResolvedValue(undefined),
-      },
+    ]);
+  });
+
+  it('switches model when the target is configured', async () => {
+    await expect(switchAgentModel('claude-3.5-sonnet')).resolves.toEqual({
+      modelId: 'claude-3.5-sonnet',
+      modelLabel: 'Claude 3.5 Sonnet',
+    });
+  });
+
+  it('runs a prompt and returns the assembled result', async () => {
+    const handlers: AgentEventHandlers = {
+      onTextDelta: vi.fn(),
+      onTextComplete: vi.fn(),
+      onToolUse: vi.fn(),
+      onToolStream: vi.fn(),
+      onToolResult: vi.fn(),
+      onToolConfirm: vi.fn(),
+      onUsage: vi.fn(),
     };
 
-    mockGetSourceModules.mockResolvedValue(mockModules);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  describe('getAgentModelLabel', () => {
-    it('should return model label', async () => {
-      const label = await getAgentModelLabel();
-      expect(label).toBe('GLM-5');
-    });
-
-    it('should handle errors gracefully', async () => {
-      const mockModules = {
-        loadEnvFiles: vi.fn().mockResolvedValue(undefined),
-        agent: { on: vi.fn(), off: vi.fn() },
-        appService: {
-          getCurrentModelLabel: vi.fn().mockRejectedValue(new Error('Failed to get label')),
-          listContextMessages: vi.fn(),
-          runForeground: vi.fn(),
-          listModels: vi.fn(),
-          switchModel: vi.fn(),
-          getCurrentModelId: vi.fn(),
-        },
-        appStore: { close: vi.fn() },
-      };
-      mockGetSourceModules.mockResolvedValue(mockModules);
-
-      await expect(getAgentModelLabel()).rejects.toThrow('Failed to get label');
-    });
-  });
-
-  describe('getAgentModelId', () => {
-    it('should return model id', async () => {
-      const id = await getAgentModelId();
-      expect(id).toBe('glm-5');
-    });
-  });
-
-  describe('listAgentModels', () => {
-    it('should return list of models', async () => {
-      const models = await listAgentModels();
-      expect(models).toEqual([
-        { id: 'glm-5', name: 'GLM-5' },
-        { id: 'claude-3.5-sonnet', name: 'Claude 3.5 Sonnet' },
-      ]);
-    });
-
-    it('should handle empty model list', async () => {
-      const mockModules = {
-        loadEnvFiles: vi.fn().mockResolvedValue(undefined),
-        agent: { on: vi.fn(), off: vi.fn() },
-        appService: {
-          listModels: vi.fn().mockResolvedValue([]),
-          listContextMessages: vi.fn(),
-          runForeground: vi.fn(),
-          switchModel: vi.fn(),
-          getCurrentModelId: vi.fn(),
-          getCurrentModelLabel: vi.fn(),
-        },
-        appStore: { close: vi.fn() },
-      };
-      mockGetSourceModules.mockResolvedValue(mockModules);
-
-      const models = await listAgentModels();
-      expect(models).toEqual([]);
-    });
-  });
-
-  describe('switchAgentModel', () => {
-    it('should switch to specified model', async () => {
-      const result = await switchAgentModel('claude-3.5-sonnet');
-      expect(result).toEqual({ success: true });
-    });
-
-    it('should handle switch failure', async () => {
-      const mockModules = {
-        loadEnvFiles: vi.fn().mockResolvedValue(undefined),
-        agent: { on: vi.fn(), off: vi.fn() },
-        appService: {
-          switchModel: vi.fn().mockResolvedValue({ success: false, error: 'Failed to switch' }),
-          listContextMessages: vi.fn(),
-          runForeground: vi.fn(),
-          listModels: vi.fn(),
-          getCurrentModelId: vi.fn(),
-          getCurrentModelLabel: vi.fn(),
-        },
-        appStore: { close: vi.fn() },
-      };
-      mockGetSourceModules.mockResolvedValue(mockModules);
-
-      const result = await switchAgentModel('invalid-model');
-      expect(result).toEqual({ success: false, error: 'Failed to switch' });
-    });
-  });
-
-  describe('disposeAgentRuntime', () => {
-    it('should dispose runtime instance', async () => {
-      await disposeAgentRuntime();
-      // 应该调用appStore.close()
-      // 由于模块是模拟的，我们无法直接验证，但可以确认没有抛出错误
-    });
-
-    it('should handle when runtime is not initialized', async () => {
-      // 第一次调用会初始化
-      await getAgentModelLabel();
-      // 然后销毁
-      await disposeAgentRuntime();
-      // 再次销毁应该不会出错
-      await disposeAgentRuntime();
-    });
-  });
-
-  describe('runAgentPrompt', () => {
-    it('should run agent prompt with handlers', async () => {
-      const handlers: AgentEventHandlers = {
-        onTextDelta: vi.fn(),
-        onTextComplete: vi.fn(),
-        onToolUse: vi.fn(),
-        onToolStream: vi.fn(),
-        onToolResult: vi.fn(),
-        onToolConfirm: vi.fn(),
-        onUsage: vi.fn(),
-      };
-
-      const result = await runAgentPrompt('Test prompt', handlers);
-      expect(result).toEqual({ success: true });
-    });
-
-    it('should handle tool confirm events', async () => {
-      const handlers: AgentEventHandlers = {
-        onTextDelta: vi.fn(),
-        onTextComplete: vi.fn(),
-        onToolUse: vi.fn(),
-        onToolStream: vi.fn(),
-        onToolResult: vi.fn(),
-        onToolConfirm: vi.fn(),
-        onUsage: vi.fn(),
-      };
-
-      // 模拟工具确认
-      mockResolveToolConfirmDecision.mockResolvedValue({ approved: true, message: 'Approved' });
-
-      const result = await runAgentPrompt('Test prompt with tool', handlers);
-      expect(result).toEqual({ success: true });
-    });
-
-    it('should handle abort signal', async () => {
-      const handlers: AgentEventHandlers = {
-        onTextDelta: vi.fn(),
-        onTextComplete: vi.fn(),
-        onToolUse: vi.fn(),
-        onToolStream: vi.fn(),
-        onToolResult: vi.fn(),
-        onToolConfirm: vi.fn(),
-        onUsage: vi.fn(),
-      };
-
-      const abortController = new AbortController();
-      const options = { abortSignal: abortController.signal };
-
-      const result = await runAgentPrompt('Test prompt', handlers, options);
-      expect(result).toEqual({ success: true });
-    });
-
-    it('should handle runtime initialization error', async () => {
-      // 模拟初始化失败
-      mockGetSourceModules.mockRejectedValue(new Error('Failed to load modules'));
-
-      const handlers: AgentEventHandlers = {
-        onTextDelta: vi.fn(),
-        onTextComplete: vi.fn(),
-        onToolUse: vi.fn(),
-        onToolStream: vi.fn(),
-        onToolResult: vi.fn(),
-        onToolConfirm: vi.fn(),
-        onUsage: vi.fn(),
-      };
-
-      await expect(runAgentPrompt('Test prompt', handlers)).rejects.toThrow(
-        'Failed to load modules'
-      );
-    });
+    await expect(runAgentPrompt('Test prompt', handlers)).resolves.toEqual(
+      expect.objectContaining({
+        text: 'done',
+        completionReason: 'stop',
+        modelLabel: 'GLM-5',
+      })
+    );
   });
 });

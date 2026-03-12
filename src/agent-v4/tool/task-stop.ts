@@ -103,7 +103,7 @@ export class TaskStopTool extends BaseTool<typeof schema> {
       });
     }
 
-    let affectedTaskIds: string[] = [];
+    const affectedTaskIds: string[] = [];
     const cancelLinkedTask = args.cancel_linked_task !== undefined ? args.cancel_linked_task : true;
 
     if (cancelLinkedTask) {

@@ -3,9 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { AssistantReply as AssistantReplyType } from '../../types/chat';
 import { buildUsageItems, getCompletionErrorMessage } from './assistant-reply';
 
-const createReply = (
-  overrides: Partial<AssistantReplyType> = {}
-): AssistantReplyType => ({
+const createReply = (overrides: Partial<AssistantReplyType> = {}): AssistantReplyType => ({
   agentLabel: '',
   modelLabel: 'glm-5',
   durationSeconds: 0.8,
@@ -22,9 +20,7 @@ describe('assistant-reply helpers', () => {
       completionMessage: 'Server returned 500: upstream provider timeout',
     });
 
-    expect(getCompletionErrorMessage(reply)).toBe(
-      'Server returned 500: upstream provider timeout'
-    );
+    expect(getCompletionErrorMessage(reply)).toBe('Server returned 500: upstream provider timeout');
   });
 
   it('ignores completion messages for non-error replies', () => {
@@ -44,8 +40,8 @@ describe('assistant-reply helpers', () => {
     });
 
     expect(buildUsageItems(reply)).toEqual([
-      { icon: '↓', value: '1.3k' },
-      { icon: '↑', value: '2.4k' },
+      { icon: '↑', value: '1.25k' },
+      { icon: '↓', value: '2.40k' },
     ]);
   });
 });

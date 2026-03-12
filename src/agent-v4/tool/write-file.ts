@@ -67,6 +67,7 @@ interface LoadedBufferSession {
     rawArgsPath: string;
     targetPath?: string;
     bufferId: string;
+    contentBytes: number;
   };
 }
 
@@ -356,6 +357,7 @@ export class WriteFileTool extends BaseTool<typeof schema> {
     rawArgsPath: string;
     targetPath?: string;
     bufferId: string;
+    contentBytes: number;
   } | null> {
     const safeId = bufferId.replace(/[^a-zA-Z0-9_-]/g, '_');
     for (const dir of this.getCandidateBufferDirs()) {

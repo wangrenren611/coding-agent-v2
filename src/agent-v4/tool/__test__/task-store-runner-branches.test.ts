@@ -176,6 +176,10 @@ describe('task-store branches', () => {
     const store = new TaskStore({ baseDir });
     const executionOrder: string[] = [];
 
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve;
+    });
     let releaseFirst!: () => void;
     const firstDone = new Promise<void>((resolve) => {
       releaseFirst = resolve;
@@ -183,12 +187,13 @@ describe('task-store branches', () => {
 
     const first = store.updateState('ns-lock', async () => {
       executionOrder.push('first-start');
+      markFirstStarted();
       await firstDone;
       executionOrder.push('first-end');
       return 'first';
     });
 
-    await sleep(20);
+    await firstStarted;
 
     const second = store.updateState('ns-lock', async () => {
       executionOrder.push('second');

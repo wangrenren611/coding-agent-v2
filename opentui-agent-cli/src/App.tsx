@@ -22,9 +22,7 @@ const appendFileTokens = (currentValue: string, files: PromptFileSelection[]) =>
     return currentValue;
   }
 
-  const existingTokens = new Set(
-    currentValue.match(/@\/\S+/g) ?? []
-  );
+  const existingTokens = new Set(currentValue.match(/@\/\S+/g) ?? []);
   const newTokens = files
     .filter(file => !isMediaSelection(file))
     .map(file => `@/${file.relativePath}`)

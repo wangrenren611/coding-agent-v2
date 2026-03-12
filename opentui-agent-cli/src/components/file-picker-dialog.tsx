@@ -78,7 +78,14 @@ export const FilePickerDialog = ({
   }
 
   return (
-    <box position="absolute" top={top} left={left} width={panelWidth} height={panelHeight} zIndex={150}>
+    <box
+      position="absolute"
+      top={top}
+      left={left}
+      width={panelWidth}
+      height={panelHeight}
+      zIndex={150}
+    >
       <box
         width="100%"
         height="100%"

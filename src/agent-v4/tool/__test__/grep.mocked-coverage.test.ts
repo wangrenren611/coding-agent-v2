@@ -344,15 +344,39 @@ describe('GrepTool mocked branch coverage', () => {
     };
 
     const originalBufferFrom = Buffer.from.bind(Buffer);
-    const bufferSpy = vi.spyOn(Buffer, 'from').mockImplementation(((
-      value: unknown,
+    const originalBufferFromString = originalBufferFrom as unknown as (
+      value: string,
       encoding?: BufferEncoding
+    ) => Buffer;
+    const originalBufferFromBytes = originalBufferFrom as unknown as (
+      value: ArrayLike<number>
+    ) => Buffer;
+    const bufferSpy = vi.spyOn(Buffer, 'from').mockImplementation(((
+      value: string | ArrayBuffer | SharedArrayBuffer | ArrayBufferView,
+      encodingOrOffset?: BufferEncoding | number,
+      length?: number
     ) => {
-      if (encoding === 'base64') {
+      if (encodingOrOffset === 'base64') {
         throw new Error('bad-base64');
       }
-      return originalBufferFrom(value as any, encoding as any);
-    }) as unknown as typeof Buffer.from);
+      if (typeof value === 'string') {
+        return originalBufferFromString(value, encodingOrOffset as BufferEncoding | undefined);
+      }
+      if (typeof encodingOrOffset === 'number') {
+        return originalBufferFromBytes(
+          new Uint8Array(value as ArrayBuffer | SharedArrayBuffer).subarray(
+            encodingOrOffset,
+            typeof length === 'number' ? encodingOrOffset + length : undefined
+          )
+        );
+      }
+      if (ArrayBuffer.isView(value)) {
+        return originalBufferFromBytes(
+          new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+        );
+      }
+      return originalBufferFromBytes(new Uint8Array(value as ArrayBuffer | SharedArrayBuffer));
+    }) as typeof Buffer.from);
 
     const child = createChild();
     spawnMock.mockReturnValueOnce(child);

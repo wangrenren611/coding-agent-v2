@@ -41,7 +41,8 @@ export type ModelId =
   | 'qwen-minimax-2.5'
   | 'deepseek-reasoner'
   | 'gpt-5.3'
-  | 'gpt-5.4';
+  | 'gpt-5.4'
+  | 'openrouter/hunter-alpha';
 
 /**
  * 模型配置

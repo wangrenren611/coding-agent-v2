@@ -1,7 +1,7 @@
 import { basename, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type { MessageContent } from '../../../../src/providers';
+import type { MessageContent } from '../../types/message-content';
 
 type ProviderModelConfig = {
   name: string;
@@ -77,6 +77,7 @@ type AgentAppRunRequestLike = {
   maxSteps?: number;
   contextLimitTokens?: number;
   abortSignal?: AbortSignal;
+  modelLabel?: string;
 };
 
 export type AgentAppUsageLike = {

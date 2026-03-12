@@ -21,7 +21,12 @@ const formatTime = (timestamp: number) => {
   });
 };
 
-export const PromptCard = ({ prompt, files = [], createdAtMs, isFirst = false }: PromptCardProps) => {
+export const PromptCard = ({
+  prompt,
+  files = [],
+  createdAtMs,
+  isFirst = false,
+}: PromptCardProps) => {
   const mediaFiles = files.filter(
     file =>
       isImageSelection({ relativePath: file, absolutePath: file, size: 0 }) ||
@@ -54,7 +59,12 @@ export const PromptCard = ({ prompt, files = [], createdAtMs, isFirst = false }:
               Media files
             </text>
             {mediaFiles.map(file => (
-              <text key={file} fg={uiTheme.text} attributes={uiTheme.typography.note} selectable={true}>
+              <text
+                key={file}
+                fg={uiTheme.text}
+                attributes={uiTheme.typography.note}
+                selectable={true}
+              >
                 {file}
               </text>
             ))}

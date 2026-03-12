@@ -31,9 +31,9 @@ import {
 } from './source-modules';
 import { ToolCallBuffer } from './tool-call-buffer';
 import { buildSystemPrompt } from '../../../../src/agent-v4/prompts/system';
-import type { MessageContent } from '../../../../src/providers';
 import type { AttachmentModelCapabilities } from '../../files/attachment-capabilities';
 import { resolveAttachmentModelCapabilities } from '../../files/attachment-capabilities';
+import type { MessageContent } from '../../types/message-content';
 
 type RuntimeCore = {
   modelId: string;

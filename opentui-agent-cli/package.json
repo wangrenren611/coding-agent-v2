@@ -10,6 +10,7 @@
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "test:run": "bun test src/context-usage-regressions.test.ts src/ui/theme.simple.test.ts src/ui/theme.test.ts src/runtime/exit.test.ts src/runtime/clipboard.test.ts src/runtime/terminal-theme.test.ts src/utils/time.test.ts src/components/tool-confirm-dialog-content.test.ts src/hooks/chat-local-replies.fixed.test.ts src/hooks/chat-local-replies.test.ts src/hooks/turn-updater.test.ts src/hooks/agent-event-handlers.test.ts src/hooks/use-agent-chat.status.test.ts src/files/attachment-capabilities.test.ts src/files/file-mention-query.test.ts src/commands/slash-commands.test.ts src/agent/runtime/runtime.simple.test.ts src/agent/runtime/tool-call-buffer.test.ts src/components/chat/assistant-reply.test.tsx src/components/chat/assistant-segment.test.ts src/components/chat/code-block.test.tsx src/components/chat/segment-groups.test.ts",
     "type-check": "tsc --noEmit",
     "check": "bun run type-check && bun run lint && bun run format:check",
     "proxy": "w2 start",
