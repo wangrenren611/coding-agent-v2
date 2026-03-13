@@ -273,6 +273,22 @@ describe('normalizeError', () => {
     expect(result).toBeInstanceOf(ConfirmationTimeoutError);
   });
 
+  it('converts plain network Error to AgentUpstreamNetworkError', () => {
+    const error = new Error('transient network failure');
+    const result = normalizeError(error, abortedMessage);
+
+    expect(result).toBeInstanceOf(AgentUpstreamNetworkError);
+    expect(result.retryable).toBe(true);
+  });
+
+  it('converts plain timeout Error to AgentUpstreamTimeoutError', () => {
+    const error = new Error('request timed out');
+    const result = normalizeError(error, abortedMessage);
+
+    expect(result).toBeInstanceOf(AgentUpstreamTimeoutError);
+    expect(result.retryable).toBe(true);
+  });
+
   it('converts generic Error to UnknownError', () => {
     const error = new Error('generic error');
     const result = normalizeError(error, abortedMessage);

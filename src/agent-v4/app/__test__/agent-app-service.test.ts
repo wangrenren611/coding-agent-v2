@@ -633,6 +633,95 @@ describe('AgentAppService', () => {
     }
   });
 
+  it('filters stored empty assistant-text history before the next llm call', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi
+      .fn()
+      .mockReturnValueOnce(
+        toStream([
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { content: 'first answer' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        toStream([
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { content: 'second answer' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+          },
+        ])
+      );
+
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-v4-app-service-empty-history-'));
+    store = new SqliteAgentAppStore(path.join(tempDir, 'agent.db'));
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      toolExecutionLedger: undefined,
+    });
+    const app = new AgentAppService({
+      agent,
+      executionStore: store,
+      eventStore: store,
+      messageStore: store,
+    });
+
+    const firstRun = await app.runForeground({
+      conversationId: 'conv_empty_history_filter',
+      executionId: 'exec_empty_history_filter_1',
+      userInput: 'first turn',
+    });
+
+    const storedMessages = [...firstRun.messages];
+    storedMessages.push({
+      messageId: 'msg_empty_assistant',
+      role: 'assistant',
+      type: 'assistant-text',
+      content: '',
+      reasoning_content: '',
+      timestamp: Date.now(),
+    });
+
+    await app.runForeground({
+      conversationId: 'conv_empty_history_filter',
+      executionId: 'exec_empty_history_filter_2',
+      userInput: 'second turn',
+      historyMessages: storedMessages,
+    });
+
+    const generateStreamCalls = (
+      provider.generateStream as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    expect(generateStreamCalls).toHaveLength(2);
+    const secondCallMessages = generateStreamCalls[1]?.[0] as Array<{
+      role: string;
+      content: unknown;
+    }>;
+    expect(
+      secondCallMessages.some(
+        (message) =>
+          message.role === 'assistant' &&
+          typeof message.content === 'string' &&
+          message.content === ''
+      )
+    ).toBe(false);
+    expect(
+      secondCallMessages.some(
+        (message) => message.role === 'assistant' && message.content === 'first answer'
+      )
+    ).toBe(true);
+  });
+
   it('maps AGENT_UPSTREAM_TIMEOUT to FAILED timeout terminal state', async () => {
     const provider = createProvider();
     const manager = createToolManager();

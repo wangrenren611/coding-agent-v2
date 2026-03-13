@@ -1,5 +1,40 @@
-import type { LLMRequestMessage, ToolCall } from '../../providers';
+import type { LLMRequestMessage, MessageContent, ToolCall } from '../../providers';
 import type { AgentInput, Message } from '../types';
+
+function hasNonEmptyTextContent(content: MessageContent | undefined): boolean {
+  if (typeof content === 'string') {
+    return content.trim().length > 0;
+  }
+  if (!Array.isArray(content)) {
+    return false;
+  }
+  return content.some((part) => {
+    if (part.type === 'text') {
+      return typeof part.text === 'string' && part.text.trim().length > 0;
+    }
+    return true;
+  });
+}
+
+function hasNonEmptyReasoningContent(reasoningContent: string | undefined): boolean {
+  return typeof reasoningContent === 'string' && reasoningContent.trim().length > 0;
+}
+
+export function shouldSendMessageToLLM(message: Message): boolean {
+  if (message.role !== 'assistant' || message.type !== 'assistant-text') {
+    return true;
+  }
+
+  const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
+  if (hasToolCalls) {
+    return true;
+  }
+
+  return (
+    hasNonEmptyTextContent(message.content) ||
+    hasNonEmptyReasoningContent(message.reasoning_content)
+  );
+}
 
 export function convertMessageToLLMMessage(message: Message): LLMRequestMessage {
   return {

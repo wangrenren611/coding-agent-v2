@@ -250,6 +250,55 @@ describe('StatelessAgent', () => {
     });
   });
 
+  it('filters empty assistant-text messages before calling generateStream', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi.fn().mockReturnValue(
+      toStream([
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { content: 'ok' } }],
+        },
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+        },
+      ])
+    );
+
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
+    await collectEvents(
+      agent.runStream(
+        {
+          ...createInput(),
+          messages: [
+            createInput().messages[0]!,
+            {
+              messageId: 'empty_assistant',
+              role: 'assistant',
+              type: 'assistant-text',
+              content: '',
+              reasoning_content: '',
+              timestamp: Date.now(),
+            },
+          ],
+        },
+        { onMessage: vi.fn(), onCheckpoint: vi.fn() }
+      )
+    );
+
+    const generateStreamCalls = (
+      provider.generateStream as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    expect(generateStreamCalls).toHaveLength(1);
+    const llmMessages = generateStreamCalls[0]?.[0] as Array<{ role: string; content: unknown }>;
+    expect(llmMessages).toHaveLength(1);
+    expect(llmMessages[0]).toMatchObject({ role: 'user', content: 'hello' });
+  });
+
   it('passes abortSignal to llm generateStream config', async () => {
     const provider = createProvider();
     const manager = createToolManager();

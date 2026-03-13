@@ -14,6 +14,7 @@ import { EventEmitter } from 'events';
 import {
   AgentAbortedError,
   AgentError,
+  AgentUpstreamRetryableError,
   MaxRetriesError,
   TimeoutBudgetExceededError,
   UnknownError,
@@ -25,7 +26,9 @@ import type { BackoffConfig } from '../../providers';
 import {
   convertMessageToLLMMessage as toLLMMessage,
   mergeLLMConfig as mergeLLMRequestConfig,
+  shouldSendMessageToLLM,
 } from './message-utils';
+
 import {
   createCheckpoint,
   createDoneEvent,
@@ -699,7 +702,9 @@ export class StatelessAgent extends EventEmitter {
     stepIndex = 0,
     writeBufferSessions: Map<string, WriteBufferRuntime> = new Map()
   ): AsyncGenerator<StreamEvent, { assistantMessage: Message; toolCalls: ToolCall[] }, unknown> {
-    const llmMessages = messages.map((msg) => this.convertMessageToLLMMessage(msg));
+    const llmMessages = messages
+      .filter((msg) => shouldSendMessageToLLM(msg))
+      .map((msg) => this.convertMessageToLLMMessage(msg));
     const stream = this.llmProvider.generateStream(llmMessages, config);
 
     const assistantMessage: Message = {
@@ -783,6 +788,12 @@ export class StatelessAgent extends EventEmitter {
 
     assistantMessage.tool_calls = toolCalls.length > 0 ? toolCalls : undefined;
     assistantMessage.type = toolCalls.length > 0 ? 'tool-call' : 'assistant-text';
+
+    const hasAssistantText = hasNonEmptyText(assistantMessage.content);
+    const hasReasoningText = hasNonEmptyText(assistantMessage.reasoning_content);
+    if (toolCalls.length === 0 && !hasAssistantText && !hasReasoningText) {
+      throw new AgentUpstreamRetryableError('LLM returned an empty assistant response');
+    }
 
     return { assistantMessage, toolCalls };
   }

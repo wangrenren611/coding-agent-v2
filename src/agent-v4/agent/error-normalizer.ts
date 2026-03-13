@@ -80,6 +80,13 @@ export function normalizeError(error: unknown, abortedMessage: string): AgentErr
     if (error.name === 'ConfirmationTimeoutError' || error.message === 'Confirmation timeout') {
       return new ConfirmationTimeoutError(error.message);
     }
+    const inferredKind = inferRetryableKindFromMessage(error.message);
+    if (inferredKind === 'timeout') {
+      return new AgentUpstreamTimeoutError(error.message);
+    }
+    if (inferredKind === 'network') {
+      return new AgentUpstreamNetworkError(error.message);
+    }
     return new UnknownError(error.message || new UnknownError().message);
   }
 

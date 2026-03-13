@@ -72,7 +72,7 @@ describe('StatelessAgent fault injection', () => {
     vi.useRealTimers();
   });
 
-  it('recovers from transient llm network failures and eventually completes', async () => {
+  it('auto-retries plain transient network errors without requiring onError callback', async () => {
     vi.useFakeTimers();
     const provider = createProvider();
     const manager = createToolManager();
@@ -102,13 +102,7 @@ describe('StatelessAgent fault injection', () => {
       backoffConfig: { initialDelayMs: 5, maxDelayMs: 5, base: 2, jitter: false },
     });
 
-    const eventsPromise = collectEvents(
-      agent.runStream(createInput(), {
-        onMessage: vi.fn(),
-        onCheckpoint: vi.fn(),
-        onError: async () => ({ retry: true }),
-      })
-    );
+    const eventsPromise = collectEvents(agent.runStream(createInput()));
     await vi.advanceTimersByTimeAsync(20);
     const events = await eventsPromise;
 
@@ -120,10 +114,93 @@ describe('StatelessAgent fault injection', () => {
     });
   });
 
+  it('auto-retries when the post-tool llm turn only emits empty chunks', async () => {
+    vi.useFakeTimers();
+    const provider = createProvider();
+    const manager = createToolManager();
+
+    provider.generateStream = vi
+      .fn()
+      .mockReturnValueOnce(
+        toStream([
+          {
+            index: 0,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      id: 'call_1',
+                      type: 'function',
+                      index: 0,
+                      function: {
+                        name: 'bash',
+                        arguments: JSON.stringify({ command: 'echo ProviderType' }),
+                      },
+                    },
+                  ],
+                  finish_reason: 'tool_calls',
+                } as unknown as ChunkDelta,
+              },
+            ],
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        toStream([
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { content: '' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { content: '' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        toStream([
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { content: 'Recovered after empty response' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+          },
+        ])
+      );
+    manager.execute = vi.fn().mockResolvedValue({
+      success: true,
+      output: "src/providers/index.ts:export type { ProviderType, ModelId } from './registry';",
+    });
+
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      backoffConfig: { initialDelayMs: 5, maxDelayMs: 5, base: 2, jitter: false },
+    });
+
+    const eventsPromise = collectEvents(agent.runStream(createInput()));
+    await vi.advanceTimersByTimeAsync(20);
+    const events = await eventsPromise;
+
+    expect(events.filter((event) => event.type === 'error')).toHaveLength(1);
+    expect(events.at(-1)).toMatchObject({
+      type: 'done',
+      data: { finishReason: 'stop' },
+    });
+    expect(provider.generateStream).toHaveBeenCalledTimes(3);
+  });
+
   it('does not leak abort listeners after repeated timeout-budgeted runs', async () => {
     const provider = createProvider();
     const manager = createToolManager();
-    provider.generateStream = vi.fn().mockReturnValue(
+    provider.generateStream = vi.fn().mockImplementation(() =>
       toStream([
         {
           index: 0,
@@ -139,7 +216,7 @@ describe('StatelessAgent fault injection', () => {
     const controller = new AbortController();
     const agent = new StatelessAgent(provider, manager, {
       maxRetryCount: 2,
-      timeoutBudgetMs: 100,
+      timeoutBudgetMs: 500,
       llmTimeoutRatio: 0.7,
     });
 

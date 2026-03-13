@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { convertMessageToLLMMessage, mergeLLMConfig } from '../message-utils';
+import {
+  convertMessageToLLMMessage,
+  mergeLLMConfig,
+  shouldSendMessageToLLM,
+} from '../message-utils';
 import type { Message } from '../../types';
 
 const createMessage = (overrides: Partial<Message> = {}): Message => ({
@@ -9,6 +13,53 @@ const createMessage = (overrides: Partial<Message> = {}): Message => ({
   content: '',
   timestamp: Date.now(),
   ...overrides,
+});
+
+describe('shouldSendMessageToLLM', () => {
+  it('filters empty assistant-text messages with no reasoning or tool calls', () => {
+    const message = createMessage({
+      role: 'assistant',
+      type: 'assistant-text',
+      content: '',
+      reasoning_content: '',
+      tool_calls: undefined,
+    });
+
+    expect(shouldSendMessageToLLM(message)).toBe(false);
+  });
+
+  it('keeps assistant-text messages with text content', () => {
+    const message = createMessage({
+      role: 'assistant',
+      type: 'assistant-text',
+      content: 'answer',
+      reasoning_content: '',
+    });
+
+    expect(shouldSendMessageToLLM(message)).toBe(true);
+  });
+
+  it('keeps assistant-text messages with reasoning content', () => {
+    const message = createMessage({
+      role: 'assistant',
+      type: 'assistant-text',
+      content: '',
+      reasoning_content: 'thinking',
+    });
+
+    expect(shouldSendMessageToLLM(message)).toBe(true);
+  });
+
+  it('keeps non-assistant messages even when content is empty', () => {
+    const message = createMessage({
+      role: 'tool',
+      type: 'tool-result',
+      content: '',
+      tool_call_id: 'call_1',
+    });
+
+    expect(shouldSendMessageToLLM(message)).toBe(true);
+  });
 });
 
 describe('convertMessageToLLMMessage', () => {
