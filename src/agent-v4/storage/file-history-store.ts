@@ -1,3 +1,4 @@
+import * as syncFs from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -46,7 +47,7 @@ export class FileHistoryStore {
       return null;
     }
 
-    const targetPath = path.resolve(input.targetPath);
+    const targetPath = this.normalizeTargetPath(input.targetPath);
     let currentContent: string;
     try {
       currentContent = await fs.readFile(targetPath, 'utf8');
@@ -91,7 +92,8 @@ export class FileHistoryStore {
   }
 
   async restoreVersion(targetPath: string, versionId: string): Promise<boolean> {
-    const manifest = await this.loadManifest(targetPath);
+    const normalizedTargetPath = this.normalizeTargetPath(targetPath);
+    const manifest = await this.loadManifest(normalizedTargetPath);
     if (!manifest) {
       return false;
     }
@@ -104,11 +106,11 @@ export class FileHistoryStore {
     const snapshotPath = this.resolveSnapshotPath(version.snapshotFile);
     const content = await fs.readFile(snapshotPath, 'utf8');
     await this.snapshotBeforeWrite({
-      targetPath: path.resolve(targetPath),
+      targetPath: normalizedTargetPath,
       nextContent: content,
       source: 'file_history_restore',
     });
-    await writeTextFileAtomically(path.resolve(targetPath), content);
+    await writeTextFileAtomically(normalizedTargetPath, content);
     return true;
   }
 
@@ -122,7 +124,7 @@ export class FileHistoryStore {
   }
 
   private async loadManifest(targetPath: string): Promise<FileHistoryManifest | null> {
-    const resolvedTargetPath = path.resolve(targetPath);
+    const resolvedTargetPath = this.normalizeTargetPath(targetPath);
     const manifestPath = this.manifestPathByTarget(resolvedTargetPath);
     return readJsonFileIfExists<FileHistoryManifest>(manifestPath);
   }
@@ -254,7 +256,46 @@ export class FileHistoryStore {
   }
 
   private pathKey(targetPath: string): string {
-    return createHash('sha256').update(path.resolve(targetPath)).digest('hex').slice(0, 24);
+    return createHash('sha256')
+      .update(this.normalizeTargetPath(targetPath))
+      .digest('hex')
+      .slice(0, 24);
+  }
+
+  private normalizeTargetPath(targetPath: string): string {
+    const absolute = path.resolve(targetPath);
+    try {
+      return syncFs.realpathSync(absolute);
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code !== 'ENOENT' && nodeError.code !== 'ENOTDIR') {
+        return absolute;
+      }
+    }
+
+    let current = absolute;
+    const trailingSegments: string[] = [];
+
+    for (;;) {
+      try {
+        const realCurrent = syncFs.realpathSync(current);
+        if (trailingSegments.length === 0) {
+          return realCurrent;
+        }
+        return path.join(realCurrent, ...trailingSegments.reverse());
+      } catch (error) {
+        const nodeError = error as NodeJS.ErrnoException;
+        if (nodeError.code !== 'ENOENT' && nodeError.code !== 'ENOTDIR') {
+          return absolute;
+        }
+        const parent = path.dirname(current);
+        if (parent === current) {
+          return absolute;
+        }
+        trailingSegments.push(path.basename(current));
+        current = parent;
+      }
+    }
   }
 
   private isNotFoundError(error: unknown): boolean {

@@ -61,10 +61,12 @@ describe('FileHistoryStore', () => {
 
     const versions = await store.listVersions(targetPath);
     expect(versions).toHaveLength(2);
-    expect(versions[0].source).toBe('file_edit');
-    expect(versions[1].source).toBe('write_file');
+    expect(versions.map((version) => version.source).sort()).toEqual(['file_edit', 'write_file']);
 
-    const restored = await store.restoreVersion(targetPath, versions[1].versionId);
+    const originalVersion = versions.find((version) => version.source === 'write_file');
+    expect(originalVersion).toBeDefined();
+
+    const restored = await store.restoreVersion(targetPath, originalVersion!.versionId);
     expect(restored).toBe(true);
     expect(await fs.readFile(targetPath, 'utf8')).toBe('v1');
   });

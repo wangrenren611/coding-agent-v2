@@ -1,8 +1,6 @@
 import * as path from 'node:path';
 
 export const AGENT_STORAGE_ROOT_ENV = 'AGENT_STORAGE_ROOT';
-export const AGENT_WRITE_BUFFER_DIR_ENV = 'AGENT_WRITE_BUFFER_DIR';
-export const AGENT_FILE_HISTORY_DIR_ENV = 'AGENT_FILE_HISTORY_DIR';
 export const AGENT_FILE_HISTORY_ENABLED_ENV = 'AGENT_FILE_HISTORY_ENABLED';
 export const AGENT_FILE_HISTORY_MAX_PER_FILE_ENV = 'AGENT_FILE_HISTORY_MAX_PER_FILE';
 export const AGENT_FILE_HISTORY_MAX_AGE_DAYS_ENV = 'AGENT_FILE_HISTORY_MAX_AGE_DAYS';
@@ -64,14 +62,8 @@ function parseNonNegativeInteger(raw: string | undefined, fallback: number): num
 
 export function getFileStorageConfig(): FileStorageConfig {
   const rootDir = resolveConfiguredPath(process.env[AGENT_STORAGE_ROOT_ENV], DEFAULT_STORAGE_ROOT);
-  const writeBufferDir = resolveConfiguredPath(
-    process.env[AGENT_WRITE_BUFFER_DIR_ENV],
-    path.join(rootDir, DEFAULT_WRITE_BUFFER_SUBDIR)
-  );
-  const historyDir = resolveConfiguredPath(
-    process.env[AGENT_FILE_HISTORY_DIR_ENV],
-    path.join(rootDir, DEFAULT_HISTORY_SUBDIR)
-  );
+  const writeBufferDir = path.resolve(rootDir, DEFAULT_WRITE_BUFFER_SUBDIR);
+  const historyDir = path.resolve(rootDir, DEFAULT_HISTORY_SUBDIR);
   const historyEnabled = parseBoolean(
     process.env[AGENT_FILE_HISTORY_ENABLED_ENV],
     DEFAULT_HISTORY_ENABLED

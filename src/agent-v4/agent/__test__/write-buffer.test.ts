@@ -89,10 +89,8 @@ describe('write-buffer', () => {
   it('uses the env-configured write buffer directory by default', async () => {
     const rootDir = await createTempDir();
     const previousRoot = process.env.AGENT_STORAGE_ROOT;
-    const previousWriteBufferDir = process.env.AGENT_WRITE_BUFFER_DIR;
 
     process.env.AGENT_STORAGE_ROOT = rootDir;
-    delete process.env.AGENT_WRITE_BUFFER_DIR;
 
     try {
       const session = await createWriteBufferSession({
@@ -107,11 +105,6 @@ describe('write-buffer', () => {
       } else {
         process.env.AGENT_STORAGE_ROOT = previousRoot;
       }
-      if (previousWriteBufferDir === undefined) {
-        delete process.env.AGENT_WRITE_BUFFER_DIR;
-      } else {
-        process.env.AGENT_WRITE_BUFFER_DIR = previousWriteBufferDir;
-      }
     }
   });
 
@@ -121,11 +114,9 @@ describe('write-buffer', () => {
     const outputDir = await createTempDir();
     const targetPath = path.join(outputDir, 'history.txt');
     const previousRoot = process.env.AGENT_STORAGE_ROOT;
-    const previousHistoryDir = process.env.AGENT_FILE_HISTORY_DIR;
     const previousHistoryEnabled = process.env.AGENT_FILE_HISTORY_ENABLED;
 
     process.env.AGENT_STORAGE_ROOT = storageRoot;
-    process.env.AGENT_FILE_HISTORY_DIR = path.join(storageRoot, 'history');
     process.env.AGENT_FILE_HISTORY_ENABLED = 'true';
 
     try {
@@ -154,11 +145,6 @@ describe('write-buffer', () => {
         delete process.env.AGENT_STORAGE_ROOT;
       } else {
         process.env.AGENT_STORAGE_ROOT = previousRoot;
-      }
-      if (previousHistoryDir === undefined) {
-        delete process.env.AGENT_FILE_HISTORY_DIR;
-      } else {
-        process.env.AGENT_FILE_HISTORY_DIR = previousHistoryDir;
       }
       if (previousHistoryEnabled === undefined) {
         delete process.env.AGENT_FILE_HISTORY_ENABLED;

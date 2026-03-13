@@ -1,4 +1,4 @@
-import { isAbsolute, resolve as resolvePath } from 'node:path';
+import { isAbsolute, resolve as resolvePath, win32 } from 'node:path';
 import type {
   AgentContextUsageEvent,
   AgentEventHandlers,
@@ -66,7 +66,6 @@ let preferredModelId = readPreferredModelIdFromEnv();
 const DEFAULT_MODEL = 'qwen3.5-plus';
 const DEFAULT_MAX_STEPS = 10000;
 const DEFAULT_MAX_RETRY_COUNT = 10;
-const DEFAULT_DB_PATH = 'C:/Users/Administrator/.coding-agent/agent.db';
 const PARENT_HIDDEN_TOOL_NAMES = new Set(['file_history_list', 'file_history_restore']);
 
 const parsePositiveInt = (raw: string | undefined, fallback: number): number => {
@@ -112,13 +111,18 @@ const resolveConversationId = () => {
 };
 
 const resolveDbPath = (workspaceRoot: string): string => {
-  const raw = (
-    process.env.AGENT_V4_DB_PATH?.trim() ||
-    process.env.AGENT_DB_PATH?.trim() ||
-    DEFAULT_DB_PATH
-  ).trim();
+  const raw = process.env.AGENT_DB_PATH?.trim();
+  if (!raw) {
+    throw new Error('Missing AGENT_DB_PATH for SQLite storage.');
+  }
   if (isAbsolute(raw)) {
     return raw;
+  }
+  if (win32.isAbsolute(raw)) {
+    throw new Error(
+      `Invalid database path "${raw}" for platform ${process.platform}. ` +
+        'Use AGENT_DB_PATH with a native absolute path.'
+    );
   }
   return resolvePath(workspaceRoot, raw);
 };

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
+import * as syncFs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { FileHistoryStore } from '../../storage/file-history-store';
@@ -64,7 +65,7 @@ describe('file history tools', () => {
     );
 
     expect(result.success).toBe(true);
-    expect(payload.path).toBe(targetPath);
+    expect(payload.path).toBe(syncFs.realpathSync(targetPath));
     expect(payload.versions).toHaveLength(1);
     expect(payload.versions[0].versionId).toBeTruthy();
   });

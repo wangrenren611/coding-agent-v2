@@ -79,6 +79,16 @@ const buildMockModules = () => {
     }
   }
 
+  class FakeAppStore {
+    static lastDbPath: string | undefined;
+
+    constructor(dbPath: string) {
+      FakeAppStore.lastDbPath = dbPath;
+    }
+
+    close = vi.fn().mockResolvedValue(undefined);
+  }
+
   return {
     ProviderRegistry: {
       getModelIds: () => ['glm-5', 'claude-3.5-sonnet'],
@@ -99,9 +109,7 @@ const buildMockModules = () => {
     })),
     StatelessAgent: FakeAgent,
     AgentAppService: FakeAppService,
-    createSqliteAgentAppStore: () => ({
-      close: vi.fn().mockResolvedValue(undefined),
-    }),
+    createSqliteAgentAppStore: (dbPath: string) => new FakeAppStore(dbPath),
     DefaultToolManager: FakeToolManager,
     BashTool: createNamedTool('bash'),
     WriteFileTool: createNamedTool('write_file'),
@@ -132,10 +140,12 @@ describe('runtime', () => {
     typeof vi.fn
   >;
   const originalApiKey = process.env.TEST_API_KEY;
+  const originalAgentDbPath = process.env.AGENT_DB_PATH;
 
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.TEST_API_KEY = 'test-key';
+    process.env.AGENT_DB_PATH = './test-agent.db';
     mockResolveWorkspaceRoot.mockReturnValue('/test/workspace');
     mockGetSourceModules.mockResolvedValue(buildMockModules());
   });
@@ -146,6 +156,11 @@ describe('runtime', () => {
       delete process.env.TEST_API_KEY;
     } else {
       process.env.TEST_API_KEY = originalApiKey;
+    }
+    if (originalAgentDbPath === undefined) {
+      delete process.env.AGENT_DB_PATH;
+    } else {
+      process.env.AGENT_DB_PATH = originalAgentDbPath;
     }
   });
 
@@ -202,6 +217,46 @@ describe('runtime', () => {
         completionReason: 'stop',
         modelLabel: 'GLM-5',
       })
+    );
+  });
+
+  it('uses AGENT_DB_PATH when configured', async () => {
+    const modules = buildMockModules();
+    const appStoreClass = modules.createSqliteAgentAppStore('/ignore').constructor as {
+      lastDbPath?: string;
+    };
+    mockGetSourceModules.mockResolvedValue(
+      modules as unknown as Awaited<ReturnType<typeof sourceModules.getSourceModules>>
+    );
+    process.env.AGENT_DB_PATH = './from-agent-db-path.db';
+
+    await disposeAgentRuntime();
+    await runAgentPrompt('Test prompt', {});
+
+    expect(appStoreClass.lastDbPath).toBe('/test/workspace/from-agent-db-path.db');
+  });
+
+  it('fails fast when no database path env is configured', async () => {
+    delete process.env.AGENT_DB_PATH;
+
+    await disposeAgentRuntime();
+
+    await expect(runAgentPrompt('Test prompt', {})).rejects.toThrow(
+      'Missing AGENT_DB_PATH for SQLite storage.'
+    );
+  });
+
+  it('rejects Windows absolute database paths on non-Windows platforms', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    process.env.AGENT_DB_PATH = 'C:/Users/Administrator/.coding-agent/agent.db';
+
+    await disposeAgentRuntime();
+
+    await expect(runAgentPrompt('Test prompt', {})).rejects.toThrow(
+      'Use AGENT_DB_PATH with a native absolute path.'
     );
   });
 
