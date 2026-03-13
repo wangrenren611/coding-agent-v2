@@ -58,13 +58,20 @@ function parseLogLevel(raw: string | undefined): LogLevel {
   if (!raw) return LogLevel.INFO;
   const normalized = raw.trim().toUpperCase();
   switch (normalized) {
-    case 'TRACE': return LogLevel.TRACE;
-    case 'DEBUG': return LogLevel.DEBUG;
-    case 'INFO': return LogLevel.INFO;
-    case 'WARN': return LogLevel.WARN;
-    case 'ERROR': return LogLevel.ERROR;
-    case 'FATAL': return LogLevel.FATAL;
-    default: throw new Error(`Invalid AGENT_LOG_LEVEL: "${raw}"`);
+    case 'TRACE':
+      return LogLevel.TRACE;
+    case 'DEBUG':
+      return LogLevel.DEBUG;
+    case 'INFO':
+      return LogLevel.INFO;
+    case 'WARN':
+      return LogLevel.WARN;
+    case 'ERROR':
+      return LogLevel.ERROR;
+    case 'FATAL':
+      return LogLevel.FATAL;
+    default:
+      throw new Error(`Invalid AGENT_LOG_LEVEL: "${raw}"`);
   }
 }
 
@@ -147,7 +154,11 @@ export function createLoggerFromRuntimeConfig(config: RuntimeConfig): Logger {
   return createLogger({
     level: config.log.level,
     console: { enabled: config.log.consoleEnabled, format: config.log.format },
-    file: { enabled: config.log.fileEnabled, filepath: config.log.filePath, format: config.log.format },
+    file: {
+      enabled: config.log.fileEnabled,
+      filepath: config.log.filePath,
+      format: config.log.format,
+    },
   });
 }
 

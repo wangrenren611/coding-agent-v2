@@ -12,12 +12,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { LogLevel } from '../logger';
-import type {
-  RenxConfig,
-  ResolvedConfig,
-  LoadConfigOptions,
-  LogConfig,
-} from './types';
+import type { RenxConfig, ResolvedConfig, LoadConfigOptions, LogConfig } from './types';
 
 // --- 常量 ---
 
@@ -34,7 +29,6 @@ const DEFAULTS: RenxConfig = {
     console: true,
     file: false,
     dir: './logs',
-
   },
   storage: {
     root: './.renx/storage',
@@ -77,13 +71,20 @@ function parseLogLevelValue(raw: string | undefined): LogLevel | null {
   if (!raw) return null;
   const normalized = raw.trim().toUpperCase();
   switch (normalized) {
-    case 'TRACE': return LogLevel.TRACE;
-    case 'DEBUG': return LogLevel.DEBUG;
-    case 'INFO': return LogLevel.INFO;
-    case 'WARN': return LogLevel.WARN;
-    case 'ERROR': return LogLevel.ERROR;
-    case 'FATAL': return LogLevel.FATAL;
-    default: return null;
+    case 'TRACE':
+      return LogLevel.TRACE;
+    case 'DEBUG':
+      return LogLevel.DEBUG;
+    case 'INFO':
+      return LogLevel.INFO;
+    case 'WARN':
+      return LogLevel.WARN;
+    case 'ERROR':
+      return LogLevel.ERROR;
+    case 'FATAL':
+      return LogLevel.FATAL;
+    default:
+      return null;
   }
 }
 
@@ -152,7 +153,9 @@ function applyEnvOverrides(config: RenxConfig, env: NodeJS.ProcessEnv): RenxConf
 
   // Storage
   const storageRoot = env.RENX_STORAGE_ROOT ?? env.AGENT_STORAGE_ROOT;
-  const fileHistoryEnabled = parseBoolean(env.RENX_FILE_HISTORY_ENABLED ?? env.AGENT_FILE_HISTORY_ENABLED);
+  const fileHistoryEnabled = parseBoolean(
+    env.RENX_FILE_HISTORY_ENABLED ?? env.AGENT_FILE_HISTORY_ENABLED
+  );
 
   if (storageRoot || fileHistoryEnabled !== null) {
     result.storage = { ...result.storage };
@@ -337,8 +340,14 @@ function applyConfigToEnv(config: RenxConfig, shellEnvVars: Set<string>): void {
   if (config.log) {
     setIfUnset('AGENT_LOG_LEVEL', config.log.level);
     setIfUnset('AGENT_LOG_FORMAT', config.log.format);
-    setIfUnset('AGENT_LOG_CONSOLE', config.log.console !== undefined ? String(config.log.console) : undefined);
-    setIfUnset('AGENT_LOG_FILE_ENABLED', config.log.file !== undefined ? String(config.log.file) : undefined);
+    setIfUnset(
+      'AGENT_LOG_CONSOLE',
+      config.log.console !== undefined ? String(config.log.console) : undefined
+    );
+    setIfUnset(
+      'AGENT_LOG_FILE_ENABLED',
+      config.log.file !== undefined ? String(config.log.file) : undefined
+    );
     setIfUnset('AGENT_LOG_DIR', config.log.dir);
   }
 
@@ -346,10 +355,30 @@ function applyConfigToEnv(config: RenxConfig, shellEnvVars: Set<string>): void {
   if (config.storage) {
     setIfUnset('AGENT_STORAGE_ROOT', config.storage.root);
     if (config.storage.fileHistory) {
-      setIfUnset('AGENT_FILE_HISTORY_ENABLED', config.storage.fileHistory.enabled !== undefined ? String(config.storage.fileHistory.enabled) : undefined);
-      setIfUnset('AGENT_FILE_HISTORY_MAX_PER_FILE', config.storage.fileHistory.maxPerFile !== undefined ? String(config.storage.fileHistory.maxPerFile) : undefined);
-      setIfUnset('AGENT_FILE_HISTORY_MAX_AGE_DAYS', config.storage.fileHistory.maxAgeDays !== undefined ? String(config.storage.fileHistory.maxAgeDays) : undefined);
-      setIfUnset('AGENT_FILE_HISTORY_MAX_TOTAL_MB', config.storage.fileHistory.maxTotalMb !== undefined ? String(config.storage.fileHistory.maxTotalMb) : undefined);
+      setIfUnset(
+        'AGENT_FILE_HISTORY_ENABLED',
+        config.storage.fileHistory.enabled !== undefined
+          ? String(config.storage.fileHistory.enabled)
+          : undefined
+      );
+      setIfUnset(
+        'AGENT_FILE_HISTORY_MAX_PER_FILE',
+        config.storage.fileHistory.maxPerFile !== undefined
+          ? String(config.storage.fileHistory.maxPerFile)
+          : undefined
+      );
+      setIfUnset(
+        'AGENT_FILE_HISTORY_MAX_AGE_DAYS',
+        config.storage.fileHistory.maxAgeDays !== undefined
+          ? String(config.storage.fileHistory.maxAgeDays)
+          : undefined
+      );
+      setIfUnset(
+        'AGENT_FILE_HISTORY_MAX_TOTAL_MB',
+        config.storage.fileHistory.maxTotalMb !== undefined
+          ? String(config.storage.fileHistory.maxTotalMb)
+          : undefined
+      );
     }
   }
 
@@ -362,7 +391,10 @@ function applyConfigToEnv(config: RenxConfig, shellEnvVars: Set<string>): void {
   if (config.agent) {
     setIfUnset('AGENT_TOOL_CONFIRMATION_MODE', config.agent.confirmationMode);
     setIfUnset('RENX_DEFAULT_MODEL', config.agent.defaultModel);
-    setIfUnset('RENX_MAX_STEPS', config.agent.maxSteps !== undefined ? String(config.agent.maxSteps) : undefined);
+    setIfUnset(
+      'RENX_MAX_STEPS',
+      config.agent.maxSteps !== undefined ? String(config.agent.maxSteps) : undefined
+    );
   }
 }
 

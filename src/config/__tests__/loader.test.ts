@@ -241,7 +241,9 @@ describe('Renx Config Loader', () => {
       expect(config.log.dir).toBe(path.join(tmpDir, 'logs'));
       // 日志文件名自动生成，格式: YYYY-MM-DDTHH-MM-SS.log
       expect(config.log.filePath).toMatch(
-        new RegExp(`^${tmpDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/logs/\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}\\.log$`)
+        new RegExp(
+          `^${tmpDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/logs/\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}\\.log$`
+        )
       );
     });
   });

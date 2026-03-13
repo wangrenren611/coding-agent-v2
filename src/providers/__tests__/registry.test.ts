@@ -49,7 +49,16 @@ describe('ProviderRegistry', () => {
     });
 
     it('should have valid provider types', () => {
-      const validProviders = ['anthropic', 'kimi', 'deepseek', 'glm', 'minimax', 'openai', 'openrouter', 'qwen'];
+      const validProviders = [
+        'anthropic',
+        'kimi',
+        'deepseek',
+        'glm',
+        'minimax',
+        'openai',
+        'openrouter',
+        'qwen',
+      ];
 
       Object.values(MODEL_CONFIGS).forEach((config) => {
         expect(validProviders).toContain(config.provider);

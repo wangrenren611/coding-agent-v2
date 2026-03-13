@@ -23,9 +23,7 @@ export class TaskStore {
   private initialized = false;
 
   constructor(options: TaskStoreOptions = {}) {
-    this.baseDir = path.resolve(
-      options.baseDir || path.join(os.homedir(), '.renx', 'task')
-    );
+    this.baseDir = path.resolve(options.baseDir || path.join(os.homedir(), '.renx', 'task'));
     this.now = options.now || Date.now;
   }
 
@@ -202,9 +200,7 @@ let globalTaskStore: TaskStore | null = null;
 let globalTaskStoreKey = '';
 
 export function getTaskStore(options: TaskStoreOptions = {}): TaskStore {
-  const baseDir = path.resolve(
-    options.baseDir || path.join(os.homedir(), '.renx', 'task')
-  );
+  const baseDir = path.resolve(options.baseDir || path.join(os.homedir(), '.renx', 'task'));
   if (!globalTaskStore || globalTaskStoreKey !== baseDir) {
     globalTaskStore = new TaskStore({
       ...options,

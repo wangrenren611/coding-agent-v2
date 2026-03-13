@@ -86,7 +86,7 @@ export interface ResolvedConfig {
   };
   /** 配置来源 */
   sources: {
-    global: string | null;  // 全局配置文件路径
+    global: string | null; // 全局配置文件路径
     project: string | null; // 项目配置文件路径
   };
 }

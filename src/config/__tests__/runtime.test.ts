@@ -2,11 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
-import {
-  createLoggerFromEnv,
-  loadEnvFiles,
-  loadRuntimeConfigFromEnv,
-} from '../runtime';
+import { createLoggerFromEnv, loadEnvFiles, loadRuntimeConfigFromEnv } from '../runtime';
 
 describe('runtime config from env', () => {
   const loggers: Array<ReturnType<typeof createLoggerFromEnv>> = [];
@@ -31,9 +27,7 @@ describe('runtime config from env', () => {
     expect(config.storage.sqlitePath).toBe(
       path.resolve(cwd, './data/agent-memory/agent-memory.db')
     );
-    expect(config.log.filePath).toMatch(
-      /^\/repo\/logs\/\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.log$/
-    );
+    expect(config.log.filePath).toMatch(/^\/repo\/logs\/\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.log$/);
     expect(config.log.consoleEnabled).toBe(true);
     expect(config.log.fileEnabled).toBe(false);
     expect(config.log.format).toBe('pretty');
@@ -57,9 +51,7 @@ describe('runtime config from env', () => {
 
     expect(config.storage.backend).toBe('sqlite');
     expect(config.storage.dir).toBe(path.resolve(cwd, './runtime-data'));
-    expect(config.storage.sqlitePath).toBe(
-      path.resolve(cwd, './runtime-data/custom.db')
-    );
+    expect(config.storage.sqlitePath).toBe(path.resolve(cwd, './runtime-data/custom.db'));
     expect(config.log.level).toBe(10); // DEBUG
     expect(config.log.consoleEnabled).toBe(false);
     expect(config.log.fileEnabled).toBe(true);
@@ -70,21 +62,21 @@ describe('runtime config from env', () => {
   });
 
   it('should throw on invalid storage backend', () => {
-    expect(() =>
-      loadRuntimeConfigFromEnv({ AGENT_STORAGE_BACKEND: 'redis' }, '/repo')
-    ).toThrow('Invalid AGENT_STORAGE_BACKEND');
+    expect(() => loadRuntimeConfigFromEnv({ AGENT_STORAGE_BACKEND: 'redis' }, '/repo')).toThrow(
+      'Invalid AGENT_STORAGE_BACKEND'
+    );
   });
 
   it('should throw on invalid log level', () => {
-    expect(() =>
-      loadRuntimeConfigFromEnv({ AGENT_LOG_LEVEL: 'verbose' }, '/repo')
-    ).toThrow('Invalid AGENT_LOG_LEVEL');
+    expect(() => loadRuntimeConfigFromEnv({ AGENT_LOG_LEVEL: 'verbose' }, '/repo')).toThrow(
+      'Invalid AGENT_LOG_LEVEL'
+    );
   });
 
   it('should throw on invalid log format', () => {
-    expect(() =>
-      loadRuntimeConfigFromEnv({ AGENT_LOG_FORMAT: 'xml' }, '/repo')
-    ).toThrow('Invalid AGENT_LOG_FORMAT');
+    expect(() => loadRuntimeConfigFromEnv({ AGENT_LOG_FORMAT: 'xml' }, '/repo')).toThrow(
+      'Invalid AGENT_LOG_FORMAT'
+    );
   });
 
   it('should load env files', async () => {
