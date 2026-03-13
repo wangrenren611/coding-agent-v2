@@ -132,6 +132,11 @@ export class AgentAppSqliteClient {
       await this.initializePromise.catch(() => undefined);
     }
     if (this.db) {
+      try {
+        this.db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+      } catch {
+        // Ignore checkpoint errors during shutdown and still close the handle.
+      }
       this.db.close();
       this.db = null;
     }

@@ -1,5 +1,4 @@
-import { isAbsolute, resolve as resolvePath, win32 } from 'node:path';
-import { homedir } from 'node:os';
+import { resolve as resolvePath } from 'node:path';
 import type {
   AgentContextUsageEvent,
   AgentEventHandlers,
@@ -32,6 +31,7 @@ import {
 } from './source-modules';
 import { ToolCallBuffer } from './tool-call-buffer';
 import { buildSystemPrompt } from '../../../../src/agent/prompts/system';
+import { resolveRenxDatabasePath, resolveRenxTaskDir } from '../../../../src/config/paths';
 import type { AttachmentModelCapabilities } from '../../files/attachment-capabilities';
 import { resolveAttachmentModelCapabilities } from '../../files/attachment-capabilities';
 import type { MessageContent } from '../../types/message-content';
@@ -80,6 +80,24 @@ const parsePositiveInt = (raw: string | undefined, fallback: number): number => 
   return value;
 };
 
+const resolvePromptCacheConfig = (
+  conversationId: string
+): Record<string, unknown> | undefined => {
+  const rawPromptCacheKey = process.env.AGENT_PROMPT_CACHE_KEY?.trim();
+  const promptCacheRetention = process.env.AGENT_PROMPT_CACHE_RETENTION?.trim();
+  const promptCacheKey = rawPromptCacheKey?.replace(/\{conversationId\}/g, conversationId);
+
+  const config: Record<string, unknown> = {};
+  if (promptCacheKey) {
+    config.prompt_cache_key = promptCacheKey;
+  }
+  if (promptCacheRetention) {
+    config.prompt_cache_retention = promptCacheRetention;
+  }
+
+  return Object.keys(config).length > 0 ? config : undefined;
+};
+
 const resolveModelId = (modules: SourceModules, requested?: string): string => {
   const ids = modules.ProviderRegistry.getModelIds();
   const normalized = requested?.trim();
@@ -111,21 +129,8 @@ const resolveConversationId = () => {
   return `opentui-${Date.now()}`;
 };
 
-const resolveDbPath = (workspaceRoot: string): string => {
-  const raw = process.env.AGENT_DB_PATH?.trim();
-  if (!raw) {
-    throw new Error('Missing AGENT_DB_PATH for SQLite storage.');
-  }
-  if (isAbsolute(raw)) {
-    return raw;
-  }
-  if (win32.isAbsolute(raw)) {
-    throw new Error(
-      `Invalid database path "${raw}" for platform ${process.platform}. ` +
-        'Use AGENT_DB_PATH with a native absolute path.'
-    );
-  }
-  return resolvePath(workspaceRoot, raw);
+const resolveDbPath = (): string => {
+  return resolveRenxDatabasePath(process.env);
 };
 
 const buildCliLoggerEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({
@@ -354,7 +359,7 @@ const createRuntime = async (): Promise<RuntimeCore> => {
   });
   const toolManager = new modules.DefaultToolManager();
   const taskStore = new modules.TaskStore({
-    baseDir: resolvePath(homedir(), '.renx', 'task'),
+    baseDir: resolveRenxTaskDir(process.env),
   });
   toolManager.registerTool(new modules.BashTool());
   toolManager.registerTool(
@@ -406,7 +411,7 @@ const createRuntime = async (): Promise<RuntimeCore> => {
     logger: agentLogger,
   });
 
-  const appStore = modules.createSqliteAgentAppStore(resolveDbPath(workspaceRoot));
+  const appStore = modules.createSqliteAgentAppStore(resolveDbPath());
   const preparableStore = appStore as AgentAppStoreLike & {
     prepare?: () => Promise<void>;
   };
@@ -633,6 +638,7 @@ export const runAgentPrompt = async (
         historyMessages: historyMessages as AgentV4MessageLike[],
         systemPrompt: buildSystemPrompt({ directory: runtime.workspaceRoot }),
         tools: runtime.parentTools,
+        config: resolvePromptCacheConfig(runtime.conversationId),
         maxSteps: runtime.maxSteps,
         abortSignal: options.abortSignal,
         modelLabel: runtime.modelLabel,

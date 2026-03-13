@@ -1,16 +1,13 @@
-import { describe, expect, it, beforeEach, afterEach, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { CliRenderer } from '@opentui/core';
-
-// 导入被测试模块
 import {
-  registerTerminalBackgroundRestore,
+  bindExitGuards,
   hardResetTerminal,
   initExitRuntime,
+  registerTerminalBackgroundRestore,
   requestExit,
-  bindExitGuards,
 } from './exit';
 
-// 模拟process对象
 const originalProcess = global.process;
 const mockProcess = {
   ...originalProcess,
@@ -29,13 +26,11 @@ const mockProcess = {
   exit: mock(() => {}),
 };
 
-// 模拟console.error
 const originalConsoleError = console.error;
 const mockConsoleError = mock(() => {});
 
 describe('exit module', () => {
   beforeEach(() => {
-    // 重置模拟
     mockProcess.stdout.write.mockClear();
     mockProcess.stdin.setRawMode.mockClear();
     mockProcess.on.mockClear();
@@ -45,39 +40,36 @@ describe('exit module', () => {
     mockProcess.stdout.isTTY = true;
     mockProcess.stdin.isTTY = true;
 
-    // 替换全局对象
-    global.process = mockProcess as any;
-    console.error = mockConsoleError as any;
+    global.process = mockProcess as typeof process;
+    console.error = mockConsoleError as typeof console.error;
   });
 
   afterEach(() => {
-    // 恢复全局对象
     global.process = originalProcess;
     console.error = originalConsoleError;
   });
 
   describe('registerTerminalBackgroundRestore', () => {
-    it('should register restore function', () => {
-      const restoreFn = () => {};
+    it('registers restore function', () => {
+      const restoreFn = () => undefined;
       registerTerminalBackgroundRestore(restoreFn);
-      // 函数内部没有返回值，只能测试它不抛出错误
       expect(() => registerTerminalBackgroundRestore(restoreFn)).not.toThrow();
     });
 
-    it('should allow null restore function', () => {
+    it('allows null restore function', () => {
       expect(() => registerTerminalBackgroundRestore(null)).not.toThrow();
     });
   });
 
   describe('hardResetTerminal', () => {
-    it('should reset terminal when stdout is TTY', () => {
+    it('resets terminal when stdout is TTY', () => {
       hardResetTerminal();
 
       expect(mockProcess.stdout.write).toHaveBeenCalled();
       expect(mockProcess.stdin.setRawMode).toHaveBeenCalledWith(false);
     });
 
-    it('should not reset terminal when stdout is not TTY', () => {
+    it('does not reset terminal when stdout is not TTY', () => {
       mockProcess.stdout.isTTY = false;
       mockProcess.stdin.isTTY = false;
 
@@ -87,7 +79,7 @@ describe('exit module', () => {
       expect(mockProcess.stdin.setRawMode).not.toHaveBeenCalled();
     });
 
-    it('should call registered restore function', () => {
+    it('calls registered restore function', () => {
       const restoreFn = mock(() => {});
       registerTerminalBackgroundRestore(restoreFn);
 
@@ -96,68 +88,63 @@ describe('exit module', () => {
       expect(restoreFn).toHaveBeenCalled();
     });
 
-    it('should handle errors gracefully', () => {
+    it('handles write errors gracefully', () => {
       mockProcess.stdout.write.mockImplementation(() => {
         throw new Error('Write error');
       });
 
-      // 不应该抛出错误
       expect(() => hardResetTerminal()).not.toThrow();
     });
   });
 
   describe('initExitRuntime', () => {
-    it('should store renderer reference', () => {
+    it('stores renderer reference', () => {
       const mockRenderer = {} as CliRenderer;
       initExitRuntime(mockRenderer);
 
-      // 函数内部只是存储引用，没有返回值
       expect(() => initExitRuntime(mockRenderer)).not.toThrow();
     });
   });
 
   describe('requestExit', () => {
-    it('should exit with default code 0', () => {
+    it('exits with default code 0', async () => {
       const mockRenderer = {
         useMouse: false,
         setTerminalTitle: mock(() => {}),
         disableKittyKeyboard: mock(() => {}),
         destroy: mock(() => {}),
-      } as any;
+      } as CliRenderer;
 
       initExitRuntime(mockRenderer);
-      requestExit();
+      await requestExit();
 
       expect(mockRenderer.destroy).toHaveBeenCalled();
       expect(mockProcess.exit).toHaveBeenCalledWith(0);
     });
 
-    it('should exit with specified code', () => {
+    it('exits with specified code', async () => {
       initExitRuntime(null as unknown as CliRenderer);
-      requestExit(1);
+      await requestExit(1);
       expect(mockProcess.exit).toHaveBeenCalledWith(1);
     });
 
-    it('should not exit twice if already cleaned up', () => {
+    it('does not exit twice if already cleaned up', async () => {
       initExitRuntime(null as unknown as CliRenderer);
-      // 第一次调用
-      requestExit(0);
+      await requestExit(0);
       expect(mockProcess.exit).toHaveBeenCalledTimes(1);
 
-      // 重置模拟
       mockProcess.exit.mockClear();
 
-      // 第二次调用，应该已经清理过了
-      requestExit(0);
+      await requestExit(0);
       expect(mockProcess.exit).not.toHaveBeenCalled();
     });
 
-    it('should handle missing renderer gracefully', () => {
-      initExitRuntime(null as any);
-      expect(() => requestExit(0)).not.toThrow();
+    it('handles missing renderer gracefully', async () => {
+      initExitRuntime(null as unknown as CliRenderer);
+      await expect(requestExit(0)).resolves.toBeUndefined();
     });
 
-    it('should handle renderer errors gracefully', () => {
+    it('handles renderer errors gracefully', async () => {
       const mockRenderer = {
         useMouse: false,
         setTerminalTitle: mock(() => {
@@ -169,18 +156,17 @@ describe('exit module', () => {
         destroy: mock(() => {
           throw new Error('Destroy error');
         }),
-      } as any;
+      } as CliRenderer;
 
       initExitRuntime(mockRenderer);
 
-      // 不应该抛出错误
-      expect(() => requestExit(0)).not.toThrow();
+      await expect(requestExit(0)).resolves.toBeUndefined();
       expect(mockProcess.exit).toHaveBeenCalledWith(0);
     });
   });
 
   describe('bindExitGuards', () => {
-    it('should bind exit handlers', () => {
+    it('binds exit handlers', () => {
       bindExitGuards();
 
       expect(mockProcess.once).toHaveBeenCalledWith('SIGINT', expect.any(Function));

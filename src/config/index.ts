@@ -1,14 +1,16 @@
 /**
- * Renx Code 配置模块
+ * Renx config module.
  *
- * 两层配置架构：
- * - 全局配置：~/.renx/config.json
- * - 项目配置：<project>/.renx/config.json
+ * Sources:
+ * - global config: ~/.renx/config.json (or RENX_HOME/config.json)
+ * - project config: <project>/.renx/config.json
+ * - environment variables
  *
- * 合并策略：项目配置 > 全局配置 > 环境变量 > 内置默认值
+ * Effective precedence:
+ * env > project config > global config > defaults
  */
 
-// 类型导出
+// Type exports
 export type {
   RenxConfig,
   ResolvedConfig,
@@ -16,11 +18,10 @@ export type {
   LogConfig,
   StorageConfig,
   FileHistoryConfig,
-  DbConfig,
   AgentConfig,
 } from './types';
 
-// 配置加载器
+// Config loaders
 export {
   loadConfig,
   loadConfigToEnv,
@@ -33,11 +34,9 @@ export {
   writeGlobalConfig,
 } from './loader';
 
-// 旧版 API（向后兼容）
+// Runtime env helpers
 export type {
-  StorageBackend,
   LogFormat,
-  RuntimeStorageConfig,
   RuntimeLogConfig,
   RuntimeConfig,
   LoadEnvFilesOptions,
@@ -49,3 +48,12 @@ export {
   createLoggerFromRuntimeConfig,
   createLoggerFromEnv,
 } from './runtime';
+
+export {
+  RENX_HOME_ENV,
+  resolveRenxHome,
+  resolveRenxLogsDir,
+  resolveRenxStorageRoot,
+  resolveRenxTaskDir,
+  resolveRenxDatabasePath,
+} from './paths';

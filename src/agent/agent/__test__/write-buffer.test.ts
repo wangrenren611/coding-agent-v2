@@ -87,10 +87,10 @@ describe('write-buffer', () => {
   });
 
   it('uses the env-configured write buffer directory by default', async () => {
-    const rootDir = await createTempDir();
-    const previousRoot = process.env.AGENT_STORAGE_ROOT;
+    const renxHome = await createTempDir();
+    const previousRenxHome = process.env.RENX_HOME;
 
-    process.env.AGENT_STORAGE_ROOT = rootDir;
+    process.env.RENX_HOME = renxHome;
 
     try {
       const session = await createWriteBufferSession({
@@ -98,25 +98,24 @@ describe('write-buffer', () => {
         toolCallId: 'tool_env_default',
       });
 
-      expect(session.baseDir).toBe(path.join(rootDir, 'cache', 'write-buffer'));
+      expect(session.baseDir).toBe(path.join(renxHome, 'storage', 'cache', 'write-buffer'));
     } finally {
-      if (previousRoot === undefined) {
-        delete process.env.AGENT_STORAGE_ROOT;
+      if (previousRenxHome === undefined) {
+        delete process.env.RENX_HOME;
       } else {
-        process.env.AGENT_STORAGE_ROOT = previousRoot;
+        process.env.RENX_HOME = previousRenxHome;
       }
     }
   });
 
   it('stores a historical snapshot before finalize overwrites an existing file', async () => {
-    const storageRoot = await createTempDir();
-    const baseDir = path.join(storageRoot, 'cache');
+    const renxHome = await createTempDir();
     const outputDir = await createTempDir();
     const targetPath = path.join(outputDir, 'history.txt');
-    const previousRoot = process.env.AGENT_STORAGE_ROOT;
+    const previousRenxHome = process.env.RENX_HOME;
     const previousHistoryEnabled = process.env.AGENT_FILE_HISTORY_ENABLED;
 
-    process.env.AGENT_STORAGE_ROOT = storageRoot;
+    process.env.RENX_HOME = renxHome;
     process.env.AGENT_FILE_HISTORY_ENABLED = 'true';
 
     try {
@@ -125,7 +124,7 @@ describe('write-buffer', () => {
         messageId: 'msg_history',
         toolCallId: 'tool_history',
         targetPath,
-        baseDir,
+        baseDir: path.join(renxHome, 'storage', 'cache'),
       });
       await appendContent(session, 'new-version');
 
@@ -141,10 +140,10 @@ describe('write-buffer', () => {
       expect(restored).toBe(true);
       expect(await fs.readFile(targetPath, 'utf8')).toBe('old-version');
     } finally {
-      if (previousRoot === undefined) {
-        delete process.env.AGENT_STORAGE_ROOT;
+      if (previousRenxHome === undefined) {
+        delete process.env.RENX_HOME;
       } else {
-        process.env.AGENT_STORAGE_ROOT = previousRoot;
+        process.env.RENX_HOME = previousRenxHome;
       }
       if (previousHistoryEnabled === undefined) {
         delete process.env.AGENT_FILE_HISTORY_ENABLED;

@@ -1,73 +1,83 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import * as fs from 'node:fs';
 import {
-  loadConfig,
-  getGlobalConfigDir,
-  getProjectConfigDir,
-  getGlobalConfigPath,
-  getProjectConfigPath,
   ensureConfigDirs,
-  writeProjectConfig,
+  getGlobalConfigDir,
+  getGlobalConfigPath,
+  getProjectConfigDir,
+  getProjectConfigPath,
+  loadConfig,
   writeGlobalConfig,
+  writeProjectConfig,
 } from '../loader';
 import { LogLevel } from '../../logger';
 
 describe('Renx Config Loader', () => {
   let tmpDir: string;
   let globalDir: string;
+  let renxHome: string;
+  const originalRenxHome = process.env.RENX_HOME;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'renx-config-test-'));
+    renxHome = path.join(tmpDir, 'renx-home');
     globalDir = path.join(tmpDir, '.renx-global');
+    process.env.RENX_HOME = renxHome;
   });
 
   afterEach(() => {
+    if (originalRenxHome === undefined) {
+      delete process.env.RENX_HOME;
+    } else {
+      process.env.RENX_HOME = originalRenxHome;
+    }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   describe('path helpers', () => {
     it('should return global config dir', () => {
-      const dir = getGlobalConfigDir();
-      expect(dir).toContain('.renx');
-      expect(dir).toBe(path.join(os.homedir(), '.renx'));
+      expect(getGlobalConfigDir()).toBe(renxHome);
     });
 
     it('should return project config dir', () => {
-      const dir = getProjectConfigDir('/my/project');
-      expect(dir).toBe('/my/project/.renx');
+      expect(getProjectConfigDir(path.join(path.sep, 'my', 'project'))).toBe(
+        path.join(path.sep, 'my', 'project', '.renx')
+      );
     });
 
     it('should return global config path', () => {
-      const p = getGlobalConfigPath();
-      expect(p).toBe(path.join(os.homedir(), '.renx', 'config.json'));
+      expect(getGlobalConfigPath()).toBe(path.join(renxHome, 'config.json'));
     });
 
     it('should return project config path', () => {
-      const p = getProjectConfigPath('/my/project');
-      expect(p).toBe('/my/project/.renx/config.json');
+      expect(getProjectConfigPath(path.join(path.sep, 'my', 'project'))).toBe(
+        path.join(path.sep, 'my', 'project', '.renx', 'config.json')
+      );
     });
   });
 
   describe('loadConfig with defaults', () => {
-    it('should load default config when no files exist', () => {
+    it('should initialize and load default global config when no files exist', () => {
       const config = loadConfig({
         projectRoot: tmpDir,
         globalDir,
         loadEnv: false,
+        env: { RENX_HOME: renxHome },
       });
 
       expect(config.log.level).toBe(LogLevel.INFO);
       expect(config.log.format).toBe('pretty');
-      expect(config.log.console).toBe(true);
-      expect(config.log.file).toBe(false);
-      expect(config.agent.maxSteps).toBe(50);
-      expect(config.agent.confirmationMode).toBe('auto-approve');
-      expect(config.agent.defaultModel).toBe('glm-5');
+      expect(config.log.console).toBe(false);
+      expect(config.log.file).toBe(true);
+      expect(config.agent.maxSteps).toBe(10000);
+      expect(config.agent.confirmationMode).toBe('manual');
+      expect(config.agent.defaultModel).toBe('qwen3.5-plus');
       expect(config.storage.fileHistory.enabled).toBe(true);
-      expect(config.sources.global).toBeNull();
+      expect(config.sources.global).toBe(path.join(globalDir, 'config.json'));
       expect(config.sources.project).toBeNull();
+      expect(fs.existsSync(path.join(globalDir, 'config.json'))).toBe(true);
     });
   });
 
@@ -86,13 +96,14 @@ describe('Renx Config Loader', () => {
         projectRoot: tmpDir,
         globalDir,
         loadEnv: false,
+        env: { RENX_HOME: renxHome },
       });
 
       expect(config.log.level).toBe(LogLevel.DEBUG);
       expect(config.log.format).toBe('json');
       expect(config.agent.defaultModel).toBe('gpt-5.3');
-      expect(config.log.console).toBe(true);
-      expect(config.agent.maxSteps).toBe(50);
+      expect(config.log.console).toBe(false);
+      expect(config.agent.maxSteps).toBe(10000);
       expect(config.sources.global).toBe(path.join(globalDir, 'config.json'));
       expect(config.sources.project).toBeNull();
     });
@@ -123,6 +134,7 @@ describe('Renx Config Loader', () => {
         projectRoot: tmpDir,
         globalDir,
         loadEnv: false,
+        env: { RENX_HOME: renxHome },
       });
 
       expect(config.log.level).toBe(LogLevel.ERROR);
@@ -150,44 +162,33 @@ describe('Renx Config Loader', () => {
         projectRoot: tmpDir,
         globalDir,
         env: {
-          RENX_LOG_LEVEL: 'FATAL',
-          RENX_DEFAULT_MODEL: 'qwen3.5-max',
-          RENX_CONFIRMATION_MODE: 'confirm',
+          RENX_HOME: renxHome,
+          AGENT_LOG_LEVEL: 'FATAL',
+          AGENT_MODEL: 'qwen3.5-max',
+          AGENT_TOOL_CONFIRMATION_MODE: 'manual',
         },
       });
 
       expect(config.log.level).toBe(LogLevel.FATAL);
       expect(config.agent.defaultModel).toBe('qwen3.5-max');
-      expect(config.agent.confirmationMode).toBe('confirm');
+      expect(config.agent.confirmationMode).toBe('manual');
     });
 
-    it('should support legacy AGENT_* env vars', () => {
+    it('should use AGENT_* env vars directly', () => {
       const config = loadConfig({
         projectRoot: tmpDir,
         globalDir,
         env: {
+          RENX_HOME: renxHome,
           AGENT_LOG_LEVEL: 'WARN',
           AGENT_LOG_FORMAT: 'json',
-          AGENT_TOOL_CONFIRMATION_MODE: 'confirm',
+          AGENT_TOOL_CONFIRMATION_MODE: 'auto-deny',
         },
       });
 
       expect(config.log.level).toBe(LogLevel.WARN);
       expect(config.log.format).toBe('json');
-      expect(config.agent.confirmationMode).toBe('confirm');
-    });
-
-    it('should prefer RENX_* over AGENT_* env vars', () => {
-      const config = loadConfig({
-        projectRoot: tmpDir,
-        globalDir,
-        env: {
-          RENX_LOG_LEVEL: 'DEBUG',
-          AGENT_LOG_LEVEL: 'ERROR',
-        },
-      });
-
-      expect(config.log.level).toBe(LogLevel.DEBUG);
+      expect(config.agent.confirmationMode).toBe('auto-deny');
     });
   });
 
@@ -212,8 +213,6 @@ describe('Renx Config Loader', () => {
       expect(fs.existsSync(configPath)).toBe(true);
       const content = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       expect(content.log.level).toBe('WARN');
-
-      fs.rmSync(path.dirname(configPath), { recursive: true, force: true });
     });
   });
 
@@ -222,29 +221,27 @@ describe('Renx Config Loader', () => {
       ensureConfigDirs(tmpDir);
 
       expect(fs.existsSync(path.join(tmpDir, '.renx'))).toBe(true);
-      expect(fs.existsSync(path.join(os.homedir(), '.renx'))).toBe(true);
+      expect(fs.existsSync(renxHome)).toBe(true);
     });
   });
 
   describe('resolved paths', () => {
-    it('should resolve relative paths from project root', () => {
+    it('should resolve runtime paths under RENX_HOME', () => {
       const config = loadConfig({
         projectRoot: tmpDir,
         globalDir,
         loadEnv: false,
+        env: { RENX_HOME: renxHome },
       });
 
       expect(path.isAbsolute(config.log.dir)).toBe(true);
       expect(path.isAbsolute(config.log.filePath)).toBe(true);
       expect(path.isAbsolute(config.storage.root)).toBe(true);
       expect(path.isAbsolute(config.db.path)).toBe(true);
-      expect(config.log.dir).toBe(path.join(tmpDir, 'logs'));
-      // 日志文件名自动生成，格式: YYYY-MM-DDTHH-MM-SS.log
-      expect(config.log.filePath).toMatch(
-        new RegExp(
-          `^${tmpDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/logs/\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}\\.log$`
-        )
-      );
+      expect(config.log.dir).toBe(path.join(renxHome, 'logs'));
+      expect(config.storage.root).toBe(path.join(renxHome, 'storage'));
+      expect(config.db.path).toBe(path.join(renxHome, 'data.db'));
+      expect(config.log.filePath.startsWith(path.join(renxHome, 'logs'))).toBe(true);
     });
   });
 });

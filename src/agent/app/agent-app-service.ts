@@ -706,6 +706,7 @@ function readUsage(value: unknown): Usage | undefined {
     return undefined;
   }
   return {
+    ...value,
     prompt_tokens: Math.max(0, promptTokens),
     completion_tokens: Math.max(0, completionTokens),
     total_tokens: Math.max(0, totalTokens),

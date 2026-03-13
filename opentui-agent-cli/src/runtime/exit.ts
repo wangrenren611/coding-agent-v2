@@ -1,4 +1,5 @@
 import type { CliRenderer } from '@opentui/core';
+import { disposeAgentRuntime } from '../agent/runtime/runtime';
 
 const TERMINAL_RESET_SEQUENCE = [
   '\u001b[0m',
@@ -17,6 +18,7 @@ const TERMINAL_RESET_SEQUENCE = [
 let rendererRef: CliRenderer | null = null;
 let hasCleanedUp = false;
 let terminalBackgroundRestore: (() => void) | null = null;
+let exitPromise: Promise<void> | null = null;
 
 export const registerTerminalBackgroundRestore = (restore: (() => void) | null) => {
   terminalBackgroundRestore = restore;
@@ -46,32 +48,51 @@ export const hardResetTerminal = () => {
 
 export const initExitRuntime = (renderer: CliRenderer) => {
   hasCleanedUp = false;
+  exitPromise = null;
   rendererRef = renderer;
 };
 
-export const requestExit = (exitCode = 0) => {
-  if (hasCleanedUp) {
-    return;
+export const requestExit = async (exitCode = 0): Promise<void> => {
+  if (exitPromise) {
+    return exitPromise;
   }
-  hasCleanedUp = true;
 
-  try {
-    if (rendererRef) {
-      rendererRef.useMouse = false;
-      rendererRef.setTerminalTitle('');
-      rendererRef.disableKittyKeyboard();
-      rendererRef.destroy();
+  exitPromise = (async () => {
+    if (hasCleanedUp) {
+      return;
     }
-  } catch {
-    // Ignore errors during renderer cleanup
-  }
+    hasCleanedUp = true;
 
-  hardResetTerminal();
-  globalThis.process.exit(exitCode);
+    try {
+      await disposeAgentRuntime();
+    } catch {
+      // Ignore errors during runtime disposal and continue exiting
+    }
+
+    try {
+      if (rendererRef) {
+        rendererRef.useMouse = false;
+        rendererRef.setTerminalTitle('');
+        rendererRef.disableKittyKeyboard();
+        rendererRef.destroy();
+      }
+    } catch {
+      // Ignore errors during renderer cleanup
+    }
+
+    hardResetTerminal();
+    globalThis.process.exit(exitCode);
+  })();
+
+  return exitPromise;
 };
 
 export const bindExitGuards = () => {
-  globalThis.process.once('SIGINT', () => requestExit(0));
-  globalThis.process.once('SIGTERM', () => requestExit(0));
+  globalThis.process.once('SIGINT', () => {
+    void requestExit(0);
+  });
+  globalThis.process.once('SIGTERM', () => {
+    void requestExit(0);
+  });
   globalThis.process.once('exit', hardResetTerminal);
 };

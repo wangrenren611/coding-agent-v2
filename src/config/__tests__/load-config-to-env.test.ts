@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import * as fs from 'node:fs';
 import { loadConfigToEnv } from '../loader';
 
 describe('loadConfigToEnv', () => {
@@ -13,19 +13,18 @@ describe('loadConfigToEnv', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'renx-env-test-'));
     globalDir = path.join(tmpDir, '.renx-global');
     process.env = { ...originalEnv };
-    // 清除可能影响测试的环境变量
+
     delete process.env.AGENT_LOG_LEVEL;
     delete process.env.AGENT_LOG_FORMAT;
     delete process.env.AGENT_LOG_FILE_ENABLED;
     delete process.env.AGENT_LOG_CONSOLE;
-    delete process.env.AGENT_LOG_DIR;
-    delete process.env.AGENT_DB_PATH;
-    delete process.env.AGENT_STORAGE_ROOT;
     delete process.env.AGENT_FILE_HISTORY_ENABLED;
     delete process.env.AGENT_FILE_HISTORY_MAX_PER_FILE;
+    delete process.env.AGENT_FILE_HISTORY_MAX_AGE_DAYS;
+    delete process.env.AGENT_FILE_HISTORY_MAX_TOTAL_MB;
     delete process.env.AGENT_TOOL_CONFIRMATION_MODE;
-    delete process.env.RENX_DEFAULT_MODEL;
-    delete process.env.RENX_MAX_STEPS;
+    delete process.env.AGENT_MODEL;
+    delete process.env.AGENT_MAX_STEPS;
   });
 
   afterEach(() => {
@@ -39,7 +38,7 @@ describe('loadConfigToEnv', () => {
       path.join(globalDir, 'config.json'),
       JSON.stringify({
         log: { level: 'DEBUG', format: 'json', file: true },
-        db: { path: '/custom/data.db' },
+        agent: { defaultModel: 'gpt-5.4' },
       })
     );
 
@@ -49,7 +48,7 @@ describe('loadConfigToEnv', () => {
     expect(process.env.AGENT_LOG_LEVEL).toBe('DEBUG');
     expect(process.env.AGENT_LOG_FORMAT).toBe('json');
     expect(process.env.AGENT_LOG_FILE_ENABLED).toBe('true');
-    expect(process.env.AGENT_DB_PATH).toBe('/custom/data.db');
+    expect(process.env.AGENT_MODEL).toBe('gpt-5.4');
   });
 
   it('should load project config.json over global', () => {
@@ -69,9 +68,8 @@ describe('loadConfigToEnv', () => {
     const files = loadConfigToEnv({ projectRoot: tmpDir, globalDir });
 
     expect(files).toHaveLength(2);
-    // 项目配置覆盖全局
     expect(process.env.AGENT_LOG_LEVEL).toBe('ERROR');
-    expect(process.env.RENX_DEFAULT_MODEL).toBe('gpt-5.3');
+    expect(process.env.AGENT_MODEL).toBe('gpt-5.3');
   });
 
   it('should not override existing env vars', () => {
@@ -85,13 +83,15 @@ describe('loadConfigToEnv', () => {
 
     loadConfigToEnv({ projectRoot: tmpDir, globalDir });
 
-    // shell 环境变量优先
     expect(process.env.AGENT_LOG_LEVEL).toBe('WARN');
   });
 
-  it('should return empty array when no config files exist', () => {
+  it('should initialize global config.json when no config files exist', () => {
     const files = loadConfigToEnv({ projectRoot: tmpDir, globalDir });
-    expect(files).toHaveLength(0);
+    expect(files).toEqual([path.join(globalDir, 'config.json')]);
+    expect(fs.existsSync(path.join(globalDir, 'config.json'))).toBe(true);
+    expect(process.env.AGENT_MODEL).toBe('qwen3.5-plus');
+    expect(process.env.AGENT_TOOL_CONFIRMATION_MODE).toBe('manual');
   });
 
   it('should load storage config', () => {
@@ -100,7 +100,6 @@ describe('loadConfigToEnv', () => {
       path.join(globalDir, 'config.json'),
       JSON.stringify({
         storage: {
-          root: '/custom/storage',
           fileHistory: { enabled: false, maxPerFile: 50 },
         },
       })
@@ -108,7 +107,6 @@ describe('loadConfigToEnv', () => {
 
     loadConfigToEnv({ projectRoot: tmpDir, globalDir });
 
-    expect(process.env.AGENT_STORAGE_ROOT).toBe('/custom/storage');
     expect(process.env.AGENT_FILE_HISTORY_ENABLED).toBe('false');
     expect(process.env.AGENT_FILE_HISTORY_MAX_PER_FILE).toBe('50');
   });
@@ -118,14 +116,14 @@ describe('loadConfigToEnv', () => {
     fs.writeFileSync(
       path.join(globalDir, 'config.json'),
       JSON.stringify({
-        agent: { confirmationMode: 'confirm', defaultModel: 'qwen3.5-max', maxSteps: 100 },
+        agent: { confirmationMode: 'manual', defaultModel: 'qwen3.5-max', maxSteps: 100 },
       })
     );
 
     loadConfigToEnv({ projectRoot: tmpDir, globalDir });
 
-    expect(process.env.AGENT_TOOL_CONFIRMATION_MODE).toBe('confirm');
-    expect(process.env.RENX_DEFAULT_MODEL).toBe('qwen3.5-max');
-    expect(process.env.RENX_MAX_STEPS).toBe('100');
+    expect(process.env.AGENT_TOOL_CONFIRMATION_MODE).toBe('manual');
+    expect(process.env.AGENT_MODEL).toBe('qwen3.5-max');
+    expect(process.env.AGENT_MAX_STEPS).toBe('100');
   });
 });

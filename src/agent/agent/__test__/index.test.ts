@@ -102,6 +102,56 @@ function toStream(chunks: TestChunk[]): AsyncGenerator<Chunk> {
   })();
 }
 
+function toToolCallStream(
+  responseId: string,
+  toolCallId: string,
+  toolName: string,
+  args: Record<string, unknown>
+): AsyncGenerator<Chunk> {
+  const raw = JSON.stringify(args);
+  const cut = Math.max(1, Math.floor(raw.length / 2));
+  return toStream([
+    {
+      id: responseId,
+      index: 0,
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                id: toolCallId,
+                type: 'function',
+                index: 0,
+                function: { name: toolName, arguments: raw.slice(0, cut) },
+              },
+            ],
+          },
+        },
+      ],
+    },
+    {
+      index: 0,
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                id: toolCallId,
+                type: 'function',
+                index: 0,
+                function: { name: toolName, arguments: raw.slice(cut) },
+              },
+            ],
+            finish_reason: 'tool_calls',
+          } as unknown as ChunkDelta,
+        },
+      ],
+    },
+  ]);
+}
+
 async function collectEvents(generator: AsyncGenerator<StreamEvent>): Promise<StreamEvent[]> {
   const events: StreamEvent[] = [];
   for await (const event of generator) {
@@ -159,6 +209,7 @@ describe('StatelessAgent', () => {
     provider.generateStream = vi.fn().mockReturnValue(
       toStream([
         {
+          id: 'resp_hello',
           index: 0,
           choices: [{ index: 0, delta: { content: 'Hello' } }],
         },
@@ -197,6 +248,9 @@ describe('StatelessAgent', () => {
       role: 'assistant',
       content: 'Hello',
       reasoning_content: 'think',
+      metadata: {
+        responseId: 'resp_hello',
+      },
       usage: {
         prompt_tokens: 10,
         completion_tokens: 5,
@@ -248,6 +302,356 @@ describe('StatelessAgent', () => {
         total_tokens: 20,
       },
     });
+  });
+
+  it('uses previous_response_id and keeps tool-call/tool-result pairs in the delta', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    manager.execute = vi.fn().mockResolvedValue({
+      success: true,
+      output: '{"temperature":26}',
+    });
+    provider.generateStream = vi
+      .fn()
+      .mockReturnValueOnce(
+        toToolCallStream('resp_tool_1', 'call_1', 'lookup_weather', {
+          city: 'Shanghai',
+        })
+      )
+      .mockReturnValueOnce(
+        toStream([
+          {
+            id: 'resp_tool_2',
+            index: 0,
+            choices: [{ index: 0, delta: { content: 'done' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+          },
+        ])
+      );
+
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      enableServerSideContinuation: true,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
+    const onMessage = vi.fn();
+
+    await collectEvents(agent.runStream(createInput(), { onMessage, onCheckpoint: vi.fn() }));
+
+    const generateStreamCalls = (
+      provider.generateStream as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    expect(generateStreamCalls).toHaveLength(2);
+    expect(generateStreamCalls[0]?.[0]).toMatchObject([{ role: 'user', content: 'hello' }]);
+    expect(generateStreamCalls[0]?.[1]).toMatchObject({
+      prompt_cache_key: 'conv_1',
+    });
+    expect(generateStreamCalls[0]?.[1] ?? {}).not.toHaveProperty('previous_response_id');
+    expect(generateStreamCalls[1]?.[0]).toMatchObject([
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [
+          {
+            id: 'call_1',
+            type: 'function',
+            function: {
+              name: 'lookup_weather',
+              arguments: '{"city":"Shanghai"}',
+            },
+          },
+        ],
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'call_1',
+        content: '{"temperature":26}',
+      },
+    ]);
+    expect(generateStreamCalls[1]?.[1]).toMatchObject({
+      previous_response_id: 'resp_tool_1',
+      prompt_cache_key: 'conv_1',
+    });
+
+    const assistantMessages = onMessage.mock.calls
+      .map((call) => call[0] as Message)
+      .filter((message) => message.role === 'assistant');
+    expect(assistantMessages[0]?.metadata).toMatchObject({
+      responseId: 'resp_tool_1',
+      continuationMode: 'full',
+    });
+    expect(assistantMessages[1]?.metadata).toMatchObject({
+      responseId: 'resp_tool_2',
+      continuationMode: 'incremental',
+      previousResponseIdUsed: 'resp_tool_1',
+      continuationBaselineMessageCount: 1,
+      continuationDeltaMessageCount: 2,
+    });
+  });
+
+  it('reuses previous_response_id across runs when history is append-only', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi
+      .fn()
+      .mockReturnValueOnce(
+        toStream([
+          {
+            id: 'resp_prev_run',
+            index: 0,
+            choices: [{ index: 0, delta: { content: 'Hello there' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        toStream([
+          {
+            id: 'resp_next_run',
+            index: 0,
+            choices: [{ index: 0, delta: { content: 'Welcome back' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+          },
+        ])
+      );
+
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      enableServerSideContinuation: true,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
+    const firstRunMessages: Message[] = [];
+    await collectEvents(
+      agent.runStream(createInput(), {
+        onMessage: async (message) => {
+          firstRunMessages.push(message);
+        },
+        onCheckpoint: vi.fn(),
+      })
+    );
+
+    const previousAssistant = firstRunMessages.find((message) => message.role === 'assistant');
+    expect(previousAssistant?.metadata).toMatchObject({
+      responseId: 'resp_prev_run',
+      continuationMode: 'full',
+    });
+
+    const historyMessages = [...createInput().messages, previousAssistant as Message];
+    await collectEvents(
+      agent.runStream(
+        {
+          executionId: 'exec_2',
+          conversationId: 'conv_1',
+          messages: [
+            ...historyMessages,
+            {
+              messageId: 'u2',
+              type: 'user',
+              role: 'user',
+              content: 'What can you do now?',
+              timestamp: Date.now(),
+            },
+          ],
+          maxSteps: 4,
+        },
+        { onMessage: vi.fn(), onCheckpoint: vi.fn() }
+      )
+    );
+
+    const generateStreamCalls = (
+      provider.generateStream as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    expect(generateStreamCalls).toHaveLength(2);
+    expect(generateStreamCalls[1]?.[0]).toMatchObject([
+      {
+        role: 'user',
+        content: 'What can you do now?',
+      },
+    ]);
+    expect(generateStreamCalls[1]?.[1]).toMatchObject({
+      previous_response_id: 'resp_prev_run',
+      prompt_cache_key: 'conv_1',
+    });
+  });
+
+  it('falls back to full replay when non-input config changes', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi
+      .fn()
+      .mockReturnValueOnce(
+        toStream([
+          {
+            id: 'resp_config_base',
+            index: 0,
+            choices: [{ index: 0, delta: { content: 'base' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        toStream([
+          {
+            id: 'resp_config_new',
+            index: 0,
+            choices: [{ index: 0, delta: { content: 'new' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+          },
+        ])
+      );
+
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      enableServerSideContinuation: true,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
+    const firstRunMessages: Message[] = [];
+    await collectEvents(
+      agent.runStream(createInput(), {
+        onMessage: async (message) => {
+          firstRunMessages.push(message);
+        },
+        onCheckpoint: vi.fn(),
+      })
+    );
+
+    const previousAssistant = firstRunMessages.find((message) => message.role === 'assistant');
+    await collectEvents(
+      agent.runStream(
+        {
+          executionId: 'exec_3',
+          conversationId: 'conv_1',
+          messages: [
+            ...createInput().messages,
+            previousAssistant as Message,
+            {
+              messageId: 'u3',
+              type: 'user',
+              role: 'user',
+              content: 'next question',
+              timestamp: Date.now(),
+            },
+          ],
+          config: { temperature: 0.2 },
+          maxSteps: 4,
+        },
+        { onMessage: vi.fn(), onCheckpoint: vi.fn() }
+      )
+    );
+
+    const generateStreamCalls = (
+      provider.generateStream as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    expect(generateStreamCalls).toHaveLength(2);
+    expect(generateStreamCalls[1]?.[0]).toMatchObject([
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'base' },
+      { role: 'user', content: 'next question' },
+    ]);
+    expect(generateStreamCalls[1]?.[1] ?? {}).not.toHaveProperty('previous_response_id');
+  });
+
+  it('falls back to full replay when prior context prefix no longer matches', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi
+      .fn()
+      .mockReturnValueOnce(
+        toStream([
+          {
+            id: 'resp_prefix_base',
+            index: 0,
+            choices: [{ index: 0, delta: { content: 'base' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        toStream([
+          {
+            id: 'resp_prefix_new',
+            index: 0,
+            choices: [{ index: 0, delta: { content: 'new' } }],
+          },
+          {
+            index: 0,
+            choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+          },
+        ])
+      );
+
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      enableServerSideContinuation: true,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
+    const firstRunMessages: Message[] = [];
+    await collectEvents(
+      agent.runStream(createInput(), {
+        onMessage: async (message) => {
+          firstRunMessages.push(message);
+        },
+        onCheckpoint: vi.fn(),
+      })
+    );
+
+    const previousAssistant = firstRunMessages.find((message) => message.role === 'assistant');
+    await collectEvents(
+      agent.runStream(
+        {
+          executionId: 'exec_4',
+          conversationId: 'conv_1',
+          messages: [
+            {
+              messageId: 'u1_changed',
+              type: 'user',
+              role: 'user',
+              content: 'hello changed',
+              timestamp: Date.now(),
+            },
+            previousAssistant as Message,
+            {
+              messageId: 'u4',
+              type: 'user',
+              role: 'user',
+              content: 'next question',
+              timestamp: Date.now(),
+            },
+          ],
+          maxSteps: 4,
+        },
+        { onMessage: vi.fn(), onCheckpoint: vi.fn() }
+      )
+    );
+
+    const generateStreamCalls = (
+      provider.generateStream as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    expect(generateStreamCalls).toHaveLength(2);
+    expect(generateStreamCalls[1]?.[0]).toMatchObject([
+      { role: 'user', content: 'hello changed' },
+      { role: 'assistant', content: 'base' },
+      { role: 'user', content: 'next question' },
+    ]);
+    expect(generateStreamCalls[1]?.[1] ?? {}).not.toHaveProperty('previous_response_id');
   });
 
   it('filters empty assistant-text messages before calling generateStream', async () => {
@@ -338,9 +742,52 @@ describe('StatelessAgent', () => {
     const callConfig = generateStreamCalls[0]?.[1] as {
       temperature?: number;
       abortSignal?: AbortSignal;
+      prompt_cache_key?: string;
     };
     expect(callConfig.temperature).toBe(0.1);
     expect(callConfig.abortSignal).toBe(controller.signal);
+    expect(callConfig.prompt_cache_key).toBe('conv_1');
+  });
+
+  it('preserves explicit prompt_cache_key when provided by caller', async () => {
+    const provider = createProvider();
+    const manager = createToolManager();
+    provider.generateStream = vi.fn().mockReturnValue(
+      toStream([
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { content: 'ok' } }],
+        },
+        {
+          index: 0,
+          choices: [{ index: 0, delta: { finish_reason: 'stop' } as unknown as ChunkDelta }],
+        },
+      ])
+    );
+
+    const agent = new StatelessAgent(provider, manager, {
+      maxRetryCount: 3,
+      toolExecutionLedger: new InMemoryToolExecutionLedger(),
+    });
+    await collectEvents(
+      agent.runStream(
+        {
+          ...createInput(),
+          config: {
+            prompt_cache_key: 'explicit-cache-key',
+          },
+        },
+        { onMessage: vi.fn(), onCheckpoint: vi.fn() }
+      )
+    );
+
+    const generateStreamCalls = (
+      provider.generateStream as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    expect(generateStreamCalls).toHaveLength(1);
+    expect(generateStreamCalls[0]?.[1]).toMatchObject({
+      prompt_cache_key: 'explicit-cache-key',
+    });
   });
 
   it('passes top-level tools into llm generateStream config', async () => {

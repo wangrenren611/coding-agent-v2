@@ -91,6 +91,7 @@ export interface Usage {
   prompt_cache_miss_tokens?: number;
   /** 用户 prompt 中命中缓存的 token 数（可选，部分提供商支持） */
   prompt_cache_hit_tokens?: number;
+  [key: string]: unknown;
 }
 
 /**
@@ -228,6 +229,12 @@ export interface LLMGenerateOptions {
   abortSignal?: AbortSignal;
   /** 工具列表 */
   tools?: Tool[];
+  /** Prompt cache routing key for providers that support sticky prefix caching */
+  prompt_cache_key?: string;
+  /** Prompt cache retention hint for providers that support configurable cache retention */
+  prompt_cache_retention?: string;
+  /** Responses API continuation id for providers that support server-side chaining */
+  previous_response_id?: string;
   [key: string]: unknown; // 添加索引签名以兼容 Record<string, unknown>
 }
 

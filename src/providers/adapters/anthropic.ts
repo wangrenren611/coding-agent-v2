@@ -78,6 +78,7 @@ interface AnthropicResponse {
   usage: {
     input_tokens: number;
     output_tokens: number;
+    [key: string]: unknown;
   };
 }
 
@@ -98,6 +99,7 @@ interface AnthropicStreamEvent {
   usage?: {
     input_tokens: number;
     output_tokens: number;
+    [key: string]: unknown;
   };
 }
 
@@ -231,6 +233,7 @@ export class AnthropicAdapter extends BaseAPIAdapter {
         },
       ],
       usage: {
+        ...anthropicResp.usage,
         prompt_tokens: anthropicResp.usage?.input_tokens || 0,
         completion_tokens: anthropicResp.usage?.output_tokens || 0,
         total_tokens:
@@ -421,6 +424,7 @@ export class AnthropicAdapter extends BaseAPIAdapter {
           ],
           usage: event.usage
             ? {
+                ...event.usage,
                 prompt_tokens: 0,
                 completion_tokens: event.usage.output_tokens || 0,
                 total_tokens: event.usage.output_tokens || 0,

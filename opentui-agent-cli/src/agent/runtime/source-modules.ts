@@ -75,6 +75,7 @@ type AgentAppRunRequestLike = {
   historyMessages?: AgentV4MessageLike[];
   systemPrompt?: string;
   tools?: Array<{ type: string; function: Record<string, unknown> }>;
+  config?: Record<string, unknown>;
   maxSteps?: number;
   contextLimitTokens?: number;
   abortSignal?: AbortSignal;

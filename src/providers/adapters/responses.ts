@@ -111,6 +111,7 @@ interface ResponsesUsage {
   input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;
+  [key: string]: unknown;
 }
 
 interface ResponsesCompletedResponse {
@@ -323,6 +324,8 @@ export class ResponsesAdapter extends BaseAPIAdapter {
       }
 
       if (message.role === 'assistant' && Array.isArray(message.tool_calls)) {
+        // Assistant tool-call turns may legitimately have empty text content.
+        // The actual semantic payload is carried by function_call items below.
         for (const toolCall of message.tool_calls) {
           items.push({
             type: 'function_call',
@@ -491,6 +494,7 @@ export class ResponsesAdapter extends BaseAPIAdapter {
     const completionTokens = usage.output_tokens ?? 0;
 
     return {
+      ...usage,
       prompt_tokens: promptTokens,
       completion_tokens: completionTokens,
       total_tokens: usage.total_tokens ?? promptTokens + completionTokens,

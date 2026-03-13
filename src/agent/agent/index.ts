@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   Message,
   AgentInput,
@@ -9,7 +10,7 @@ import {
   ToolDecision,
 } from '../types';
 import { ToolManager } from '../tool/tool-manager';
-import { LLMProvider, Tool, ToolCall } from '../../providers';
+import { LLMProvider, LLMRequestMessage, Tool, ToolCall } from '../../providers';
 import { EventEmitter } from 'events';
 import {
   AgentAbortedError,
@@ -28,6 +29,7 @@ import {
   mergeLLMConfig as mergeLLMRequestConfig,
   shouldSendMessageToLLM,
 } from './message-utils';
+import { processToolCallPairs } from '../utils/message';
 
 import {
   createCheckpoint,
@@ -101,11 +103,76 @@ function hasNonEmptyText(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
+type ContinuationMetadata = {
+  responseId?: string;
+  llmRequestConfigHash?: string;
+  llmRequestInputHash?: string;
+  llmRequestInputMessageCount?: number;
+  llmResponseMessageHash?: string;
+  continuationMode?: 'full' | 'incremental';
+  previousResponseIdUsed?: string;
+  continuationBaselineMessageCount?: number;
+  continuationDeltaMessageCount?: number;
+};
+
+type LLMRequestPlan = {
+  llmMessages: LLMRequestMessage[];
+  requestMessages: LLMRequestMessage[];
+  requestConfig: AgentInput['config'];
+  requestConfigHash: string;
+  requestInputHash: string;
+  requestInputMessageCount: number;
+  continuationMode: 'full' | 'incremental';
+  previousResponseIdUsed?: string;
+  continuationBaselineMessageCount?: number;
+  continuationDeltaMessageCount: number;
+};
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeValueForHash(value: unknown): unknown {
+  if (value === undefined) {
+    return null;
+  }
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeValueForHash(item));
+  }
+  if (typeof value === 'object') {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        const normalized = normalizeValueForHash((value as Record<string, unknown>)[key]);
+        if (normalized !== undefined) {
+          acc[key] = normalized;
+        }
+        return acc;
+      }, {});
+  }
+  return String(value);
+}
+
+function hashValueForContinuation(value: unknown): string {
+  return createHash('sha256')
+    .update(JSON.stringify(normalizeValueForHash(value)))
+    .digest('hex');
+}
+
 export interface AgentConfig {
   maxRetryCount?: number;
   enableCompaction?: boolean;
   compactionTriggerRatio?: number;
   compactionKeepMessagesNum?: number;
+  enableServerSideContinuation?: boolean;
   backoffConfig?: BackoffConfig;
   maxConcurrentToolCalls?: number;
   toolConcurrencyPolicyResolver?: (toolCall: ToolCall) => ToolConcurrencyPolicy;
@@ -126,6 +193,7 @@ interface InternalAgentConfig {
   enableCompaction: boolean;
   compactionTriggerRatio: number;
   compactionKeepMessagesNum: number;
+  enableServerSideContinuation: boolean;
   backoffConfig: BackoffConfig;
   maxConcurrentToolCalls: number;
   toolConcurrencyPolicyResolver?: (toolCall: ToolCall) => ToolConcurrencyPolicy;
@@ -165,6 +233,7 @@ export class StatelessAgent extends EventEmitter {
       compactionTriggerRatio: config.compactionTriggerRatio ?? DEFAULT_COMPACTION_TRIGGER_RATIO,
       compactionKeepMessagesNum:
         config.compactionKeepMessagesNum ?? DEFAULT_COMPACTION_KEEP_MESSAGES,
+      enableServerSideContinuation: config.enableServerSideContinuation ?? false,
       backoffConfig: config.backoffConfig ?? {},
       maxConcurrentToolCalls: Math.max(
         1,
@@ -217,6 +286,182 @@ export class StatelessAgent extends EventEmitter {
 
   private convertMessageToLLMMessage(message: Message) {
     return toLLMMessage(message);
+  }
+
+  private normalizeContinuationConfig(config: AgentInput['config']): Record<string, unknown> {
+    if (!config) {
+      return {};
+    }
+
+    const { abortSignal, previous_response_id, ...rest } = config as AgentInput['config'] & {
+      abortSignal?: AbortSignal;
+      previous_response_id?: string;
+    };
+    void abortSignal;
+    void previous_response_id;
+
+    return normalizeValueForHash(rest) as Record<string, unknown>;
+  }
+
+  private readContinuationMetadata(message: Message): ContinuationMetadata | undefined {
+    if (!isPlainRecord(message.metadata)) {
+      return undefined;
+    }
+
+    const metadata = message.metadata as Record<string, unknown>;
+    const responseId =
+      typeof metadata.responseId === 'string' && metadata.responseId.trim().length > 0
+        ? metadata.responseId
+        : undefined;
+    const llmRequestConfigHash =
+      typeof metadata.llmRequestConfigHash === 'string' ? metadata.llmRequestConfigHash : undefined;
+    const llmRequestInputHash =
+      typeof metadata.llmRequestInputHash === 'string' ? metadata.llmRequestInputHash : undefined;
+    const llmRequestInputMessageCount =
+      typeof metadata.llmRequestInputMessageCount === 'number'
+        ? metadata.llmRequestInputMessageCount
+        : undefined;
+    const llmResponseMessageHash =
+      typeof metadata.llmResponseMessageHash === 'string'
+        ? metadata.llmResponseMessageHash
+        : undefined;
+
+    if (
+      !responseId ||
+      !llmRequestConfigHash ||
+      !llmRequestInputHash ||
+      typeof llmRequestInputMessageCount !== 'number' ||
+      !Number.isInteger(llmRequestInputMessageCount) ||
+      llmRequestInputMessageCount < 0 ||
+      !llmResponseMessageHash
+    ) {
+      return undefined;
+    }
+
+    const safeInputMessageCount = llmRequestInputMessageCount;
+
+    return {
+      responseId,
+      llmRequestConfigHash,
+      llmRequestInputHash,
+      llmRequestInputMessageCount: safeInputMessageCount,
+      llmResponseMessageHash,
+    };
+  }
+
+  private buildLLMRequestPlan(messages: Message[], config: AgentInput['config']): LLMRequestPlan {
+    const llmSourceMessages = messages.filter((msg) => shouldSendMessageToLLM(msg));
+    const llmMessages = llmSourceMessages.map((msg) => this.convertMessageToLLMMessage(msg));
+    const requestConfigHash = hashValueForContinuation(this.normalizeContinuationConfig(config));
+    const requestInputHash = hashValueForContinuation(llmMessages);
+    const requestInputMessageCount = llmMessages.length;
+
+    const explicitPreviousResponseId =
+      typeof config?.previous_response_id === 'string' &&
+      config.previous_response_id.trim().length > 0
+        ? config.previous_response_id
+        : undefined;
+
+    if (explicitPreviousResponseId) {
+      return {
+        llmMessages,
+        requestMessages: llmMessages,
+        requestConfig: config,
+        requestConfigHash,
+        requestInputHash,
+        requestInputMessageCount,
+        continuationMode: 'full',
+        continuationDeltaMessageCount: llmMessages.length,
+      };
+    }
+
+    // Keep server-side continuation opt-in. In the current gateway environment
+    // full replay + prompt_cache_key is more stable than automatic previous_response_id chaining.
+    if (!this.config.enableServerSideContinuation) {
+      return {
+        llmMessages,
+        requestMessages: llmMessages,
+        requestConfig: config,
+        requestConfigHash,
+        requestInputHash,
+        requestInputMessageCount,
+        continuationMode: 'full',
+        continuationDeltaMessageCount: llmMessages.length,
+      };
+    }
+
+    for (let index = llmSourceMessages.length - 1; index >= 0; index -= 1) {
+      const candidate = llmSourceMessages[index];
+      if (candidate.role !== 'assistant') {
+        continue;
+      }
+
+      const metadata = this.readContinuationMetadata(candidate);
+      if (!metadata) {
+        continue;
+      }
+
+      if (metadata.llmRequestConfigHash !== requestConfigHash) {
+        break;
+      }
+
+      const prefixMessages = llmMessages.slice(0, index);
+      const currentAssistantMessage = llmMessages[index];
+      if (!currentAssistantMessage) {
+        break;
+      }
+
+      if (prefixMessages.length !== metadata.llmRequestInputMessageCount) {
+        break;
+      }
+
+      if (hashValueForContinuation(prefixMessages) !== metadata.llmRequestInputHash) {
+        break;
+      }
+
+      if (hashValueForContinuation(currentAssistantMessage) !== metadata.llmResponseMessageHash) {
+        break;
+      }
+
+      // If the delta contains a tool result, the paired assistant tool_call must
+      // be included as well, otherwise the Responses gateway rejects the request shape.
+      const continuationWindow = processToolCallPairs(
+        llmSourceMessages.slice(0, index + 1),
+        llmSourceMessages.slice(index + 1)
+      );
+      const deltaSourceMessages = continuationWindow.active;
+      if (deltaSourceMessages.length === 0) {
+        break;
+      }
+      const deltaMessages = deltaSourceMessages.map((msg) => this.convertMessageToLLMMessage(msg));
+
+      return {
+        llmMessages,
+        requestMessages: deltaMessages,
+        requestConfig: {
+          ...(config || {}),
+          previous_response_id: metadata.responseId,
+        },
+        requestConfigHash,
+        requestInputHash,
+        requestInputMessageCount,
+        continuationMode: 'incremental',
+        previousResponseIdUsed: metadata.responseId,
+        continuationBaselineMessageCount: continuationWindow.pending.length,
+        continuationDeltaMessageCount: deltaMessages.length,
+      };
+    }
+
+    return {
+      llmMessages,
+      requestMessages: llmMessages,
+      requestConfig: config,
+      requestConfigHash,
+      requestInputHash,
+      requestInputMessageCount,
+      continuationMode: 'full',
+      continuationDeltaMessageCount: llmMessages.length,
+    };
   }
 
   private needsCompaction(
@@ -388,7 +633,12 @@ export class StatelessAgent extends EventEmitter {
           try {
             const llmGen = this.callLLMAndProcessStream(
               messages,
-              this.mergeLLMConfig(input.config, effectiveTools, llmScope.signal),
+              this.mergeLLMConfig(
+                input.config,
+                effectiveTools,
+                llmScope.signal,
+                input.conversationId
+              ),
               llmScope.signal,
               input.executionId,
               stepIndex,
@@ -702,10 +952,11 @@ export class StatelessAgent extends EventEmitter {
     stepIndex = 0,
     writeBufferSessions: Map<string, WriteBufferRuntime> = new Map()
   ): AsyncGenerator<StreamEvent, { assistantMessage: Message; toolCalls: ToolCall[] }, unknown> {
-    const llmMessages = messages
-      .filter((msg) => shouldSendMessageToLLM(msg))
-      .map((msg) => this.convertMessageToLLMMessage(msg));
-    const stream = this.llmProvider.generateStream(llmMessages, config);
+    const requestPlan = this.buildLLMRequestPlan(messages, config);
+    const stream = this.llmProvider.generateStream(
+      requestPlan.requestMessages,
+      requestPlan.requestConfig
+    );
 
     const assistantMessage: Message = {
       messageId: generateId('msg_'),
@@ -723,6 +974,13 @@ export class StatelessAgent extends EventEmitter {
       this.throwIfAborted(abortSignal);
       const choices = chunk.choices;
       const delta = choices?.[0]?.delta;
+
+      if (typeof chunk.id === 'string' && chunk.id.trim().length > 0) {
+        assistantMessage.metadata = {
+          ...assistantMessage.metadata,
+          responseId: chunk.id,
+        };
+      }
 
       if (chunk.usage) {
         assistantMessage.usage = chunk.usage;
@@ -788,6 +1046,26 @@ export class StatelessAgent extends EventEmitter {
 
     assistantMessage.tool_calls = toolCalls.length > 0 ? toolCalls : undefined;
     assistantMessage.type = toolCalls.length > 0 ? 'tool-call' : 'assistant-text';
+    assistantMessage.metadata = {
+      ...assistantMessage.metadata,
+      llmRequestConfigHash: requestPlan.requestConfigHash,
+      llmRequestInputHash: requestPlan.requestInputHash,
+      llmRequestInputMessageCount: requestPlan.requestInputMessageCount,
+      continuationMode: requestPlan.continuationMode,
+      continuationDeltaMessageCount: requestPlan.continuationDeltaMessageCount,
+      ...(requestPlan.previousResponseIdUsed
+        ? {
+            previousResponseIdUsed: requestPlan.previousResponseIdUsed,
+            continuationBaselineMessageCount: requestPlan.continuationBaselineMessageCount,
+          }
+        : {}),
+    };
+    assistantMessage.metadata = {
+      ...assistantMessage.metadata,
+      llmResponseMessageHash: hashValueForContinuation(
+        this.convertMessageToLLMMessage(assistantMessage)
+      ),
+    };
 
     const hasAssistantText = hasNonEmptyText(assistantMessage.content);
     const hasReasoningText = hasNonEmptyText(assistantMessage.reasoning_content);
@@ -1244,9 +1522,24 @@ export class StatelessAgent extends EventEmitter {
   private mergeLLMConfig(
     config: AgentInput['config'],
     tools?: AgentInput['tools'],
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    conversationId?: string
   ): AgentInput['config'] {
-    return mergeLLMRequestConfig(config, tools, abortSignal);
+    const merged = mergeLLMRequestConfig(config, tools, abortSignal);
+    if (
+      typeof conversationId !== 'string' ||
+      conversationId.trim().length === 0 ||
+      merged?.prompt_cache_key
+    ) {
+      return merged;
+    }
+
+    // Use the conversation id as the default sticky cache routing key so
+    // repeated full replays can still hit provider-side prefix caching.
+    return {
+      ...(merged || {}),
+      prompt_cache_key: conversationId,
+    };
   }
 
   private resolveLLMTools(inputTools?: Tool[]): Tool[] | undefined {

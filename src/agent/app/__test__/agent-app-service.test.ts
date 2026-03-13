@@ -211,6 +211,11 @@ describe('AgentAppService', () => {
             prompt_tokens: 120,
             completion_tokens: 30,
             total_tokens: 150,
+            prompt_cache_hit_tokens: 80,
+            prompt_cache_miss_tokens: 40,
+            input_tokens_details: {
+              cached_tokens: 80,
+            },
           },
         },
       ])
@@ -232,7 +237,16 @@ describe('AgentAppService', () => {
     const usageEvents: Array<{
       sequence: number;
       stepIndex: number;
-      usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+      usage: {
+        prompt_tokens: number;
+        completion_tokens: number;
+        total_tokens: number;
+        prompt_cache_hit_tokens?: number;
+        prompt_cache_miss_tokens?: number;
+        input_tokens_details?: {
+          cached_tokens: number;
+        };
+      };
       cumulativeUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
       contextTokens?: number;
       contextLimitTokens?: number;
@@ -278,6 +292,11 @@ describe('AgentAppService', () => {
       prompt_tokens: 120,
       completion_tokens: 30,
       total_tokens: 150,
+      prompt_cache_hit_tokens: 80,
+      prompt_cache_miss_tokens: 40,
+      input_tokens_details: {
+        cached_tokens: 80,
+      },
     });
     expect(usageEvents[0]?.cumulativeUsage).toEqual({
       prompt_tokens: 120,
@@ -290,6 +309,18 @@ describe('AgentAppService', () => {
       expectedContextUsage.contextUsagePercent,
       6
     );
+
+    const storedMessages = await store.list('conv_usage');
+    expect(storedMessages.at(-1)?.usage).toEqual({
+      prompt_tokens: 120,
+      completion_tokens: 30,
+      total_tokens: 150,
+      prompt_cache_hit_tokens: 80,
+      prompt_cache_miss_tokens: 40,
+      input_tokens_details: {
+        cached_tokens: 80,
+      },
+    });
   });
 
   it('forwards onContextUsage immediately before usage events', async () => {

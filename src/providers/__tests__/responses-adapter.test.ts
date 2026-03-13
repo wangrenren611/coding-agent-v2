@@ -167,6 +167,12 @@ describe('ResponsesAdapter', () => {
         input_tokens: 10,
         output_tokens: 2,
         total_tokens: 12,
+        input_tokens_details: {
+          cached_tokens: 7,
+        },
+        output_tokens_details: {
+          reasoning_tokens: 1,
+        },
       },
     });
 
@@ -186,9 +192,17 @@ describe('ResponsesAdapter', () => {
         },
       ],
       usage: {
+        input_tokens: 10,
+        output_tokens: 2,
         prompt_tokens: 10,
         completion_tokens: 2,
         total_tokens: 12,
+        input_tokens_details: {
+          cached_tokens: 7,
+        },
+        output_tokens_details: {
+          reasoning_tokens: 1,
+        },
       },
     });
   });
@@ -208,7 +222,7 @@ describe('ResponsesAdapter', () => {
       'event: response.output_text.delta\n',
       'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"pong"}\n\n',
       'event: response.completed\n',
-      'data: {"type":"response.completed","response":{"id":"resp_123","model":"gpt-5.3-codex","created_at":1762675000,"usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}}}\n\n',
+      'data: {"type":"response.completed","response":{"id":"resp_123","model":"gpt-5.3-codex","created_at":1762675000,"usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12,"input_tokens_details":{"cached_tokens":6},"output_tokens_details":{"reasoning_tokens":1}}}}\n\n',
     ].join('');
 
     const stream = new ReadableStream({
@@ -234,9 +248,17 @@ describe('ResponsesAdapter', () => {
     );
     expect(chunks[2].choices?.[0]?.delta.content).toBe('pong');
     expect(chunks[3].usage).toMatchObject({
+      input_tokens: 10,
+      output_tokens: 2,
       prompt_tokens: 10,
       completion_tokens: 2,
       total_tokens: 12,
+      input_tokens_details: {
+        cached_tokens: 6,
+      },
+      output_tokens_details: {
+        reasoning_tokens: 1,
+      },
     });
   });
 

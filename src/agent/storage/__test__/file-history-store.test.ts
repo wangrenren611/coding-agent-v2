@@ -27,7 +27,6 @@ function createHistoryStore(
       historyMaxPerFile: 20,
       historyMaxAgeDays: 14,
       historyMaxTotalBytes: 1024 * 1024,
-      legacyWriteBufferDir: path.join(rootDir, '.renx', 'write-file'),
       ...overrides,
     },
   });
