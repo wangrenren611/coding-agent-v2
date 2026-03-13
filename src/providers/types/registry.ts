@@ -14,6 +14,7 @@ export type ProviderType =
   | 'glm'
   | 'minimax'
   | 'openai'
+  | 'openrouter'
   | 'qwen';
 
 /**

@@ -214,7 +214,7 @@ export const MODEL_DEFINITIONS: Record<ModelId, Omit<ModelConfig, 'apiKey'>> = {
   },
   'openrouter/hunter-alpha': {
     id: 'openrouter/hunter-alpha',
-    provider: 'openai',
+    provider: 'openrouter',
     name: 'OpenRouter Hunter Alpha',
     baseURL: 'https://openrouter.ai/api/v1',
     endpointPath: '/chat/completions',
