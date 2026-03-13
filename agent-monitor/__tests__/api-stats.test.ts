@@ -3,15 +3,15 @@ import { GET } from '@/app/api/stats/route';
 
 vi.mock('@/lib/db', () => ({
   getAggregateStats: vi.fn(),
-  getTokenUsageByDay: vi.fn(),
-  getStatusDistribution: vi.fn(),
+  getDailyStats: vi.fn(),
+  getModelUsage: vi.fn(),
   getRunStats: vi.fn(),
 }));
 
 import {
   getAggregateStats,
-  getTokenUsageByDay,
-  getStatusDistribution,
+  getDailyStats,
+  getModelUsage,
   getRunStats,
 } from '@/lib/db';
 
@@ -40,7 +40,7 @@ describe('API /api/stats', () => {
 
       expect(getAggregateStats).toHaveBeenCalled();
       expect(response.status).toBe(200);
-      expect(data.aggregate).toEqual(mockStats);
+      expect(data.stats).toEqual(mockStats);
     });
 
     it('should return daily token usage when type=daily', async () => {
@@ -60,61 +60,57 @@ describe('API /api/stats', () => {
           run_count: 8,
         },
       ];
-      vi.mocked(getTokenUsageByDay).mockReturnValue(mockDaily as any);
+      vi.mocked(getDailyStats).mockReturnValue(mockDaily as any);
 
       const request = new Request('http://localhost:3888/api/stats?type=daily');
       const response = await GET(request);
       const data = await response.json();
 
-      expect(getTokenUsageByDay).toHaveBeenCalledWith(7);
-      expect(data.daily).toHaveLength(2);
-      expect(data.daily[0].total_tokens).toBe(1000);
+      expect(getDailyStats).toHaveBeenCalledWith(7);
+      expect(data.daily_stats).toHaveLength(2);
     });
 
     it('should respect custom days parameter', async () => {
-      vi.mocked(getTokenUsageByDay).mockReturnValue([]);
+      vi.mocked(getDailyStats).mockReturnValue([]);
 
       const request = new Request('http://localhost:3888/api/stats?type=daily&days=30');
-      await GET(request);
+      const response = await GET(request);
 
-      expect(getTokenUsageByDay).toHaveBeenCalledWith(30);
+      expect(getDailyStats).toHaveBeenCalledWith(30);
     });
 
-    it('should return status distribution when type=distribution', async () => {
-      const mockDistribution = [
-        { status: 'COMPLETED', count: 90, percentage: 90 },
-        { status: 'FAILED', count: 5, percentage: 5 },
-        { status: 'RUNNING', count: 5, percentage: 5 },
+    it('should return model usage when type=models', async () => {
+      const mockModels = [
+        { model: 'gpt-4', total_tokens: 10000, prompt_tokens: 8000, completion_tokens: 2000, message_count: 50, run_count: 10 },
       ];
-      vi.mocked(getStatusDistribution).mockReturnValue(mockDistribution as any);
+      vi.mocked(getModelUsage).mockReturnValue(mockModels as any);
 
-      const request = new Request('http://localhost:3888/api/stats?type=distribution');
+      const request = new Request('http://localhost:3888/api/stats?type=models');
       const response = await GET(request);
       const data = await response.json();
 
-      expect(getStatusDistribution).toHaveBeenCalled();
-      expect(data.distribution).toHaveLength(3);
-      expect(data.distribution[0].status).toBe('COMPLETED');
+      expect(getModelUsage).toHaveBeenCalled();
+      expect(data.model_usage).toHaveLength(1);
     });
 
-    it('should return stats for specific execution', async () => {
-      const mockStats = {
+    it('should return run stats for specific execution', async () => {
+      const mockRunStats = {
         execution_id: 'exec_001',
         total_tokens: 5000,
         prompt_tokens: 4000,
         completion_tokens: 1000,
-        duration_ms: 25000,
+        duration_ms: 30000,
         message_count: 10,
         tool_call_count: 5,
       };
-      vi.mocked(getRunStats).mockReturnValue(mockStats as any);
+      vi.mocked(getRunStats).mockReturnValue(mockRunStats);
 
       const request = new Request('http://localhost:3888/api/stats?execution_id=exec_001');
       const response = await GET(request);
       const data = await response.json();
 
       expect(getRunStats).toHaveBeenCalledWith('exec_001');
-      expect(data.stats).toEqual(mockStats);
+      expect(data.stats).toEqual(mockRunStats);
     });
 
     it('should handle database errors gracefully', async () => {

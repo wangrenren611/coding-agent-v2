@@ -1,4 +1,5 @@
 import { isAbsolute, resolve as resolvePath, win32 } from 'node:path';
+import { homedir } from 'node:os';
 import type {
   AgentContextUsageEvent,
   AgentEventHandlers,
@@ -30,7 +31,7 @@ import {
   type ToolConfirmEventLike,
 } from './source-modules';
 import { ToolCallBuffer } from './tool-call-buffer';
-import { buildSystemPrompt } from '../../../../src/agent-v4/prompts/system';
+import { buildSystemPrompt } from '../../../../src/agent/prompts/system';
 import type { AttachmentModelCapabilities } from '../../files/attachment-capabilities';
 import { resolveAttachmentModelCapabilities } from '../../files/attachment-capabilities';
 import type { MessageContent } from '../../types/message-content';
@@ -337,6 +338,7 @@ const createRuntime = async (): Promise<RuntimeCore> => {
   const modules = await getSourceModules();
   const workspaceRoot = resolveWorkspaceRoot();
   await modules.loadEnvFiles(workspaceRoot);
+  modules.loadConfigToEnv({ projectRoot: workspaceRoot });
   const conversationId = resolveConversationId();
 
   const modelId = resolveModelId(modules, preferredModelId);
@@ -352,7 +354,7 @@ const createRuntime = async (): Promise<RuntimeCore> => {
   });
   const toolManager = new modules.DefaultToolManager();
   const taskStore = new modules.TaskStore({
-    baseDir: resolvePath(workspaceRoot, '.agent-cache', 'task-system-v1'),
+    baseDir: resolvePath(homedir(), '.renx', 'task'),
   });
   toolManager.registerTool(new modules.BashTool());
   toolManager.registerTool(

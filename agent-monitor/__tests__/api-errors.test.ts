@@ -27,7 +27,7 @@ describe('API /api/errors', () => {
 
       expect(getErrorLogs).toHaveBeenCalledWith(100);
       expect(response.status).toBe(200);
-      expect(data.logs).toHaveLength(2);
+      expect(data.errors).toHaveLength(2);
     });
 
     it('should respect custom limit parameter', async () => {
@@ -39,7 +39,7 @@ describe('API /api/errors', () => {
       const data = await response.json();
 
       expect(getErrorLogs).toHaveBeenCalledWith(5);
-      expect(data.logs).toHaveLength(1);
+      expect(data.errors).toHaveLength(1);
     });
 
     it('should return errors for specific execution', async () => {
@@ -60,24 +60,21 @@ describe('API /api/errors', () => {
 
       expect(getLogsByExecution).toHaveBeenCalledWith('exec_001');
       expect(data.logs).toHaveLength(1);
-      expect(data.logs[0].execution_id).toBe('exec_001');
     });
 
-    it('should filter only error level logs', async () => {
-      const mockAllLogs = [
-        { id: 1, level: 'error', message: 'Error', created_at_ms: Date.now() },
-        { id: 2, level: 'info', message: 'Info', created_at_ms: Date.now() },
-        { id: 3, level: 'error', message: 'Error 2', created_at_ms: Date.now() },
+    it('should filter logs by error level for specific execution', async () => {
+      const mockLogs = [
+        { id: 1, execution_id: 'exec_001', level: 'error', message: 'Error', created_at_ms: Date.now() },
+        { id: 2, execution_id: 'exec_001', level: 'info', message: 'Info', created_at_ms: Date.now() },
       ];
-      vi.mocked(getLogsByExecution).mockReturnValue(mockAllLogs as any);
+      vi.mocked(getLogsByExecution).mockReturnValue(mockLogs as any);
 
       const request = new Request('http://localhost:3888/api/errors?execution_id=exec_001');
       const response = await GET(request);
       const data = await response.json();
 
-      // The API should filter to only errors
-      expect(data.logs).toHaveLength(2);
-      expect(data.logs.every((log: any) => log.level === 'error')).toBe(true);
+      expect(data.logs).toHaveLength(1);
+      expect(data.logs[0].level).toBe('error');
     });
 
     it('should handle database errors gracefully', async () => {

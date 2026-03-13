@@ -1,159 +1,232 @@
+/* v8 ignore file */
+/* c8 ignore file */
 /**
- * Agent 类型定义
+ * 企业级无状态 Agent 核心类型定义
+ * 参考: ENTERPRISE_REALTIME.md
  */
 
-import type { LLMGenerateOptions, LLMRequestMessage, Chunk, BackoffConfig } from '../providers';
+import { LLMGenerateOptions, MessageContent, Tool, ToolCall, Usage } from '../providers';
 
-// 从 core 重新导出共享类型
-export type {
-  ToolCall,
-  FinishReason,
-  Usage,
-  Message,
-  MessageType,
-  ToolResult,
-  ToolExecutionContext,
-  AgentLoopState,
-} from '../core/types';
+// ============================================================
+// 消息类型
+// ============================================================
+export type MessageType =
+  | 'system'
+  | 'user'
+  | 'tool-call'
+  | 'tool-result'
+  | 'summary'
+  | 'assistant-text';
 
-// 从 core 导入类型供内部使用
-import type { ToolCall, FinishReason, Usage, ToolResult, AgentLoopState } from '../core/types';
-
-import type { MemoryManager } from '../storage';
-import type { ToolManager } from '../tool';
-import type { ToolConfirmDecision, ToolConfirmRequest } from '../tool/types';
-import type { Plugin } from '../hook';
-import type { Logger } from '../logger';
-
-// =============================================================================
-// Agent 配置类型
-// =============================================================================
-
-/**
- * Agent 配置
- */
-export interface AgentConfig {
-  /** Provider 实例 */
-  provider: import('../providers').LLMProvider;
-  /** 系统提示词 */
-  systemPrompt?: string;
-
-  // ---------------------------------------------------------------------------
-  // 工具配置
-  // ---------------------------------------------------------------------------
-
-  /**
-   * 工具管理器
-   *
-   * 统一管理工具的注册、schema生成、执行
-   */
-  toolManager: ToolManager;
-
-  // ---------------------------------------------------------------------------
-  // 压缩配置
-  // ---------------------------------------------------------------------------
-
-  /** 是否启用压缩 */
-  enableCompaction?: boolean;
-  /** 压缩时保留的最近消息数 */
-  compactionKeepMessages?: number;
-  /** 摘要语言 */
-  summaryLanguage?: string;
-  /** 触发压缩的阈值比例（默认 0.9，即达到可用限制的 90% 时触发） */
-  compactionTriggerRatio?: number;
-
-  // ---------------------------------------------------------------------------
-  // 其他配置
-  // ---------------------------------------------------------------------------
-
-  /** 最大步骤次数（每次LLM调用为一个步骤） */
-  maxSteps?: number;
-  /** 最大重试次数 */
-  maxRetries?: number;
-  /** 退避配置 */
-  backoffConfig?: BackoffConfig;
-  /** 生成选项 */
-  generateOptions?: LLMGenerateOptions;
-  /** 完成检测器 */
-  completionDetector?: CompletionDetector;
-  /** 自定义 completionDetector 返回 done=false 时，是否继续执行默认完成检测器 */
-  useDefaultCompletionDetector?: boolean;
-  /** 插件列表 */
-  plugins?: Plugin[];
-  /** 工具确认回调（用于等待用户确认） */
-  onToolConfirm?: (
-    request: ToolConfirmRequest
-  ) => ToolConfirmDecision | Promise<ToolConfirmDecision>;
-  /** 调试模式 */
-  debug?: boolean;
-  /** 日志记录器 */
-  logger?: Logger;
-  /** 会话 ID（用于消息存储） */
-  sessionId?: string;
-  /** 内存管理器（用于消息存储） */
-  memoryManager?: MemoryManager;
+export interface Message {
+  messageId: string;
+  type: MessageType;
+  /** @deprecated 请使用 messageId 字段代替 */
+  id?: string;
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: MessageContent;
+  reasoning_content?: string;
+  tool_call_id?: string;
+  tool_calls?: ToolCall[];
+  timestamp: number;
+  metadata?: Record<string, unknown>;
+  usage?: Usage;
 }
 
-// =============================================================================
-// 完成检测类型
-// =============================================================================
+// ============================================================
+// Agent 输入输出
+// ============================================================
 
-/**
- * 完成检测结果
- */
-export interface CompletionResult {
-  done: boolean;
-  reason: 'stop' | 'length' | 'user_abort' | 'limit_exceeded';
+export interface AgentInput {
+  executionId: string;
+  conversationId: string;
+  messages: Message[];
+  systemPrompt?: string;
+  tools?: Tool[];
+  config?: LLMGenerateOptions;
+  maxSteps?: number;
+  abortSignal?: AbortSignal;
+  timeoutBudgetMs?: number;
+  llmTimeoutRatio?: number;
+  contextLimitTokens?: number;
+}
+
+export interface AgentOutput {
+  messages: Message[];
+  finishReason: 'stop' | 'max_steps' | 'error';
+  steps: number;
+}
+
+// ============================================================
+// 回调接口
+// ============================================================
+
+export interface ErrorDecision {
+  retry: boolean;
   message?: string;
 }
 
-/**
- * 完成检测器
- */
-export type CompletionDetector = (
-  state: AgentLoopState,
-  messages: LLMRequestMessage[],
-  lastResponse?: AgentStepResult
-) => Promise<CompletionResult> | CompletionResult;
-
-// =============================================================================
-// 结果类型
-// =============================================================================
-
-/**
- * 步骤执行结果
- */
-export interface AgentStepResult {
-  /** 生成的文本 */
-  text: string;
-  /** 工具调用列表 */
-  toolCalls: ToolCall[];
-  /** 工具执行结果 */
-  toolResults: Array<{ toolCallId: string; result: ToolResult }>;
-  /** 完成原因 */
-  finishReason: FinishReason;
-  /** Token 使用 */
-  usage: Usage;
-  /** 原始响应块 */
-  rawChunks: Chunk[];
+export interface AgentMetric {
+  name: string;
+  value: number;
+  unit?: 'ms' | 'count';
+  timestamp: number;
+  tags?: Record<string, string | number | boolean>;
 }
 
-/**
- * Agent 运行结果
- */
-export interface AgentResult {
-  /** 最终文本 */
-  text: string;
-  /** 完整消息历史 */
-  messages: LLMRequestMessage[];
-  /** 所有步骤结果 */
-  steps: AgentStepResult[];
-  /** 总 Token 使用 */
-  totalUsage: Usage;
-  /** 完成原因 */
-  completionReason: CompletionResult['reason'];
-  /** 完成消息 */
-  completionMessage?: string;
-  /** 循环次数 */
-  loopCount: number;
+export interface AgentTraceEvent {
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
+  name: string;
+  phase: 'start' | 'end';
+  timestamp: number;
+  attributes?: Record<string, unknown>;
 }
+
+export interface AgentContextUsage {
+  stepIndex: number;
+  messageCount: number;
+  contextTokens: number;
+  contextLimitTokens: number;
+  contextUsagePercent: number;
+}
+
+export interface AgentCallbacks {
+  onMessage: (message: Message) => void | Promise<void>;
+  onCheckpoint: (checkpoint: ExecutionCheckpoint) => void | Promise<void>;
+  onProgress?: (progress: ExecutionProgress) => void | Promise<void>;
+  onCompaction?: (compaction: CompactionInfo) => void | Promise<void>;
+  onContextUsage?: (usage: AgentContextUsage) => void | Promise<void>;
+  onMetric?: (metric: AgentMetric) => void | Promise<void>;
+  onTrace?: (event: AgentTraceEvent) => void | Promise<void>;
+  onToolPolicy?: (info: ToolPolicyCheckInfo) => ToolPolicyDecision | Promise<ToolPolicyDecision>;
+  onError?: (error: Error) => ErrorDecision | void | Promise<ErrorDecision | void>;
+}
+
+export interface CompactionInfo {
+  executionId: string;
+  stepIndex: number;
+  removedMessageIds: string[];
+  messageCountBefore: number;
+  messageCountAfter: number;
+}
+
+export interface ExecutionCheckpoint {
+  executionId: string;
+  stepIndex: number;
+  lastMessageId: string;
+  lastMessageTime: number;
+  canResume: boolean;
+}
+
+export interface ExecutionProgress {
+  executionId: string;
+  stepIndex: number;
+  currentAction: 'llm' | 'tool' | 'waiting';
+  messageCount: number;
+}
+
+export interface ToolStreamChunk {
+  type: 'stdout' | 'stderr' | 'progress';
+  data: string;
+}
+
+export interface ExecuteOptions {
+  onChunk?: (chunk: ToolStreamChunk) => void;
+  onConfirm?: (info: ToolConfirmInfo) => Promise<ToolDecision>;
+}
+
+export interface ToolConfirmInfo {
+  toolCallId: string;
+  toolName: string;
+  arguments: string;
+}
+
+export interface ToolDecision {
+  approved: boolean;
+  message?: string;
+}
+
+export interface ToolPolicyCheckInfo {
+  toolCallId: string;
+  toolName: string;
+  arguments: string;
+  parsedArguments: Record<string, unknown>;
+}
+
+export interface ToolPolicyDecision {
+  allowed: boolean;
+  code?: string;
+  message?: string;
+  audit?: Record<string, unknown>;
+}
+
+// ============================================================
+// 流式事件
+// ============================================================
+
+export interface StreamEvent {
+  type:
+    | 'chunk'
+    | 'reasoning_chunk'
+    | 'tool_call'
+    | 'tool_result'
+    | 'tool_stream'
+    | 'progress'
+    | 'checkpoint'
+    | 'compaction'
+    | 'done'
+    | 'error';
+  data: unknown;
+}
+
+// ============================================================
+// 执行状态
+// ============================================================
+
+export type ExecutionStatus =
+  | 'CREATED'
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED';
+
+export interface Execution {
+  executionId: string;
+  conversationId: string;
+  status: ExecutionStatus;
+  stepIndex?: number;
+  createdAt: number;
+  updatedAt: number;
+  completedAt?: number;
+  result?: string;
+  error?: string;
+}
+
+// ============================================================
+// 任务
+// ============================================================
+
+export interface Task {
+  executionId: string;
+  conversationId: string;
+  message: {
+    role: 'user';
+    content: string;
+  };
+  createdAt: number;
+}
+
+// ============================================================
+// 上下文
+// ============================================================
+
+export interface ConversationContext {
+  messages: Message[];
+  systemPrompt?: string;
+  tools?: Tool[];
+}
+
+export const AGENT_TYPES_MODULE = 'renx-types';

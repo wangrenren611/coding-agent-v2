@@ -9,7 +9,7 @@ vi.mock('./source-modules', () => ({
   resolveWorkspaceRoot: vi.fn(),
 }));
 
-vi.mock('../../../../src/agent-v4/prompts/system', () => ({
+vi.mock('../../../../src/agent/prompts/system', () => ({
   buildSystemPrompt: vi.fn(() => 'Test system prompt'),
 }));
 
@@ -101,6 +101,7 @@ const buildMockModules = () => {
       createFromEnv: () => ({}),
     },
     loadEnvFiles: vi.fn().mockResolvedValue([]),
+    loadConfigToEnv: vi.fn().mockReturnValue([]),
     createLoggerFromEnv: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() })),
     createAgentLoggerAdapter: vi.fn((logger: Record<string, unknown>) => ({
       info: typeof logger.info === 'function' ? logger.info.bind(logger) : undefined,
@@ -251,7 +252,7 @@ describe('runtime', () => {
       return;
     }
 
-    process.env.AGENT_DB_PATH = 'C:/Users/Administrator/.coding-agent/agent.db';
+    process.env.AGENT_DB_PATH = 'C:/Users/Administrator/.renx/data.db';
 
     await disposeAgentRuntime();
 

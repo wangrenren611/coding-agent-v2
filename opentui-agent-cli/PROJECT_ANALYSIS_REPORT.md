@@ -331,7 +331,7 @@ import { render, useInput, useTerminalDimensions } from '@opentui/react';
 ┌─────────────────────────────────────────────────────────────────────┐
 │                       外部依赖层 (External)                          │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────────┐   │
-│  │ agent-v4/agent  │  │ agent-v4/app    │  │ providers        │   │
+│  │ agent/agent  │  │ agent/app    │  │ providers        │   │
 │  │ (Agent 核心)    │  │ (应用服务)      │  │ (LLM 提供商)    │   │
 │  └─────────────────┘  └─────────────────┘  └──────────────────┘   │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────────┐   │
@@ -348,7 +348,7 @@ import { render, useInput, useTerminalDimensions } from '@opentui/react';
 | 表现层 | UI 渲染和用户交互 | App.tsx, components/* | ↓ |
 | Hooks 层 | 状态管理和业务逻辑封装 | hooks/* | ↓ |
 | 运行时层 | Agent 执行和事件处理 | agent/runtime/* | ↓ |
-| 外部依赖层 | LLM 调用和数据持久化 | agent-v4/* | - |
+| 外部依赖层 | LLM 调用和数据持久化 | agent/* | - |
 
 ### 3.3 架构特点
 
@@ -734,9 +734,9 @@ export async function getSourceModules(): Promise<SourceModules> {
   if (!modulesPromise) {
     modulesPromise = (async () => {
       const [agent, app, tools] = await Promise.all([
-        import('agent-v4/agent'),
-        import('agent-v4/app'),
-        import('agent-v4/tool'),
+        import('agent/agent'),
+        import('agent/app'),
+        import('agent/tool'),
       ]);
       return { agent, app, tools };
     })();
@@ -825,7 +825,7 @@ export function bindExitGuards(renderer: CliRenderer) {
 .env
 .env.local
 .env.*.local
-.agent-v4/    # 数据库文件
+.agent/    # 数据库文件
 ```
 
 ### 7.3 潜在风险

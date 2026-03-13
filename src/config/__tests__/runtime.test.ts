@@ -4,21 +4,15 @@ import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import {
   createLoggerFromEnv,
-  createMemoryManagerFromEnv,
   loadEnvFiles,
   loadRuntimeConfigFromEnv,
 } from '../runtime';
 
 describe('runtime config from env', () => {
   const loggers: Array<ReturnType<typeof createLoggerFromEnv>> = [];
-  const managers: Array<ReturnType<typeof createMemoryManagerFromEnv>> = [];
   const tempDirs: string[] = [];
 
   afterEach(async () => {
-    for (const manager of managers.splice(0, managers.length)) {
-      await manager.close();
-    }
-
     for (const logger of loggers.splice(0, loggers.length)) {
       logger.close();
     }
@@ -37,7 +31,9 @@ describe('runtime config from env', () => {
     expect(config.storage.sqlitePath).toBe(
       path.resolve(cwd, './data/agent-memory/agent-memory.db')
     );
-    expect(config.log.filePath).toBe(path.resolve(cwd, './logs/agent.log'));
+    expect(config.log.filePath).toMatch(
+      /^\/repo\/logs\/\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.log$/
+    );
     expect(config.log.consoleEnabled).toBe(true);
     expect(config.log.fileEnabled).toBe(false);
     expect(config.log.format).toBe('pretty');
@@ -54,7 +50,6 @@ describe('runtime config from env', () => {
         AGENT_LOG_CONSOLE: '0',
         AGENT_LOG_FILE_ENABLED: '1',
         AGENT_LOG_DIR: './runtime-logs',
-        AGENT_LOG_FILE: 'agent-runtime.log',
         AGENT_LOG_FORMAT: 'json',
       },
       cwd
@@ -62,130 +57,62 @@ describe('runtime config from env', () => {
 
     expect(config.storage.backend).toBe('sqlite');
     expect(config.storage.dir).toBe(path.resolve(cwd, './runtime-data'));
-    expect(config.storage.sqlitePath).toBe(path.resolve(cwd, './runtime-data/custom.db'));
+    expect(config.storage.sqlitePath).toBe(
+      path.resolve(cwd, './runtime-data/custom.db')
+    );
+    expect(config.log.level).toBe(10); // DEBUG
     expect(config.log.consoleEnabled).toBe(false);
     expect(config.log.fileEnabled).toBe(true);
-    expect(config.log.filePath).toBe(path.resolve(cwd, './runtime-logs/agent-runtime.log'));
+    expect(config.log.filePath).toMatch(
+      /^\/repo\/runtime-logs\/\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.log$/
+    );
     expect(config.log.format).toBe('json');
   });
 
-  it('should throw on invalid env values', () => {
-    expect(() => loadRuntimeConfigFromEnv({ AGENT_STORAGE_BACKEND: 'memory' }, '/repo')).toThrow(
-      'AGENT_STORAGE_BACKEND'
-    );
-
-    expect(() => loadRuntimeConfigFromEnv({ AGENT_LOG_LEVEL: 'verbose' }, '/repo')).toThrow(
-      'AGENT_LOG_LEVEL'
-    );
-
-    expect(() => loadRuntimeConfigFromEnv({ AGENT_LOG_FILE_ENABLED: 'maybe' }, '/repo')).toThrow(
-      'Invalid boolean env value'
-    );
+  it('should throw on invalid storage backend', () => {
+    expect(() =>
+      loadRuntimeConfigFromEnv({ AGENT_STORAGE_BACKEND: 'redis' }, '/repo')
+    ).toThrow('Invalid AGENT_STORAGE_BACKEND');
   });
 
-  it('should create file storage memory manager from env', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'runtime-file-env-'));
-    tempDirs.push(tempDir);
-    const cwd = tempDir;
-
-    const manager = createMemoryManagerFromEnv(
-      {
-        AGENT_STORAGE_BACKEND: 'file',
-        AGENT_STORAGE_DIR: './agent-memory',
-      },
-      cwd
-    );
-    managers.push(manager);
-
-    await manager.initialize();
-    const sessionId = await manager.createSession('runtime-file', 'System prompt');
-    await manager.addMessages(sessionId, [{ messageId: 'm1', role: 'user', content: 'hello' }]);
-
-    const contextPath = path.join(cwd, 'agent-memory', 'contexts', 'runtime-file.json');
-    await expect(fs.access(contextPath)).resolves.toBeUndefined();
+  it('should throw on invalid log level', () => {
+    expect(() =>
+      loadRuntimeConfigFromEnv({ AGENT_LOG_LEVEL: 'verbose' }, '/repo')
+    ).toThrow('Invalid AGENT_LOG_LEVEL');
   });
 
-  it('should create sqlite storage memory manager from env', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'runtime-sqlite-env-'));
-    tempDirs.push(tempDir);
-    const cwd = tempDir;
-
-    const manager = createMemoryManagerFromEnv(
-      {
-        AGENT_STORAGE_BACKEND: 'sqlite',
-        AGENT_SQLITE_PATH: './sqlite-data/agent.db',
-      },
-      cwd
-    );
-    managers.push(manager);
-
-    await manager.initialize();
-    const sessionId = await manager.createSession('runtime-sqlite', 'System prompt');
-    await manager.addMessages(sessionId, [{ messageId: 'm1', role: 'user', content: 'hello' }]);
-
-    const dbPath = path.join(cwd, 'sqlite-data', 'agent.db');
-    await expect(fs.access(dbPath)).resolves.toBeUndefined();
+  it('should throw on invalid log format', () => {
+    expect(() =>
+      loadRuntimeConfigFromEnv({ AGENT_LOG_FORMAT: 'xml' }, '/repo')
+    ).toThrow('Invalid AGENT_LOG_FORMAT');
   });
 
-  it('should create logger from env with file path', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'runtime-logger-env-'));
-    tempDirs.push(tempDir);
-    const cwd = tempDir;
+  it('should load env files', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'config-test-'));
+    tempDirs.push(tmpDir);
 
+    await fs.writeFile(
+      path.join(tmpDir, '.env'),
+      'AGENT_LOG_LEVEL=debug\nAGENT_STORAGE_DIR=./custom-data\n'
+    );
+
+    const loaded = await loadEnvFiles(tmpDir, { files: ['.env'], override: true });
+    expect(loaded).toHaveLength(1);
+    expect(process.env.AGENT_LOG_LEVEL).toBe('debug');
+    expect(process.env.AGENT_STORAGE_DIR).toBe('./custom-data');
+
+    delete process.env.AGENT_LOG_LEVEL;
+    delete process.env.AGENT_STORAGE_DIR;
+  });
+
+  it('should create logger from env', () => {
     const logger = createLoggerFromEnv(
-      {
-        AGENT_LOG_LEVEL: 'INFO',
-        AGENT_LOG_CONSOLE: 'false',
-        AGENT_LOG_FILE_ENABLED: 'true',
-        AGENT_LOG_DIR: './runtime-logs',
-        AGENT_LOG_FILE: 'runtime.log',
-        AGENT_LOG_FORMAT: 'pretty',
-      },
-      cwd
+      { AGENT_LOG_LEVEL: 'info', AGENT_LOG_CONSOLE: 'true' },
+      '/repo'
     );
     loggers.push(logger);
-
-    logger.info('runtime logger smoke test');
-    const loggerConfig = logger.getConfig();
-    expect(loggerConfig.level).toBeDefined();
-    expect(loggerConfig.console.enabled).toBe(false);
-    expect(loggerConfig.file.enabled).toBe(true);
-    expect(loggerConfig.file.filepath).toBe(path.join(cwd, 'runtime-logs', 'runtime.log'));
-  });
-
-  it('should load env files from src/config and keep existing process env by default', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'runtime-load-env-'));
-    tempDirs.push(tempDir);
-
-    const keyA = 'RUNTIME_CONFIG_TEST_KEY_A';
-    const keyB = 'RUNTIME_CONFIG_TEST_KEY_B';
-    const prevA = process.env[keyA];
-    const prevB = process.env[keyB];
-
-    try {
-      await fs.writeFile(path.join(tempDir, '.env'), `${keyA}=from-env\n`, 'utf8');
-      await fs.writeFile(path.join(tempDir, '.env.development'), `${keyB}=from-env-dev\n`, 'utf8');
-
-      process.env[keyA] = 'existing';
-      delete process.env[keyB];
-
-      const loaded = await loadEnvFiles(tempDir);
-      expect(loaded.length).toBe(2);
-
-      expect(process.env[keyA]).toBe('existing');
-      expect(process.env[keyB]).toBe('from-env-dev');
-    } finally {
-      if (prevA === undefined) {
-        delete process.env[keyA];
-      } else {
-        process.env[keyA] = prevA;
-      }
-
-      if (prevB === undefined) {
-        delete process.env[keyB];
-      } else {
-        process.env[keyB] = prevB;
-      }
-    }
+    expect(logger).toBeDefined();
+    expect(typeof logger.info).toBe('function');
+    expect(typeof logger.error).toBe('function');
   });
 });

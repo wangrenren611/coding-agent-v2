@@ -9,7 +9,7 @@ vi.mock('./source-modules', () => ({
   resolveWorkspaceRoot: vi.fn(),
 }));
 
-vi.mock('../../../../src/agent-v4/prompts/system', () => ({
+vi.mock('../../../../src/agent/prompts/system', () => ({
   buildSystemPrompt: vi.fn(() => 'Test system prompt'),
 }));
 
@@ -148,6 +148,7 @@ describe('runAgentPrompt usage forwarding', () => {
         createFromEnv: () => ({}),
       },
       loadEnvFiles: vi.fn().mockResolvedValue([]),
+    loadConfigToEnv: vi.fn().mockReturnValue([]),
       createLoggerFromEnv: vi.fn(() => loggerFromEnv),
       createAgentLoggerAdapter: vi.fn((logger: typeof loggerFromEnv) => ({
         info: (message: string, _context?: Record<string, unknown>, _data?: unknown) =>

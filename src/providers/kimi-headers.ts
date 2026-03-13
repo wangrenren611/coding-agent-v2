@@ -32,7 +32,7 @@ const PACKAGE_VERSION = (() => {
  * 优先从缓存文件读取，不存在则生成新的并保存
  */
 function getDeviceId(): string {
-  const cacheDir = path.join(os.homedir(), '.coding-agent');
+  const cacheDir = path.join(os.homedir(), '.renx');
   const deviceIdPath = path.join(cacheDir, 'device_id');
 
   try {

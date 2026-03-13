@@ -10,7 +10,9 @@ function query<T>(sql: string): T[] {
       encoding: 'utf-8',
       maxBuffer: 10 * 1024 * 1024,
     });
-    return JSON.parse(result) as T[];
+    const trimmed = result.trim();
+    if (!trimmed) { return []; }
+    return JSON.parse(trimmed) as T[];
   } catch (error) {
     console.error('Database query error:', error);
     return [];
@@ -79,58 +81,63 @@ export function getRunById(executionId: string): Run | null {
 }
 
 export function getErrorLogs(limit = 100): RunLog[] {
-  return query<RunLog>(`SELECT * FROM run_logs WHERE level = 'error' ORDER BY created_at_ms DESC LIMIT ${limit}`);
+  return query<RunLog>(
+    `SELECT * FROM run_logs WHERE level IN ('error', 'warning') ORDER BY created_at_ms DESC LIMIT ${limit}`
+  );
 }
 
-export function getLogsByExecution(executionId: string, limit = 200): RunLog[] {
-  return query<RunLog>(`SELECT * FROM run_logs WHERE execution_id = '${executionId}' ORDER BY created_at_ms ASC LIMIT ${limit}`);
+export function getRunLogs(executionId: string, limit = 100): RunLog[] {
+  return query<RunLog>(
+    `SELECT * FROM run_logs WHERE execution_id = '${executionId}' ORDER BY created_at_ms DESC LIMIT ${limit}`
+  );
 }
 
 export function getRunStats(executionId: string): RunStats | null {
-  const messages = query<{ usage_json: string }>(
-    `SELECT usage_json FROM messages WHERE execution_id = '${executionId}' AND usage_json IS NOT NULL`
+  const messages = query<Message>(
+    `SELECT * FROM messages WHERE execution_id = '${executionId}'`
   );
 
-  let total_tokens = 0;
-  let prompt_tokens = 0;
-  let completion_tokens = 0;
+  const run = getRunById(executionId);
+  if (!run) { return null; }
+
+  let totalTokens = 0;
+  let promptTokens = 0;
+  let completionTokens = 0;
 
   for (const msg of messages) {
-    try {
-      const usage = JSON.parse(msg.usage_json);
-      total_tokens += usage.total_tokens || 0;
-      prompt_tokens += usage.prompt_tokens || 0;
-      completion_tokens += usage.completion_tokens || 0;
-    } catch {
-      // Skip invalid JSON
+    if (msg.usage_json) {
+      try {
+        const usage = JSON.parse(msg.usage_json);
+        totalTokens += usage.total_tokens || 0;
+        promptTokens += usage.prompt_tokens || 0;
+        completionTokens += usage.completion_tokens || 0;
+      } catch {
+        // Ignore parse errors
+      }
     }
   }
 
-  const run = getRunById(executionId);
-  const duration_ms = run && run.started_at_ms && run.completed_at_ms
-    ? run.completed_at_ms - run.started_at_ms
-    : 0;
+  const durationMs =
+    run.completed_at_ms && run.started_at_ms
+      ? run.completed_at_ms - run.started_at_ms
+      : 0;
 
-  const messageCountResult = queryOne<{ count: number }>(
-    `SELECT COUNT(*) as count FROM messages WHERE execution_id = '${executionId}'`
-  );
-
-  const toolCallCountResult = queryOne<{ count: number }>(
-    `SELECT COUNT(*) as count FROM messages WHERE execution_id = '${executionId}' AND type = 'tool-call'`
+  const toolCallCount = query<{ count: number }>(
+    `SELECT COUNT(*) as count FROM messages WHERE execution_id = '${executionId}' AND type = 'tool_call'`
   );
 
   return {
     execution_id: executionId,
-    total_tokens,
-    prompt_tokens,
-    completion_tokens,
-    duration_ms,
-    message_count: messageCountResult?.count || 0,
-    tool_call_count: toolCallCountResult?.count || 0,
+    total_tokens: totalTokens,
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    duration_ms: durationMs,
+    message_count: messages.length,
+    tool_call_count: toolCallCount[0]?.count || 0,
   };
 }
 
-export function getAggregateStats(): {
+export interface AggregateStats {
   total_runs: number;
   running_runs: number;
   completed_runs: number;
@@ -139,238 +146,247 @@ export function getAggregateStats(): {
   total_tokens: number;
   avg_duration_ms: number;
   total_errors: number;
-} {
-  const runStats = queryOne<{
-    total_runs: number;
-    running_runs: number;
-    completed_runs: number;
-    failed_runs: number;
-    cancelled_runs: number;
-  }>(`
-    SELECT 
-      COUNT(*) as total_runs,
-      SUM(CASE WHEN status = 'RUNNING' THEN 1 ELSE 0 END) as running_runs,
-      SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as completed_runs,
-      SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END) as failed_runs,
-      SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_runs
-    FROM runs
-  `) || { total_runs: 0, running_runs: 0, completed_runs: 0, failed_runs: 0, cancelled_runs: 0 };
+}
 
-  const errorCount = queryOne<{ count: number }>(
-    `SELECT COUNT(*) as count FROM run_logs WHERE level = 'error'`
+export function getAggregateStats(): AggregateStats {
+  const runs = query<Run>('SELECT * FROM runs');
+  const errors = query<{ count: number }>(
+    "SELECT COUNT(*) as count FROM run_logs WHERE level = 'error'"
   );
 
-  const recentRuns = getRuns(100);
   let totalTokens = 0;
   let totalDuration = 0;
-  let runsWithDuration = 0;
+  let completedWithDuration = 0;
 
-  for (const run of recentRuns) {
+  for (const run of runs) {
     const stats = getRunStats(run.execution_id);
     if (stats) {
       totalTokens += stats.total_tokens;
       if (stats.duration_ms > 0) {
         totalDuration += stats.duration_ms;
-        runsWithDuration++;
+        completedWithDuration++;
       }
     }
   }
 
   return {
-    total_runs: runStats.total_runs || 0,
-    running_runs: runStats.running_runs || 0,
-    completed_runs: runStats.completed_runs || 0,
-    failed_runs: runStats.failed_runs || 0,
-    cancelled_runs: runStats.cancelled_runs || 0,
+    total_runs: runs.length,
+    running_runs: runs.filter(r => r.status === 'RUNNING').length,
+    completed_runs: runs.filter(r => r.status === 'COMPLETED').length,
+    failed_runs: runs.filter(r => r.status === 'FAILED').length,
+    cancelled_runs: runs.filter(r => r.status === 'CANCELLED').length,
     total_tokens: totalTokens,
-    avg_duration_ms: runsWithDuration > 0 ? Math.round(totalDuration / runsWithDuration) : 0,
-    total_errors: errorCount?.count || 0,
+    avg_duration_ms: completedWithDuration > 0 ? Math.round(totalDuration / completedWithDuration) : 0,
+    total_errors: errors[0]?.count || 0,
   };
 }
 
-export function getTokenUsageByDay(days = 7): Array<{
+export interface DailyStats {
   date: string;
   total_tokens: number;
   prompt_tokens: number;
   completion_tokens: number;
   run_count: number;
-}> {
-  const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
-  const runs = query<{ execution_id: string; created_at_ms: number }>(
-    `SELECT execution_id, created_at_ms FROM runs WHERE created_at_ms > ${cutoffMs} ORDER BY created_at_ms DESC`
-  );
+}
 
-  const dailyStats = new Map<string, {
+export function getDailyStats(days = 7): DailyStats[] {
+  const result = query<{
+    date: string;
     total_tokens: number;
     prompt_tokens: number;
     completion_tokens: number;
     run_count: number;
-  }>();
-
-  for (const run of runs) {
-    const date = new Date(run.created_at_ms).toISOString().split('T')[0];
-    const stats = getRunStats(run.execution_id);
-    
-    if (!dailyStats.has(date)) {
-      dailyStats.set(date, { total_tokens: 0, prompt_tokens: 0, completion_tokens: 0, run_count: 0 });
-    }
-    
-    const dayStats = dailyStats.get(date)!;
-    dayStats.run_count++;
-    if (stats) {
-      dayStats.total_tokens += stats.total_tokens;
-      dayStats.prompt_tokens += stats.prompt_tokens;
-      dayStats.completion_tokens += stats.completion_tokens;
-    }
-  }
-
-  return Array.from(dailyStats.entries())
-    .map(([date, stats]) => ({ date, ...stats }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
-
-export function getStatusDistribution(): Array<{
-  status: string;
-  count: number;
-  percentage: number;
-}> {
-  const totalResult = queryOne<{ count: number }>('SELECT COUNT(*) as count FROM runs');
-  const total = totalResult?.count || 0;
-  
-  const distribution = query<{ status: string; count: number }>(`
-    SELECT status, COUNT(*) as count FROM runs GROUP BY status
+  }>(`
+    SELECT 
+      date(created_at_ms / 1000, 'unixepoch') as date,
+      0 as total_tokens,
+      0 as prompt_tokens,
+      0 as completion_tokens,
+      COUNT(*) as run_count
+    FROM runs
+    WHERE created_at_ms > (strftime('%s', 'now') - ${days * 86400}) * 1000
+    GROUP BY date
+    ORDER BY date ASC
   `);
 
-  return distribution.map(d => ({
-    status: d.status,
-    count: d.count,
-    percentage: total > 0 ? Math.round((d.count / total) * 100) : 0,
-  }));
+  // Enrich with token data from messages
+  return result.map(day => {
+    const dayRuns = query<Run>(
+      `SELECT * FROM runs WHERE date(created_at_ms / 1000, 'unixepoch') = '${day.date}'`
+    );
+
+    let totalTokens = 0;
+    let promptTokens = 0;
+    let completionTokens = 0;
+
+    for (const run of dayRuns) {
+      const stats = getRunStats(run.execution_id);
+      if (stats) {
+        totalTokens += stats.total_tokens;
+        promptTokens += stats.prompt_tokens;
+        completionTokens += stats.completion_tokens;
+      }
+    }
+
+    return {
+      date: day.date,
+      total_tokens: totalTokens,
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      run_count: day.run_count,
+    };
+  });
 }
 
-export function getTokenUsageByModel(): Array<{
+export interface ModelUsage {
   model: string;
   total_tokens: number;
   prompt_tokens: number;
   completion_tokens: number;
   message_count: number;
   run_count: number;
-}> {
-  // 从 messages 表中提取 usage_json 中的模型信息
-  // 同时从 metadata_json 中尝试获取模型信息
-  const messages = query<{
-    execution_id: string;
-    usage_json: string;
-    metadata_json: string | null;
-  }>(`
-    SELECT execution_id, usage_json, metadata_json
-    FROM messages 
-    WHERE usage_json IS NOT NULL 
-    AND json_extract(usage_json, '$.total_tokens') > 0
-  `);
-
-  const modelStats = new Map<string, {
-    total_tokens: number;
-    prompt_tokens: number;
-    completion_tokens: number;
-    message_count: number;
-    executions: Set<string>;
-  }>();
-
-  for (const msg of messages) {
-    try {
-      const usage = JSON.parse(msg.usage_json);
-      const total_tokens = usage.total_tokens || 0;
-      const prompt_tokens = usage.prompt_tokens || 0;
-      const completion_tokens = usage.completion_tokens || 0;
-
-      // 尝试从 metadata_json 中提取模型信息
-      let model = 'unknown';
-      if (msg.metadata_json) {
-        try {
-          const metadata = JSON.parse(msg.metadata_json);
-          // 尝试多种可能的模型字段
-          model = metadata.model || 
-                  metadata.model_id || 
-                  metadata.modelLabel ||
-                  'unknown';
-        } catch {
-          // 忽略解析错误
-        }
-      }
-
-      if (!modelStats.has(model)) {
-        modelStats.set(model, {
-          total_tokens: 0,
-          prompt_tokens: 0,
-          completion_tokens: 0,
-          message_count: 0,
-          executions: new Set(),
-        });
-      }
-
-      const stats = modelStats.get(model)!;
-      stats.total_tokens += total_tokens;
-      stats.prompt_tokens += prompt_tokens;
-      stats.completion_tokens += completion_tokens;
-      stats.message_count++;
-      stats.executions.add(msg.execution_id);
-    } catch {
-      // 忽略解析错误
-    }
-  }
-
-  return Array.from(modelStats.entries())
-    .map(([model, stats]) => ({
-      model,
-      total_tokens: stats.total_tokens,
-      prompt_tokens: stats.prompt_tokens,
-      completion_tokens: stats.completion_tokens,
-      message_count: stats.message_count,
-      run_count: stats.executions.size,
-    }))
-    .sort((a, b) => b.total_tokens - a.total_tokens);
 }
 
-export function getTokenUsageByExecution(): Array<{
+export function getLogsByExecution(executionId: string, limit = 200): RunLog[] {
+  return query<RunLog>(
+    `SELECT * FROM run_logs WHERE execution_id = '${executionId}' ORDER BY created_at_ms DESC LIMIT ${limit}`
+  );
+}
+
+export interface TokenUsageByDay {
+  date: string;
+  total_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  run_count: number;
+}
+
+export function getTokenUsageByDay(days = 7): TokenUsageByDay[] {
+  return query<TokenUsageByDay>(`
+    SELECT 
+      date(created_at_ms / 1000, 'unixepoch') as date,
+      0 as total_tokens,
+      0 as prompt_tokens,
+      0 as completion_tokens,
+      COUNT(*) as run_count
+    FROM runs
+    WHERE created_at_ms > (strftime('%s', 'now') - ${days * 86400}) * 1000
+    GROUP BY date
+    ORDER BY date ASC
+  `);
+}
+
+export interface StatusDistribution {
+  status: string;
+  count: number;
+}
+
+export function getStatusDistribution(): StatusDistribution[] {
+  return query<StatusDistribution>(`
+    SELECT status, COUNT(*) as count
+    FROM runs
+    GROUP BY status
+  `);
+}
+
+export interface TokenUsageByModel {
+  model: string;
+  total_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  message_count: number;
+  run_count: number;
+}
+
+export function getTokenUsageByModel(): TokenUsageByModel[] {
+  return getModelUsage();
+}
+
+export interface TokenUsageByExecution {
   execution_id: string;
   total_tokens: number;
   prompt_tokens: number;
   completion_tokens: number;
   message_count: number;
-  status: string;
-  created_at_ms: number;
-}> {
-  const runs = query<Run>('SELECT execution_id, status, created_at_ms FROM runs ORDER BY created_at_ms DESC LIMIT 100');
-  
-  return runs.map(run => {
-    const messages = query<{ usage_json: string }>(
-      `SELECT usage_json FROM messages WHERE execution_id = '${run.execution_id}' AND usage_json IS NOT NULL`
-    );
+}
 
-    let total_tokens = 0;
-    let prompt_tokens = 0;
-    let completion_tokens = 0;
+export function getTokenUsageByExecution(): TokenUsageByExecution[] {
+  const messages = query<Message>(
+    "SELECT * FROM messages WHERE role = 'assistant' AND usage_json IS NOT NULL"
+  );
 
-    for (const msg of messages) {
-      try {
-        const usage = JSON.parse(msg.usage_json);
-        total_tokens += usage.total_tokens || 0;
-        prompt_tokens += usage.prompt_tokens || 0;
-        completion_tokens += usage.completion_tokens || 0;
-      } catch {
-        // 忽略解析错误
+  const execMap = new Map<string, TokenUsageByExecution>();
+
+  for (const msg of messages) {
+    if (!msg.usage_json) { continue; }
+    try {
+      const usage = JSON.parse(msg.usage_json);
+      if (!execMap.has(msg.execution_id)) {
+        execMap.set(msg.execution_id, {
+          execution_id: msg.execution_id,
+          total_tokens: 0,
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          message_count: 0,
+        });
       }
-    }
+      const entry = execMap.get(msg.execution_id)!;
+      entry.total_tokens += usage.total_tokens || 0;
+      entry.prompt_tokens += usage.prompt_tokens || 0;
+      entry.completion_tokens += usage.completion_tokens || 0;
+      entry.message_count += 1;
+    } catch { /* ignore */ }
+  }
 
-    return {
-      execution_id: run.execution_id,
-      total_tokens,
-      prompt_tokens,
-      completion_tokens,
-      message_count: messages.length,
-      status: run.status,
-      created_at_ms: run.created_at_ms,
-    };
-  }).filter(r => r.total_tokens > 0);
+  return Array.from(execMap.values()).sort((a, b) => b.total_tokens - a.total_tokens);
+}
+
+export function getModelUsage(): ModelUsage[] {
+  // Model info is in metadata_json.modelLabel, token counts in usage_json
+  const rows = query<{
+    model: string;
+    usage_json: string;
+    execution_id: string;
+  }>(
+    "SELECT json_extract(metadata_json, '$.modelLabel') as model, usage_json, execution_id FROM messages WHERE role = 'assistant' AND usage_json IS NOT NULL AND metadata_json IS NOT NULL"
+  );
+
+  const modelMap = new Map<string, ModelUsage>();
+  const modelRuns = new Map<string, Set<string>>();
+
+  for (const row of rows) {
+    const model = row.model || 'unknown';
+
+    try {
+      const usage = JSON.parse(row.usage_json);
+
+      if (!modelMap.has(model)) {
+        modelMap.set(model, {
+          model,
+          total_tokens: 0,
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          message_count: 0,
+          run_count: 0,
+        });
+        modelRuns.set(model, new Set());
+      }
+
+      const entry = modelMap.get(model)!;
+      entry.total_tokens += usage.total_tokens || 0;
+      entry.prompt_tokens += usage.prompt_tokens || 0;
+      entry.completion_tokens += usage.completion_tokens || 0;
+      entry.message_count += 1;
+      modelRuns.get(model)!.add(row.execution_id);
+    } catch {
+      // Ignore parse errors
+    }
+  }
+
+  // Set run counts
+  for (const [model, entry] of Array.from(modelMap.entries())) {
+    entry.run_count = modelRuns.get(model)?.size || 0;
+  }
+
+  return Array.from(modelMap.values()).sort((a, b) => b.total_tokens - a.total_tokens);
 }

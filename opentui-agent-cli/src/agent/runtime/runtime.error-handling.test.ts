@@ -9,7 +9,7 @@ vi.mock('./source-modules', () => ({
   resolveWorkspaceRoot: vi.fn(),
 }));
 
-vi.mock('../../../../src/agent-v4/prompts/system', () => ({
+vi.mock('../../../../src/agent/prompts/system', () => ({
   buildSystemPrompt: vi.fn(() => 'Test system prompt'),
 }));
 
@@ -95,6 +95,7 @@ describe('runAgentPrompt error handling', () => {
           createFromEnv: () => ({}),
         },
         loadEnvFiles: vi.fn().mockResolvedValue([]),
+    loadConfigToEnv: vi.fn().mockReturnValue([]),
         createLoggerFromEnv,
         createAgentLoggerAdapter: vi.fn(() => ({
           info: vi.fn(),

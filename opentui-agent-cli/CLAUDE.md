@@ -77,9 +77,9 @@ bun test --watch src/path/to/test.ts   # Run tests in watch mode
 
 ### External Dependencies
 
-The agent runtime imports from `../../../../src/agent-v4/` for:
+The agent runtime imports from `../../../../src/agent/` for:
 
 - System prompt building
 - Core agent implementation (StatelessAgent, tool managers, etc.)
 
-This indicates a monorepo structure where `agent-v4` is a sibling package providing the backend agent logic.
+This indicates a monorepo structure where `agent` is a sibling package providing the backend agent logic.

@@ -1,7 +1,8 @@
 'use client';
 
 import { formatDistanceToNow } from 'date-fns';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import { useState } from 'react';
 
 interface ErrorLog {
   id: number;
@@ -17,26 +18,36 @@ interface ErrorLog {
 
 interface ErrorListProps {
   errors: ErrorLog[];
-  onDismiss?: (id: number) => void;
 }
 
-export function ErrorList({ errors, onDismiss }: ErrorListProps) {
+export function ErrorList({ errors }: ErrorListProps) {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
   if (errors.length === 0) {
     return (
-      <div className="card">
-        <h2 className="text-lg font-semibold mb-4">Recent Errors</h2>
-        <div className="text-center py-8 text-muted-foreground">
-          <AlertTriangle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-          <p>No errors found</p>
+      <div className="card animate-fade-in">
+        <div className="panel-header">
+          <h2 className="text-sm font-semibold text-foreground">Recent Errors</h2>
+        </div>
+        <div className="panel-body">
+          <div className="text-center py-8 text-muted-foreground">
+            <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-muted mb-3">
+              <AlertTriangle className="w-5 h-5 text-muted-foreground/50" />
+            </div>
+            <p className="text-sm">No errors found</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="card">
-      <h2 className="text-lg font-semibold mb-4">Recent Errors</h2>
-      <div className="space-y-3">
+    <div className="card animate-fade-in">
+      <div className="panel-header">
+        <h2 className="text-sm font-semibold text-foreground">Recent Errors</h2>
+        <span className="text-xs text-muted-foreground">{errors.length} entries</span>
+      </div>
+      <div className="divide-y divide-border">
         {errors.map(error => {
           let errorData = null;
           if (error.error_json) {
@@ -47,47 +58,60 @@ export function ErrorList({ errors, onDismiss }: ErrorListProps) {
             }
           }
 
+          const isExpanded = expandedId === error.id;
+
           return (
-            <div key={error.id} className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-              <div className="flex items-start justify-between gap-4">
+            <div 
+              key={error.id} 
+              className="p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+              onClick={() => setExpandedId(isExpanded ? null : error.id)}
+            >
+              <div className="flex items-start gap-2">
+                <div className="mt-0.5 flex-shrink-0">
+                  {isExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  )}
+                </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                    <span className="text-sm font-medium text-red-400">
+                  <div className="flex items-center gap-2 mb-1">
+                    <AlertTriangle className="w-3.5 h-3.5 text-destructive flex-shrink-0" />
+                    <span className="text-sm font-medium text-destructive truncate">
                       {error.code || error.message}
                     </span>
                   </div>
-                  <div className="text-xs text-muted-foreground space-y-1">
+                  <div className="text-xs text-muted-foreground space-y-0.5">
                     <p>
-                      <span className="font-mono">{error.execution_id}</span>
-                      {error.step_index !== null && <span> • Step {error.step_index}</span>}
+                      <span className="text-muted-foreground/70">Exec:</span>{' '}
+                      <code className="font-mono">{error.execution_id.slice(0, 12)}...</code>
+                      {error.step_index !== null && (
+                        <>
+                          {' '}
+                          <span className="text-muted-foreground/70 ml-1">Step:</span> {error.step_index}
+                        </>
+                      )}
                     </p>
                     <p>
-                      Source: {error.source} •{' '}
-                      {formatDistanceToNow(error.created_at_ms, {
-                        addSuffix: true,
-                      })}
+                      <span className="text-muted-foreground/70">Source:</span> {error.source}{' '}
+                      <span className="text-muted-foreground/70 ml-2">Time:</span>{' '}
+                      {formatDistanceToNow(new Date(error.created_at_ms), { addSuffix: true })}
                     </p>
                   </div>
-                  {errorData?.stack && (
-                    <details className="mt-2">
-                      <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                        Show stack trace
-                      </summary>
-                      <pre className="mt-2 p-2 bg-black/30 rounded text-xs overflow-x-auto text-red-300">
-                        {errorData.stack}
-                      </pre>
-                    </details>
+
+                  {isExpanded && (
+                    <div className="mt-3 p-3 bg-muted rounded-lg border border-border">
+                      <p className="text-sm text-foreground mb-2">
+                        {error.message}
+                      </p>
+                      {errorData && (
+                        <pre className="text-xs text-muted-foreground overflow-x-auto font-mono bg-background p-2 rounded border border-border">
+                          {JSON.stringify(errorData, null, 2)}
+                        </pre>
+                      )}
+                    </div>
                   )}
                 </div>
-                {onDismiss && (
-                  <button
-                    onClick={() => onDismiss(error.id)}
-                    className="p-1 hover:bg-red-500/20 rounded transition-colors"
-                  >
-                    <X className="w-4 h-4 text-red-400" />
-                  </button>
-                )}
               </div>
             </div>
           );

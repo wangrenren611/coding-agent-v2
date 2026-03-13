@@ -7,7 +7,7 @@ import { TokenUsageChart } from '@/components/TokenUsageChart';
 import { ModelUsageTable } from '@/components/ModelUsageTable';
 import { ErrorList } from '@/components/ErrorList';
 import { RunDetail } from '@/components/RunDetail';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Activity } from 'lucide-react';
 
 interface AggregateStats {
   total_runs: number;
@@ -71,25 +71,25 @@ export default function Dashboard() {
 
   async function fetchData() {
     try {
-      const [statsRes, runsRes, dailyRes, errorsRes, modelsRes] = await Promise.all([
+      const [statsRes, runsRes, dailyRes, errorsRes, modelRes] = await Promise.all([
         fetch('/api/stats'),
         fetch('/api/runs?limit=50'),
-        fetch('/api/stats?type=daily&days=7'),
+        fetch('/api/stats?type=daily'),
         fetch('/api/errors?limit=10'),
-        fetch('/api/models'),
+        fetch('/api/stats?type=models'),
       ]);
 
       const statsData = await statsRes.json();
       const runsData = await runsRes.json();
       const dailyData = await dailyRes.json();
       const errorsData = await errorsRes.json();
-      const modelsData = await modelsRes.json();
+      const modelData = await modelRes.json();
 
-      setStats(statsData.aggregate || null);
-      setRuns(runsData.runs || []);
-      setDailyUsage(dailyData.daily || []);
-      setErrors(errorsData.logs || []);
-      setModelUsage(modelsData.byModel || []);
+      setStats(statsData.stats);
+      setRuns(runsData.runs);
+      setDailyUsage(dailyData.daily_stats);
+      setErrors(errorsData.errors);
+      setModelUsage(modelData.model_usage);
       setLastRefresh(new Date());
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -100,69 +100,94 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 30000); // Refresh every 30 seconds
+    const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
-          <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
-          <p className="text-muted-foreground">Loading dashboard...</p>
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-4">
+            <Activity className="w-6 h-6 text-primary animate-pulse" />
+          </div>
+          <p className="text-sm text-muted-foreground font-medium">
+            Loading dashboard...
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Agent Monitor</h1>
-            <p className="text-muted-foreground mt-1">
-              Agent DB Dashboard • Last refreshed: {lastRefresh.toLocaleTimeString()}
-            </p>
+      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="max-w-[1600px] mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10">
+                <Activity className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-lg font-semibold tracking-tight text-foreground">
+                  Agent Monitor
+                </h1>
+                <p className="text-xs text-muted-foreground hidden sm:block">
+                  Database runs, errors & statistics
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground hidden md:block">
+                Last sync: {lastRefresh.toLocaleTimeString('en-US', { hour12: false })}
+              </span>
+              <button onClick={fetchData} className="btn-secondary text-sm">
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
+            </div>
           </div>
-          <button
-            onClick={fetchData}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="space-y-6">
-        {/* Stats Overview */}
+      <main className="max-w-[1600px] mx-auto px-6 py-6 space-y-6">
+        {/* Stats Row */}
         {stats && <StatCards stats={stats} />}
 
-        {/* Token Usage Chart */}
-        {dailyUsage && dailyUsage.length > 0 && <TokenUsageChart data={dailyUsage} />}
+        {/* Charts Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <TokenUsageChart data={dailyUsage} />
+          <ModelUsageTable data={modelUsage} />
+        </div>
 
-        {/* Model Usage Statistics */}
-        {modelUsage && modelUsage.length > 0 && <ModelUsageTable data={modelUsage} />}
-
-        {/* Two Column Layout */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Run Table - Takes 2 columns */}
-          <div className="lg:col-span-2">
+        {/* Table and Errors Row */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="xl:col-span-2">
             <RunTable runs={runs} onSelectRun={setSelectedRun} />
           </div>
-
-          {/* Error List - Takes 1 column */}
           <div>
             <ErrorList errors={errors} />
           </div>
         </div>
       </main>
 
+      {/* Footer */}
+      <footer className="border-t border-border mt-8">
+        <div className="max-w-[1600px] mx-auto px-6 py-4">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Agent Monitor</span>
+            <span>Auto-refresh: 30s</span>
+          </div>
+        </div>
+      </footer>
+
       {/* Run Detail Modal */}
-      {selectedRun && <RunDetail executionId={selectedRun} onClose={() => setSelectedRun(null)} />}
+      {selectedRun && (
+        <RunDetail executionId={selectedRun} onClose={() => setSelectedRun(null)} />
+      )}
     </div>
   );
 }

@@ -12,8 +12,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ logs });
     }
 
-    const logs = getErrorLogs(limit);
-    return NextResponse.json({ logs });
+    const errors = getErrorLogs(limit);
+    return NextResponse.json({ errors });
   } catch (error) {
     console.error('Error fetching errors:', error);
     return NextResponse.json({ error: 'Failed to fetch errors' }, { status: 500 });
