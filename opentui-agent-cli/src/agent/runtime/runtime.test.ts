@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./tool-confirmation', () => ({
@@ -141,12 +142,17 @@ describe('runtime', () => {
     typeof vi.fn
   >;
   const originalApiKey = process.env.TEST_API_KEY;
-  const originalAgentDbPath = process.env.AGENT_DB_PATH;
+  const originalRenxHome = process.env.RENX_HOME;
+  const originalPromptCacheKey = process.env.AGENT_PROMPT_CACHE_KEY;
+  const originalPromptCacheRetention = process.env.AGENT_PROMPT_CACHE_RETENTION;
+  const renxHome = path.join(process.cwd(), '.tmp-renx-home');
 
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.TEST_API_KEY = 'test-key';
-    process.env.AGENT_DB_PATH = './test-agent.db';
+    process.env.RENX_HOME = renxHome;
+    delete process.env.AGENT_PROMPT_CACHE_KEY;
+    delete process.env.AGENT_PROMPT_CACHE_RETENTION;
     mockResolveWorkspaceRoot.mockReturnValue('/test/workspace');
     mockGetSourceModules.mockResolvedValue(buildMockModules());
   });
@@ -158,10 +164,20 @@ describe('runtime', () => {
     } else {
       process.env.TEST_API_KEY = originalApiKey;
     }
-    if (originalAgentDbPath === undefined) {
-      delete process.env.AGENT_DB_PATH;
+    if (originalRenxHome === undefined) {
+      delete process.env.RENX_HOME;
     } else {
-      process.env.AGENT_DB_PATH = originalAgentDbPath;
+      process.env.RENX_HOME = originalRenxHome;
+    }
+    if (originalPromptCacheKey === undefined) {
+      delete process.env.AGENT_PROMPT_CACHE_KEY;
+    } else {
+      process.env.AGENT_PROMPT_CACHE_KEY = originalPromptCacheKey;
+    }
+    if (originalPromptCacheRetention === undefined) {
+      delete process.env.AGENT_PROMPT_CACHE_RETENTION;
+    } else {
+      process.env.AGENT_PROMPT_CACHE_RETENTION = originalPromptCacheRetention;
     }
   });
 
@@ -221,7 +237,7 @@ describe('runtime', () => {
     );
   });
 
-  it('uses AGENT_DB_PATH when configured', async () => {
+  it('stores app state under RENX_HOME by default', async () => {
     const modules = buildMockModules();
     const appStoreClass = modules.createSqliteAgentAppStore('/ignore').constructor as {
       lastDbPath?: string;
@@ -229,36 +245,11 @@ describe('runtime', () => {
     mockGetSourceModules.mockResolvedValue(
       modules as unknown as Awaited<ReturnType<typeof sourceModules.getSourceModules>>
     );
-    process.env.AGENT_DB_PATH = './from-agent-db-path.db';
 
     await disposeAgentRuntime();
     await runAgentPrompt('Test prompt', {});
 
-    expect(appStoreClass.lastDbPath).toBe('/test/workspace/from-agent-db-path.db');
-  });
-
-  it('fails fast when no database path env is configured', async () => {
-    delete process.env.AGENT_DB_PATH;
-
-    await disposeAgentRuntime();
-
-    await expect(runAgentPrompt('Test prompt', {})).rejects.toThrow(
-      'Missing AGENT_DB_PATH for SQLite storage.'
-    );
-  });
-
-  it('rejects Windows absolute database paths on non-Windows platforms', async () => {
-    if (process.platform === 'win32') {
-      return;
-    }
-
-    process.env.AGENT_DB_PATH = 'C:/Users/Administrator/.renx/data.db';
-
-    await disposeAgentRuntime();
-
-    await expect(runAgentPrompt('Test prompt', {})).rejects.toThrow(
-      'Use AGENT_DB_PATH with a native absolute path.'
-    );
+    expect(appStoreClass.lastDbPath).toBe(path.join(renxHome, 'data.db'));
   });
 
   it('hides file history tools from the parent agent tool list', async () => {
@@ -279,5 +270,24 @@ describe('runtime', () => {
     expect(toolNames).toContain('file_edit');
     expect(toolNames).not.toContain('file_history_list');
     expect(toolNames).not.toContain('file_history_restore');
+  });
+
+  it('forwards prompt cache config from env to the app request', async () => {
+    const modules = buildMockModules();
+    const appServiceClass = modules.AgentAppService as {
+      lastRequest?: { config?: Record<string, unknown> };
+    };
+    mockGetSourceModules.mockResolvedValue(
+      modules as unknown as Awaited<ReturnType<typeof sourceModules.getSourceModules>>
+    );
+    process.env.AGENT_PROMPT_CACHE_KEY = 'cache-{conversationId}';
+    process.env.AGENT_PROMPT_CACHE_RETENTION = '24h';
+
+    await runAgentPrompt('Test prompt', {});
+
+    expect(appServiceClass.lastRequest?.config).toEqual({
+      prompt_cache_key: expect.stringMatching(/^cache-opentui-/),
+      prompt_cache_retention: '24h',
+    });
   });
 });

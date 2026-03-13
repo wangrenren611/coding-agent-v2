@@ -140,11 +140,7 @@ function parseConfirmationMode(
   }
 
   const normalized = raw.trim().toLowerCase().replace(/_/g, '-');
-  if (
-    normalized === 'manual' ||
-    normalized === 'auto-approve' ||
-    normalized === 'auto-deny'
-  ) {
+  if (normalized === 'manual' || normalized === 'auto-approve' || normalized === 'auto-deny') {
     return normalized;
   }
   return null;

@@ -64,7 +64,10 @@ describe('runtime config from env', () => {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'config-test-'));
     tempDirs.push(tmpDir);
 
-    await fs.writeFile(path.join(tmpDir, '.env'), 'AGENT_LOG_LEVEL=debug\nRENX_HOME=./custom-home\n');
+    await fs.writeFile(
+      path.join(tmpDir, '.env'),
+      'AGENT_LOG_LEVEL=debug\nRENX_HOME=./custom-home\n'
+    );
 
     const loaded = await loadEnvFiles(tmpDir, { files: ['.env'], override: true });
     expect(loaded).toHaveLength(1);
