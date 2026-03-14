@@ -1,6 +1,6 @@
 {
   "name": "@renxqoo/renx-code",
-  "version": "0.0.14",
+  "version": "0.0.18",
   "description": "Renx Code terminal AI coding assistant",
   "module": "src/index.tsx",
   "type": "module",

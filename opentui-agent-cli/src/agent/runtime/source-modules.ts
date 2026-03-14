@@ -1,6 +1,29 @@
-import { existsSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { resolve } from 'node:path';
+
+import * as appMod from '../../../../src/agent/app/index.ts';
+import * as agentV4Mod from '../../../../src/agent/agent/index.ts';
+import * as agentLoggerMod from '../../../../src/agent/agent/logger.ts';
+import * as bashToolMod from '../../../../src/agent/tool/bash.ts';
+import * as fileEditToolMod from '../../../../src/agent/tool/file-edit-tool.ts';
+import * as fileHistoryListToolMod from '../../../../src/agent/tool/file-history-list.ts';
+import * as fileHistoryRestoreToolMod from '../../../../src/agent/tool/file-history-restore.ts';
+import * as fileReadToolMod from '../../../../src/agent/tool/file-read-tool.ts';
+import * as globToolMod from '../../../../src/agent/tool/glob.ts';
+import * as grepToolMod from '../../../../src/agent/tool/grep.ts';
+import * as skillToolMod from '../../../../src/agent/tool/skill-tool.ts';
+import * as taskCreateToolMod from '../../../../src/agent/tool/task-create.ts';
+import * as taskGetToolMod from '../../../../src/agent/tool/task-get.ts';
+import * as taskListToolMod from '../../../../src/agent/tool/task-list.ts';
+import * as taskOutputToolMod from '../../../../src/agent/tool/task-output.ts';
+import * as taskRunnerAdapterMod from '../../../../src/agent/tool/task-runner-adapter.ts';
+import * as taskStopToolMod from '../../../../src/agent/tool/task-stop.ts';
+import * as taskStoreMod from '../../../../src/agent/tool/task-store.ts';
+import * as taskToolMod from '../../../../src/agent/tool/task.ts';
+import * as taskUpdateToolMod from '../../../../src/agent/tool/task-update.ts';
+import * as toolManagerMod from '../../../../src/agent/tool/tool-manager.ts';
+import * as writeToolMod from '../../../../src/agent/tool/write-file.ts';
+import * as configMod from '../../../../src/config/index.ts';
+import * as providerMod from '../../../../src/providers/index.ts';
 
 import type { MessageContent } from '../../types/message-content';
 
@@ -198,38 +221,12 @@ export type SourceModules = {
 
 let modulesPromise: Promise<SourceModules> | null = null;
 
-const moduleDir = dirname(fileURLToPath(import.meta.url));
-const embeddedRepoRoot = resolve(moduleDir, '../../_embedded_root');
-const requiredSourceModulePaths = [
-  'src/providers/index.ts',
-  'src/config/index.ts',
-  'src/agent/app/index.ts',
-] as const;
-
-const hasRequiredSourceModules = (root: string) =>
-  requiredSourceModulePaths.every(relativePath => existsSync(resolve(root, relativePath)));
-
 export const resolveRepoRoot = () => {
-  const cwd = process.cwd();
   const explicit = process.env.AGENT_REPO_ROOT?.trim();
-  const candidates = [
-    explicit ? resolve(explicit) : null,
-    embeddedRepoRoot,
-    resolve(moduleDir, '../../../../'),
-    resolve(moduleDir, '../../..'),
-    resolve(cwd),
-    resolve(cwd, '..'),
-  ].filter((candidate): candidate is string => Boolean(candidate));
-
-  for (const candidate of new Set(candidates)) {
-    if (hasRequiredSourceModules(candidate)) {
-      return candidate;
-    }
+  if (explicit) {
+    return resolve(explicit);
   }
-
-  throw new Error(
-    `Unable to resolve agent source repo root from ${cwd}. Set AGENT_REPO_ROOT to override.`
-  );
+  return resolve(process.cwd());
 };
 
 export const resolveWorkspaceRoot = () => {
@@ -239,8 +236,6 @@ export const resolveWorkspaceRoot = () => {
   }
   return resolve(process.cwd());
 };
-
-const toModuleUrl = (path: string) => pathToFileURL(path).href;
 
 const getRequiredExport = <T>(moduleObj: Record<string, unknown>, name: string): T => {
   const value = moduleObj[name];
@@ -252,58 +247,6 @@ const getRequiredExport = <T>(moduleObj: Record<string, unknown>, name: string):
 
 const loadSourceModules = async (): Promise<SourceModules> => {
   const repoRoot = resolveRepoRoot();
-
-  const [
-    providerMod,
-    configMod,
-    appMod,
-    agentV4Mod,
-    agentLoggerMod,
-    toolManagerMod,
-    bashToolMod,
-    writeToolMod,
-    fileReadToolMod,
-    fileEditToolMod,
-    fileHistoryListToolMod,
-    fileHistoryRestoreToolMod,
-    globToolMod,
-    grepToolMod,
-    skillToolMod,
-    taskToolMod,
-    taskCreateToolMod,
-    taskGetToolMod,
-    taskListToolMod,
-    taskUpdateToolMod,
-    taskStopToolMod,
-    taskOutputToolMod,
-    taskStoreMod,
-    taskRunnerAdapterMod,
-  ] = await Promise.all([
-    import(toModuleUrl(resolve(repoRoot, 'src/providers/index.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/config/index.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/app/index.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/agent/index.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/agent/logger.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/tool-manager.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/bash.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/write-file.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/file-read-tool.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/file-edit-tool.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/file-history-list.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/file-history-restore.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/glob.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/grep.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/skill-tool.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/task.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/task-create.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/task-get.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/task-list.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/task-update.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/task-stop.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/task-output.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/task-store.ts'))),
-    import(toModuleUrl(resolve(repoRoot, 'src/agent/tool/task-runner-adapter.ts'))),
-  ]);
 
   return {
     repoRoot,

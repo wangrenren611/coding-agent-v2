@@ -1,10 +1,13 @@
 type CliArgsResult = {
   ok: boolean;
   error?: string;
+  shouldExit?: boolean;
+  output?: string;
 };
 
 const CONVERSATION_ID_FLAGS = new Set(['--conversationId', '--conversation-id']);
 const SESSION_ID_FLAGS = new Set(['--sessionId', '--session-id']);
+const VERSION_FLAGS = new Set(['-v', '--version']);
 
 const readFlagValue = (argv: string[], index: number): string | null => {
   const inline = argv[index]?.split('=', 2)[1];
@@ -22,8 +25,17 @@ const readFlagValue = (argv: string[], index: number): string | null => {
 
 export const applyCliArgsToEnv = (
   argv: string[] = process.argv.slice(2),
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  version = env.RENX_VERSION ?? '0.0.0'
 ): CliArgsResult => {
+  if (argv.some((token) => VERSION_FLAGS.has(token))) {
+    return {
+      ok: true,
+      shouldExit: true,
+      output: version,
+    };
+  }
+
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (!token) {

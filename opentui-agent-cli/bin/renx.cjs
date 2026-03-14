@@ -6,6 +6,15 @@ const path = require("node:path");
 
 const packageRoot = path.resolve(__dirname, "..");
 const binaryName = process.platform === "win32" ? "renx.exe" : "renx";
+const packageJson = JSON.parse(
+  fs.readFileSync(path.join(packageRoot, "package.json"), "utf8")
+);
+const cliArgs = process.argv.slice(2);
+
+if (cliArgs.includes("-v") || cliArgs.includes("--version")) {
+  console.log(packageJson.version || "0.0.0");
+  process.exit(0);
+}
 
 function run(target, args, env = process.env) {
   const result = childProcess.spawnSync(target, args, {
@@ -61,7 +70,10 @@ const binaryCandidates = [
 
 for (const candidate of binaryCandidates) {
   if (fs.existsSync(candidate)) {
-    run(candidate, process.argv.slice(2));
+    run(candidate, cliArgs, {
+      ...process.env,
+      RENX_VERSION: process.env.RENX_VERSION || packageJson.version || "0.0.0",
+    });
   }
 }
 
@@ -79,8 +91,9 @@ if (fs.existsSync(sourceEntry)) {
   const bunExecutable = resolveBunExecutable();
 
   if (bunExecutable) {
-    run(bunExecutable, ["run", sourceEntry, ...process.argv.slice(2)], {
+    run(bunExecutable, ["run", sourceEntry, ...cliArgs], {
       ...process.env,
+      RENX_VERSION: process.env.RENX_VERSION || packageJson.version || "0.0.0",
       AGENT_WORKDIR: process.env.AGENT_WORKDIR || process.cwd(),
       ...(resolvedRepoRoot ? { AGENT_REPO_ROOT: resolvedRepoRoot } : {}),
     });

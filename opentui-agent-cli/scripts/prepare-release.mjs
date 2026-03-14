@@ -62,6 +62,7 @@ const result = await Bun.build({
   },
   define: {
     OTUI_TREE_SITTER_WORKER_PATH: JSON.stringify(bunfsRoot + workerRelativePath),
+    RENX_BUILD_VERSION: JSON.stringify(packageJson.version ?? "0.0.0"),
   },
 });
 
