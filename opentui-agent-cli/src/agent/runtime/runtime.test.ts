@@ -25,7 +25,9 @@ import {
 import * as sourceModules from './source-modules';
 import type { AgentEventHandlers } from './types';
 
-const buildMockModules = () => {
+const buildMockModules = (
+  overrides?: Partial<Awaited<ReturnType<typeof sourceModules.getSourceModules>>>
+) => {
   class FakeToolManager {
     private readonly tools: unknown[] = [];
 
@@ -131,6 +133,7 @@ const buildMockModules = () => {
     TaskOutputTool: createNamedTool('task_output'),
     TaskStore: class {},
     RealSubagentRunnerAdapter: class {},
+    ...overrides,
   };
 };
 
@@ -143,6 +146,7 @@ describe('runtime', () => {
   >;
   const originalApiKey = process.env.TEST_API_KEY;
   const originalRenxHome = process.env.RENX_HOME;
+  const originalAgentModel = process.env.AGENT_MODEL;
   const originalPromptCacheKey = process.env.AGENT_PROMPT_CACHE_KEY;
   const originalPromptCacheRetention = process.env.AGENT_PROMPT_CACHE_RETENTION;
   const renxHome = path.join(process.cwd(), '.tmp-renx-home');
@@ -151,6 +155,7 @@ describe('runtime', () => {
     vi.clearAllMocks();
     process.env.TEST_API_KEY = 'test-key';
     process.env.RENX_HOME = renxHome;
+    delete process.env.AGENT_MODEL;
     delete process.env.AGENT_PROMPT_CACHE_KEY;
     delete process.env.AGENT_PROMPT_CACHE_RETENTION;
     mockResolveWorkspaceRoot.mockReturnValue('/test/workspace');
@@ -168,6 +173,11 @@ describe('runtime', () => {
       delete process.env.RENX_HOME;
     } else {
       process.env.RENX_HOME = originalRenxHome;
+    }
+    if (originalAgentModel === undefined) {
+      delete process.env.AGENT_MODEL;
+    } else {
+      process.env.AGENT_MODEL = originalAgentModel;
     }
     if (originalPromptCacheKey === undefined) {
       delete process.env.AGENT_PROMPT_CACHE_KEY;
@@ -187,6 +197,31 @@ describe('runtime', () => {
 
   it('returns the active model id', async () => {
     await expect(getAgentModelId()).resolves.toBe('glm-5');
+  });
+
+  it('uses AGENT_MODEL loaded from config before runtime initialization', async () => {
+    const modules = buildMockModules({
+      ProviderRegistry: {
+        getModelIds: () => ['glm-5', 'gpt-5.3-my'],
+        getModelConfig: (modelId: string) => ({
+          name: modelId === 'gpt-5.3-my' ? 'GPT-5.3-my' : 'GLM-5',
+          envApiKey: 'TEST_API_KEY',
+          provider: modelId === 'gpt-5.3-my' ? 'openai' : 'zhipu',
+          model: modelId,
+        }),
+        createFromEnv: () => ({}),
+      },
+      loadConfigToEnv: vi.fn(() => {
+        process.env.AGENT_MODEL = 'gpt-5.3-my';
+        return ['C:\\Users\\Administrator\\.renx\\config.json'];
+      }),
+    });
+    mockGetSourceModules.mockResolvedValue(
+      modules as unknown as Awaited<ReturnType<typeof sourceModules.getSourceModules>>
+    );
+
+    await expect(getAgentModelId()).resolves.toBe('gpt-5.3-my');
+    await expect(getAgentModelLabel()).resolves.toBe('GPT-5.3-my');
   });
 
   it('lists models with current selection', async () => {

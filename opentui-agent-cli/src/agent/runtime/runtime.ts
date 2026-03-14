@@ -64,6 +64,11 @@ const readPreferredModelIdFromEnv = (): string | undefined => {
 
 let preferredModelId = readPreferredModelIdFromEnv();
 
+const syncPreferredModelIdFromEnv = (): string | undefined => {
+  preferredModelId = readPreferredModelIdFromEnv();
+  return preferredModelId;
+};
+
 const DEFAULT_MODEL = 'qwen3.5-plus';
 const DEFAULT_MAX_STEPS = 10000;
 const DEFAULT_MAX_RETRY_COUNT = 10;
@@ -339,11 +344,16 @@ const extractAssistantText = (result: AgentAppRunResultLike): string => {
   return '';
 };
 
+const prepareRuntimeEnvironment = async (modules: SourceModules, workspaceRoot: string) => {
+  await modules.loadEnvFiles(workspaceRoot);
+  modules.loadConfigToEnv({ projectRoot: workspaceRoot });
+  syncPreferredModelIdFromEnv();
+};
+
 const createRuntime = async (): Promise<RuntimeCore> => {
   const modules = await getSourceModules();
   const workspaceRoot = resolveWorkspaceRoot();
-  await modules.loadEnvFiles(workspaceRoot);
-  modules.loadConfigToEnv({ projectRoot: workspaceRoot });
+  await prepareRuntimeEnvironment(modules, workspaceRoot);
   const conversationId = resolveConversationId();
 
   const modelId = resolveModelId(modules, preferredModelId);
@@ -805,8 +815,17 @@ export const runAgentPrompt = async (
 };
 
 export const getAgentModelLabel = async (): Promise<string> => {
-  const runtime = await getRuntime();
-  return runtime.modelLabel;
+  if (runtimePromise) {
+    const runtime = await runtimePromise;
+    if (runtime) {
+      return runtime.modelLabel;
+    }
+  }
+
+  const modules = await getSourceModules();
+  const modelId = await getAgentModelId();
+  const config = modules.ProviderRegistry.getModelConfig(modelId);
+  return config.name;
 };
 
 export const getAgentModelAttachmentCapabilities =
@@ -825,11 +844,13 @@ export const getAgentModelId = async (): Promise<string> => {
     }
   }
   const modules = await getSourceModules();
+  await prepareRuntimeEnvironment(modules, resolveWorkspaceRoot());
   return resolveModelId(modules, preferredModelId);
 };
 
 export const listAgentModels = async (): Promise<AgentModelOption[]> => {
   const modules = await getSourceModules();
+  await prepareRuntimeEnvironment(modules, resolveWorkspaceRoot());
   const currentModelId = await getAgentModelId();
 
   return modules.ProviderRegistry.getModelIds()
