@@ -252,6 +252,31 @@ describe('runtime', () => {
     });
   });
 
+  it('keeps the switched model across runtime re-initialization', async () => {
+    const modules = buildMockModules({
+      loadConfigToEnv: vi.fn(() => {
+        process.env.AGENT_MODEL = 'glm-5';
+        return ['C:\\Users\\Administrator\\.renx\\config.json'];
+      }),
+    });
+    mockGetSourceModules.mockResolvedValue(
+      modules as unknown as Awaited<ReturnType<typeof sourceModules.getSourceModules>>
+    );
+
+    await expect(switchAgentModel('claude-3.5-sonnet')).resolves.toEqual({
+      modelId: 'claude-3.5-sonnet',
+      modelLabel: 'Claude 3.5 Sonnet',
+    });
+
+    await expect(getAgentModelId()).resolves.toBe('claude-3.5-sonnet');
+    await expect(getAgentModelLabel()).resolves.toBe('Claude 3.5 Sonnet');
+    await expect(runAgentPrompt('Test prompt', {})).resolves.toEqual(
+      expect.objectContaining({
+        modelLabel: 'Claude 3.5 Sonnet',
+      })
+    );
+  });
+
   it('runs a prompt and returns the assembled result', async () => {
     const handlers: AgentEventHandlers = {
       onTextDelta: vi.fn(),

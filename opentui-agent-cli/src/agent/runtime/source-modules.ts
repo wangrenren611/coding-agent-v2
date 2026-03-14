@@ -1,5 +1,6 @@
-import { basename, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import type { MessageContent } from '../../types/message-content';
 
@@ -197,12 +198,38 @@ export type SourceModules = {
 
 let modulesPromise: Promise<SourceModules> | null = null;
 
+const moduleDir = dirname(fileURLToPath(import.meta.url));
+const embeddedRepoRoot = resolve(moduleDir, '../../_embedded_root');
+const requiredSourceModulePaths = [
+  'src/providers/index.ts',
+  'src/config/index.ts',
+  'src/agent/app/index.ts',
+] as const;
+
+const hasRequiredSourceModules = (root: string) =>
+  requiredSourceModulePaths.every(relativePath => existsSync(resolve(root, relativePath)));
+
 export const resolveRepoRoot = () => {
   const cwd = process.cwd();
-  if (basename(cwd) === 'opentui-agent-cli') {
-    return resolve(cwd, '..');
+  const explicit = process.env.AGENT_REPO_ROOT?.trim();
+  const candidates = [
+    explicit ? resolve(explicit) : null,
+    embeddedRepoRoot,
+    resolve(moduleDir, '../../../../'),
+    resolve(moduleDir, '../../..'),
+    resolve(cwd),
+    resolve(cwd, '..'),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  for (const candidate of new Set(candidates)) {
+    if (hasRequiredSourceModules(candidate)) {
+      return candidate;
+    }
   }
-  return cwd;
+
+  throw new Error(
+    `Unable to resolve agent source repo root from ${cwd}. Set AGENT_REPO_ROOT to override.`
+  );
 };
 
 export const resolveWorkspaceRoot = () => {
@@ -210,7 +237,7 @@ export const resolveWorkspaceRoot = () => {
   if (explicit) {
     return resolve(explicit);
   }
-  return resolveRepoRoot();
+  return resolve(process.cwd());
 };
 
 const toModuleUrl = (path: string) => pathToFileURL(path).href;

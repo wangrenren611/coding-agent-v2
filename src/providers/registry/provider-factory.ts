@@ -9,7 +9,7 @@ import { AnthropicAdapter } from '../adapters/anthropic';
 import { OpenAICompatibleProvider, OpenAICompatibleConfig } from '../openai-compatible';
 import type { BaseProviderConfig, ModelId } from '../types';
 import type { BaseAPIAdapter } from '../adapters/base';
-import { MODEL_DEFINITIONS } from './model-config';
+import { getResolvedModelDefinitions } from './model-config';
 import { KimiAdapter } from '../adapters/kimi';
 import { ResponsesAdapter } from '../adapters/responses';
 
@@ -32,7 +32,7 @@ export class ProviderFactory {
       throw new Error('ModelId is required.');
     }
 
-    const modelConfig = MODEL_DEFINITIONS[modelId];
+    const modelConfig = getResolvedModelDefinitions()[modelId];
     if (!modelConfig) {
       throw new Error(`Unknown model: ${modelId}`);
     }
@@ -73,7 +73,7 @@ export class ProviderFactory {
    * @returns OpenAI Compatible Provider 实例
    */
   static create(modelId: ModelId, config: BaseProviderConfig): OpenAICompatibleProvider {
-    const modelConfig = MODEL_DEFINITIONS[modelId];
+    const modelConfig = getResolvedModelDefinitions()[modelId];
     if (!modelConfig) {
       throw new Error(`Unknown model: ${modelId}`);
     }
@@ -92,7 +92,11 @@ export class ProviderFactory {
     modelId: ModelId,
     logger?: OpenAICompatibleConfig['logger']
   ): BaseAPIAdapter {
-    const modelConfig = MODEL_DEFINITIONS[modelId];
+    const modelConfig = getResolvedModelDefinitions()[modelId];
+    if (!modelConfig) {
+      throw new Error(`Unknown model: ${modelId}`);
+    }
+
     if (modelConfig.provider === 'anthropic') {
       return new AnthropicAdapter({
         defaultModel: modelConfig.model,

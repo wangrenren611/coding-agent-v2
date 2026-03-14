@@ -25,6 +25,7 @@ describe('loadConfigToEnv', () => {
     delete process.env.AGENT_TOOL_CONFIRMATION_MODE;
     delete process.env.AGENT_MODEL;
     delete process.env.AGENT_MAX_STEPS;
+    delete process.env.RENX_CUSTOM_MODELS_JSON;
   });
 
   afterEach(() => {
@@ -125,5 +126,113 @@ describe('loadConfigToEnv', () => {
     expect(process.env.AGENT_TOOL_CONFIRMATION_MODE).toBe('manual');
     expect(process.env.AGENT_MODEL).toBe('qwen3.5-max');
     expect(process.env.AGENT_MAX_STEPS).toBe('100');
+  });
+
+  it('should merge custom models into RENX_CUSTOM_MODELS_JSON', () => {
+    fs.mkdirSync(globalDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(globalDir, 'config.json'),
+      JSON.stringify({
+        models: {
+          'shared-model': {
+            provider: 'openai',
+            name: 'Shared Model',
+            baseURL: 'https://global.example.com/v1',
+            endpointPath: '/chat/completions',
+            envApiKey: 'SHARED_API_KEY',
+            envBaseURL: 'SHARED_API_BASE',
+            model: 'shared-global',
+            max_tokens: 4096,
+            LLMMAX_TOKENS: 64000,
+            features: ['streaming'],
+          },
+        },
+      })
+    );
+
+    const projectConfigDir = path.join(tmpDir, '.renx');
+    fs.mkdirSync(projectConfigDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(projectConfigDir, 'config.json'),
+      JSON.stringify({
+        models: {
+          'shared-model': {
+            baseURL: 'https://project.example.com/v1',
+            model: 'shared-project',
+          },
+          'project-model': {
+            provider: 'openai',
+            name: 'Project Model',
+            baseURL: 'https://project-only.example.com/v1',
+            endpointPath: '/responses',
+            envApiKey: 'PROJECT_API_KEY',
+            envBaseURL: 'PROJECT_API_BASE',
+            model: 'project-model',
+            max_tokens: 8000,
+            LLMMAX_TOKENS: 128000,
+            features: ['streaming', 'function-calling'],
+          },
+        },
+      })
+    );
+
+    loadConfigToEnv({ projectRoot: tmpDir, globalDir });
+
+    const models = JSON.parse(process.env.RENX_CUSTOM_MODELS_JSON ?? '{}') as Record<
+      string,
+      Record<string, unknown>
+    >;
+
+    expect(models['shared-model']).toMatchObject({
+      provider: 'openai',
+      baseURL: 'https://project.example.com/v1',
+      model: 'shared-project',
+    });
+    expect(models['project-model']).toMatchObject({
+      endpointPath: '/responses',
+    });
+  });
+
+  it('should keep existing RENX_CUSTOM_MODELS_JSON values over config files', () => {
+    process.env.RENX_CUSTOM_MODELS_JSON = JSON.stringify({
+      'shared-model': {
+        baseURL: 'https://env.example.com/v1',
+        model: 'env-model',
+      },
+    });
+
+    fs.mkdirSync(globalDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(globalDir, 'config.json'),
+      JSON.stringify({
+        models: {
+          'shared-model': {
+            provider: 'openai',
+            name: 'Shared Model',
+            baseURL: 'https://global.example.com/v1',
+            endpointPath: '/chat/completions',
+            envApiKey: 'SHARED_API_KEY',
+            envBaseURL: 'SHARED_API_BASE',
+            model: 'shared-global',
+            max_tokens: 4096,
+            LLMMAX_TOKENS: 64000,
+            features: ['streaming'],
+          },
+        },
+      })
+    );
+
+    loadConfigToEnv({ projectRoot: tmpDir, globalDir });
+
+    const models = JSON.parse(process.env.RENX_CUSTOM_MODELS_JSON ?? '{}') as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(models['shared-model']).toMatchObject({
+      baseURL: 'https://env.example.com/v1',
+      model: 'env-model',
+      provider: 'openai',
+      envApiKey: 'SHARED_API_KEY',
+    });
   });
 });

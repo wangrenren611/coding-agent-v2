@@ -1,21 +1,53 @@
-import { execSync } from 'child_process';
-import { homedir } from 'os';
-import { join } from 'path';
+import { execFileSync } from 'child_process';
 
-const DB_PATH = join(homedir(), '.agent-v4', 'agent.db');
+const DB_PATH = 'C:\\Users\\Administrator\\.renx\\data.db';
+const MAX_BUFFER = 10 * 1024 * 1024;
+
+function runSqliteCli(sql: string): string {
+  return execFileSync('sqlite3', ['-json', DB_PATH, sql], {
+    encoding: 'utf-8',
+    maxBuffer: MAX_BUFFER,
+  });
+}
+
+function runPythonSqlite(sql: string): string {
+  const pyScript = [
+    'import json, sqlite3, sys',
+    'db_path, query = sys.argv[1], sys.argv[2]',
+    'conn = sqlite3.connect(db_path)',
+    'conn.row_factory = sqlite3.Row',
+    'cur = conn.cursor()',
+    'cur.execute(query)',
+    'rows = [dict(r) for r in cur.fetchall()]',
+    'print(json.dumps(rows, ensure_ascii=False))',
+    'conn.close()',
+  ].join('; ');
+
+  return execFileSync('python', ['-c', pyScript, DB_PATH, sql], {
+    encoding: 'utf-8',
+    maxBuffer: MAX_BUFFER,
+  });
+}
 
 function query<T>(sql: string): T[] {
   try {
-    const result = execSync(`sqlite3 -json "${DB_PATH}" "${sql.replace(/"/g, '\\"')}"`, {
-      encoding: 'utf-8',
-      maxBuffer: 10 * 1024 * 1024,
-    });
+    const result = runSqliteCli(sql);
     const trimmed = result.trim();
     if (!trimmed) { return []; }
     return JSON.parse(trimmed) as T[];
-  } catch (error) {
-    console.error('Database query error:', error);
-    return [];
+  } catch (cliError) {
+    try {
+      const result = runPythonSqlite(sql);
+      const trimmed = result.trim();
+      if (!trimmed) { return []; }
+      return JSON.parse(trimmed) as T[];
+    } catch (pythonError) {
+      console.error('Database query error (sqlite3 + python fallback failed):', {
+        cliError,
+        pythonError,
+      });
+      return [];
+    }
   }
 }
 

@@ -1,4 +1,4 @@
-import { readdir } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 
 import { resolveWorkspaceRoot } from '../agent/runtime/source-modules';
@@ -40,17 +40,15 @@ const visitDirectory = async (
       continue;
     }
 
-    const stat = await Bun.file(absolutePath)
-      .stat()
-      .catch(() => undefined);
-    if (!stat || !stat.isFile()) {
+    const fileStat = await stat(absolutePath).catch(() => undefined);
+    if (!fileStat || !fileStat.isFile()) {
       continue;
     }
 
     output.push({
       relativePath: relative(root, absolutePath),
       absolutePath,
-      size: stat.size,
+      size: fileStat.size,
     });
   }
 };

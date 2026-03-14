@@ -1,5 +1,5 @@
 ﻿import { z } from 'zod';
-import { LLMTool, ToolConcurrencyMode, ToolExecutionContext } from './types';
+import type { LLMTool, ToolConcurrencyMode, ToolExecutionContext } from './types';
 import { ToolExecutionError } from './error';
 
 export type ToolParameterSchema = z.ZodType;

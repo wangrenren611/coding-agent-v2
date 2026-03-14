@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BaseTool, ToolResult } from './base-tool';
+import { BaseTool, type ToolResult } from './base-tool';
 import { ToolExecutionError } from './error';
 import { WEB_SEARCH_TOOL_DESCRIPTION } from './tool-prompts';
 import type { ToolExecutionContext } from './types';

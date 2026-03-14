@@ -2,7 +2,7 @@ import { z } from 'zod';
 import * as ts from 'typescript';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { BaseTool, ToolResult } from './base-tool';
+import { BaseTool, type ToolResult } from './base-tool';
 import { ToolExecutionError } from './error';
 import { ensurePathWithinAllowed, normalizeAllowedDirectories } from './path-security';
 import { LSP_TOOL_DESCRIPTION } from './tool-prompts';

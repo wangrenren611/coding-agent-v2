@@ -63,10 +63,15 @@ const readPreferredModelIdFromEnv = (): string | undefined => {
 };
 
 let preferredModelId = readPreferredModelIdFromEnv();
+let sessionModelIdOverride: string | undefined;
+
+const getPreferredModelId = (): string | undefined => {
+  return sessionModelIdOverride?.trim() || preferredModelId;
+};
 
 const syncPreferredModelIdFromEnv = (): string | undefined => {
   preferredModelId = readPreferredModelIdFromEnv();
-  return preferredModelId;
+  return getPreferredModelId();
 };
 
 const DEFAULT_MODEL = 'qwen3.5-plus';
@@ -356,7 +361,7 @@ const createRuntime = async (): Promise<RuntimeCore> => {
   await prepareRuntimeEnvironment(modules, workspaceRoot);
   const conversationId = resolveConversationId();
 
-  const modelId = resolveModelId(modules, preferredModelId);
+  const modelId = resolveModelId(modules, getPreferredModelId());
   const modelConfig = requireModelApiKey(modules, modelId);
   const maxSteps = parsePositiveInt(process.env.AGENT_MAX_STEPS, DEFAULT_MAX_STEPS);
   const coreLogger = modules.createLoggerFromEnv(buildCliLoggerEnv(process.env), workspaceRoot);
@@ -845,7 +850,7 @@ export const getAgentModelId = async (): Promise<string> => {
   }
   const modules = await getSourceModules();
   await prepareRuntimeEnvironment(modules, resolveWorkspaceRoot());
-  return resolveModelId(modules, preferredModelId);
+  return resolveModelId(modules, getPreferredModelId());
 };
 
 export const listAgentModels = async (): Promise<AgentModelOption[]> => {
@@ -888,7 +893,7 @@ export const switchAgentModel = async (modelId: string): Promise<AgentModelSwitc
     throw new Error(`Missing env ${config.envApiKey} for model ${modelId}.`);
   }
 
-  preferredModelId = modelId;
+  sessionModelIdOverride = modelId;
   await disposeRuntimeInstance();
   return {
     modelId,
@@ -898,5 +903,6 @@ export const switchAgentModel = async (modelId: string): Promise<AgentModelSwitc
 
 export const disposeAgentRuntime = async (): Promise<void> => {
   await disposeRuntimeInstance();
+  sessionModelIdOverride = undefined;
   preferredModelId = readPreferredModelIdFromEnv();
 };

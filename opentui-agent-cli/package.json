@@ -1,11 +1,22 @@
 {
-  "name": "opentui-agent-cli",
+  "name": "@renxqoo/renx-code",
+  "version": "0.0.14",
+  "description": "Renx Code terminal AI coding assistant",
   "module": "src/index.tsx",
   "type": "module",
-  "private": true,
+  "private": false,
+  "bin": {
+    "renx": "./bin/renx.cjs"
+  },
+  "files": [
+    "bin",
+    "README.md",
+    "tsconfig.json"
+  ],
   "scripts": {
+    "release:prepare": "bun ./scripts/prepare-release.mjs",
     "dev": "bun run src/index.tsx",
-    "dev:watch": "bun run --watch src/index.tsx",
+    "dev:watch": "bun --watch src/index.tsx",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write .",
@@ -13,10 +24,34 @@
     "test:run": "bun test src/context-usage-regressions.test.ts src/ui/theme.simple.test.ts src/ui/theme.test.ts src/runtime/exit.test.ts src/runtime/clipboard.test.ts src/runtime/terminal-theme.test.ts src/utils/time.test.ts src/components/tool-confirm-dialog-content.test.ts src/hooks/chat-local-replies.fixed.test.ts src/hooks/chat-local-replies.test.ts src/hooks/turn-updater.test.ts src/hooks/agent-event-handlers.test.ts src/hooks/use-agent-chat.status.test.ts src/files/attachment-capabilities.test.ts src/files/file-mention-query.test.ts src/commands/slash-commands.test.ts src/agent/runtime/runtime.simple.test.ts src/agent/runtime/tool-call-buffer.test.ts src/components/chat/assistant-reply.test.tsx src/components/chat/assistant-segment.test.ts src/components/chat/code-block.test.tsx src/components/chat/segment-groups.test.ts",
     "type-check": "tsc --noEmit",
     "check": "bun run type-check && bun run lint && bun run format:check",
+    "pack:dry": "npm run release:prepare && npm pack ./release/publish --dry-run",
+    "pack:tgz": "npm run release:prepare && npm pack ./release/publish",
+    "version:fix": "npm version patch",
+    "version:feature": "npm version minor",
+    "version:breaking": "npm version major",
+    "publish:fix": "npm run version:fix && npm run release:prepare && npm publish ./release/publish --access public",
+    "publish:feature": "npm run version:feature && npm run release:prepare && npm publish ./release/publish --access public",
+    "publish:breaking": "npm run version:breaking && npm run release:prepare && npm publish ./release/publish --access public",
+    "publish:patch": "npm run publish:fix",
+    "publish:minor": "npm run publish:feature",
+    "publish:major": "npm run publish:breaking",
     "proxy": "w2 start",
     "proxy:stop": "w2 stop",
     "proxy:restart": "w2 restart"
   },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "renx",
+    "renx-code",
+    "cli",
+    "terminal",
+    "ai",
+    "coding-assistant",
+    "developer-tools",
+    "opentui"
+  ],
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@testing-library/react": "^16.3.2",

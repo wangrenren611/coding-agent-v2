@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { createTwoFilesPatch } from 'diff';
 import { z } from 'zod';
-import { BaseTool, ToolConfirmDetails, ToolResult } from './base-tool';
+import { BaseTool, type ToolConfirmDetails, type ToolResult } from './base-tool';
 import { ToolExecutionError } from './error';
 import {
   assessPathAccess,

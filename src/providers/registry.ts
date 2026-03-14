@@ -6,11 +6,11 @@
  */
 
 import { ProviderFactory } from './registry/provider-factory';
-import { MODEL_DEFINITIONS } from './registry/model-config';
+import { getResolvedModelDefinitions, MODEL_DEFINITIONS } from './registry/model-config';
 import type { ModelConfig, ModelId, ProviderType } from './types';
 
 // 导出类型
-export type { ProviderType, ModelId, ModelConfig } from './types';
+export type { ProviderType, BuiltinModelId, ModelId, ModelConfig } from './types';
 
 // 导出模型配置
 export { MODEL_DEFINITIONS as MODEL_CONFIGS } from './registry/model-config';
@@ -47,7 +47,7 @@ export class ProviderRegistry {
    * 获取所有模型配置
    */
   static listModels(): ModelConfig[] {
-    return Object.values(MODEL_DEFINITIONS).map((config) => ({
+    return Object.values(getResolvedModelDefinitions()).map((config) => ({
       ...config,
       apiKey: undefined,
     }));
@@ -57,7 +57,7 @@ export class ProviderRegistry {
    * 获取指定厂商的所有模型
    */
   static listModelsByProvider(provider: ProviderType): ModelConfig[] {
-    return Object.values(MODEL_DEFINITIONS)
+    return Object.values(getResolvedModelDefinitions())
       .filter((m) => m.provider === provider)
       .map((config) => ({
         ...config,
@@ -69,14 +69,14 @@ export class ProviderRegistry {
    * 获取所有模型 ID
    */
   static getModelIds(): ModelId[] {
-    return Object.keys(MODEL_DEFINITIONS) as ModelId[];
+    return Object.keys(getResolvedModelDefinitions()) as ModelId[];
   }
 
   /**
    * 获取指定模型的配置
    */
   static getModelConfig(modelId: ModelId): ModelConfig {
-    const config = MODEL_DEFINITIONS[modelId];
+    const config = getResolvedModelDefinitions()[modelId];
     if (!config) {
       throw new Error(`Unknown model: ${modelId}`);
     }
@@ -87,7 +87,7 @@ export class ProviderRegistry {
    * 获取模型显示名称
    */
   static getModelName(modelId: ModelId): string {
-    return MODEL_DEFINITIONS[modelId]?.name || modelId;
+    return getResolvedModelDefinitions()[modelId]?.name || modelId;
   }
 
   /**
@@ -95,7 +95,7 @@ export class ProviderRegistry {
    */
   static getProviders(): ProviderType[] {
     const providers = new Set<ProviderType>();
-    Object.values(MODEL_DEFINITIONS).forEach((m) => providers.add(m.provider));
+    Object.values(getResolvedModelDefinitions()).forEach((m) => providers.add(m.provider));
     return Array.from(providers);
   }
 }

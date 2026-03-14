@@ -4,16 +4,15 @@
  */
 
 import {
-  LLMTool,
-  ToolCall,
-  ToolConcurrencyPolicy,
-  ToolConfirmInfo,
-  ToolPolicyCheckInfo,
-  ToolPolicyDecision,
-  ToolExecutionContext,
+  type LLMTool,
+  type ToolCall,
+  type ToolConcurrencyPolicy,
+  type ToolConfirmInfo,
+  type ToolPolicyCheckInfo,
+  type ToolPolicyDecision,
+  type ToolExecutionContext,
 } from './types';
-import { BaseTool, ToolConfirmDetails } from './base-tool';
-import { ToolResult } from './base-tool';
+import { BaseTool, type ToolConfirmDetails, type ToolResult } from './base-tool';
 import {
   EmptyToolNameError,
   InvalidArgumentsError,

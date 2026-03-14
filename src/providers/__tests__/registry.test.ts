@@ -15,6 +15,7 @@ describe('ProviderRegistry', () => {
   beforeEach(() => {
     vi.resetModules();
     process.env = { ...originalEnv };
+    delete process.env.RENX_CUSTOM_MODELS_JSON;
   });
 
   afterEach(() => {
@@ -69,12 +70,12 @@ describe('ProviderRegistry', () => {
       expect(MODEL_CONFIGS['claude-opus-4.6'].endpointPath).toBe('/v1/messages');
     });
 
-    it('should use responses endpoint for gpt-5.3 compatibility gateway', () => {
-      expect(MODEL_CONFIGS['gpt-5.3'].baseURL).toBe('https://gmncode.cn/v1');
+    it('should use responses endpoint for gpt-5.3 official OpenAI API', () => {
+      expect(MODEL_CONFIGS['gpt-5.3'].baseURL).toBe('https://api.openai.com/v1');
       expect(MODEL_CONFIGS['gpt-5.3'].endpointPath).toBe('/responses');
       expect(MODEL_CONFIGS['gpt-5.3'].model).toBe('gpt-5.3-codex');
-      expect(MODEL_CONFIGS['gpt-5.3'].max_tokens).toBe(128 * 1000);
-      expect(MODEL_CONFIGS['gpt-5.3'].LLMMAX_TOKENS).toBe(400 * 1000);
+      expect(MODEL_CONFIGS['gpt-5.3'].max_tokens).toBe(1000 * 32);
+      expect(MODEL_CONFIGS['gpt-5.3'].LLMMAX_TOKENS).toBe(258 * 1000);
       expect(MODEL_CONFIGS['gpt-5.3'].features).toContain('reasoning');
     });
   });
@@ -132,18 +133,43 @@ describe('ProviderRegistry', () => {
       expect(provider.adapter).toBeInstanceOf(StandardAdapter);
     });
 
-    it('should create gpt-5.3 provider with gmn-compatible defaults', () => {
+    it('should create gpt-5.3 provider with official OpenAI defaults', () => {
       process.env.OPENAI_API_KEY = 'test-openai-key';
       delete process.env.OPENAI_API_BASE;
 
       const provider = ProviderRegistry.createFromEnv('gpt-5.3');
 
       expect(provider.config.apiKey).toBe('test-openai-key');
-      expect(provider.config.baseURL).toBe('https://gmncode.cn/v1');
+      expect(provider.config.baseURL).toBe('https://api.openai.com/v1');
       expect(provider.config.model).toBe('gpt-5.3-codex');
-      expect(provider.config.max_tokens).toBe(128 * 1000);
-      expect(provider.config.LLMMAX_TOKENS).toBe(400 * 1000);
+      expect(provider.config.max_tokens).toBe(1000 * 32);
+      expect(provider.config.LLMMAX_TOKENS).toBe(258 * 1000);
       expect(provider.adapter).toBeInstanceOf(ResponsesAdapter);
+    });
+
+    it('should create provider for a custom model from RENX_CUSTOM_MODELS_JSON', () => {
+      process.env.CUSTOM_OPENAI_API_KEY = 'custom-key';
+      process.env.RENX_CUSTOM_MODELS_JSON = JSON.stringify({
+        'custom-openai': {
+          provider: 'openai',
+          name: 'Custom OpenAI',
+          baseURL: 'https://custom.example.com/v1',
+          endpointPath: '/chat/completions',
+          envApiKey: 'CUSTOM_OPENAI_API_KEY',
+          envBaseURL: 'CUSTOM_OPENAI_API_BASE',
+          model: 'custom-model',
+          max_tokens: 4096,
+          LLMMAX_TOKENS: 64000,
+          features: ['streaming', 'function-calling'],
+        },
+      });
+
+      const provider = ProviderRegistry.createFromEnv('custom-openai');
+
+      expect(provider.config.apiKey).toBe('custom-key');
+      expect(provider.config.baseURL).toBe('https://custom.example.com/v1');
+      expect(provider.config.model).toBe('custom-model');
+      expect(provider.adapter).toBeInstanceOf(StandardAdapter);
     });
 
     it('should use default baseURL when env var not set', () => {
@@ -162,6 +188,20 @@ describe('ProviderRegistry', () => {
       const provider = ProviderRegistry.createFromEnv('glm-4.7');
 
       expect(provider.config.baseURL).toBe('https://custom.example.com');
+    });
+
+    it('should allow custom model config to override a built-in baseURL', () => {
+      process.env.OPENAI_API_KEY = 'test-openai-key';
+      process.env.RENX_CUSTOM_MODELS_JSON = JSON.stringify({
+        'gpt-5.4': {
+          baseURL: 'https://proxy.example.com/v1',
+        },
+      });
+
+      const provider = ProviderRegistry.createFromEnv('gpt-5.4');
+
+      expect(provider.config.baseURL).toBe('https://proxy.example.com/v1');
+      expect(provider.adapter).toBeInstanceOf(ResponsesAdapter);
     });
 
     it('should accept config overrides', () => {
@@ -355,6 +395,25 @@ describe('ProviderRegistry', () => {
 
       expect(Array.isArray(ids)).toBe(true);
     });
+
+    it('should include custom model IDs from env config', () => {
+      process.env.RENX_CUSTOM_MODELS_JSON = JSON.stringify({
+        'custom-openai': {
+          provider: 'openai',
+          name: 'Custom OpenAI',
+          baseURL: 'https://custom.example.com/v1',
+          endpointPath: '/chat/completions',
+          envApiKey: 'CUSTOM_OPENAI_API_KEY',
+          envBaseURL: 'CUSTOM_OPENAI_API_BASE',
+          model: 'custom-model',
+          max_tokens: 4096,
+          LLMMAX_TOKENS: 64000,
+          features: ['streaming'],
+        },
+      });
+
+      expect(ProviderRegistry.getModelIds()).toContain('custom-openai');
+    });
   });
 
   describe('getModelConfig', () => {
@@ -378,6 +437,21 @@ describe('ProviderRegistry', () => {
       expect(() => {
         ProviderRegistry.getModelConfig('unknown' as ModelId);
       }).toThrow('Unknown model: unknown');
+    });
+
+    it('should reflect built-in overrides from custom env config', () => {
+      process.env.RENX_CUSTOM_MODELS_JSON = JSON.stringify({
+        'gpt-5.4': {
+          baseURL: 'https://proxy.example.com/v1',
+          name: 'GPT-5.4 Proxy',
+        },
+      });
+
+      const config = ProviderRegistry.getModelConfig('gpt-5.4');
+
+      expect(config.baseURL).toBe('https://proxy.example.com/v1');
+      expect(config.name).toBe('GPT-5.4 Proxy');
+      expect(config.envApiKey).toBe('OPENAI_API_KEY');
     });
   });
 

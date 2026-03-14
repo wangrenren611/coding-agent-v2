@@ -9,10 +9,6 @@ vi.mock('./source-modules', () => ({
   resolveWorkspaceRoot: vi.fn(),
 }));
 
-vi.mock('../../../../src/agent/prompts/system', () => ({
-  buildSystemPrompt: vi.fn(() => 'Test system prompt'),
-}));
-
 import { disposeAgentRuntime, runAgentPrompt } from './runtime';
 import * as sourceModules from './source-modules';
 import type { AgentContextUsageEvent, AgentEventHandlers } from './types';
@@ -124,7 +120,10 @@ describe('runAgentPrompt context usage forwarding', () => {
         createFromEnv: () => ({}),
       },
       loadEnvFiles: vi.fn().mockResolvedValue([]),
-    loadConfigToEnv: vi.fn().mockReturnValue([]),
+      loadConfigToEnv: vi.fn().mockReturnValue([]),
+      buildSystemPrompt: vi.fn(() => 'Test system prompt'),
+      resolveRenxDatabasePath: vi.fn(() => '/tmp/renx/data.db'),
+      resolveRenxTaskDir: vi.fn(() => '/tmp/renx/task'),
       createLoggerFromEnv: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() })),
       createAgentLoggerAdapter: vi.fn((logger: Record<string, unknown>) => ({
         info: typeof logger.info === 'function' ? logger.info.bind(logger) : undefined,

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BaseTool, ToolResult } from './base-tool';
+import { BaseTool, type ToolResult } from './base-tool';
 import { ToolExecutionError } from './error';
 import { formatSkillForContext } from './skill/parser';
 import { getSkillLoader, initializeSkillLoader } from './skill/loader';

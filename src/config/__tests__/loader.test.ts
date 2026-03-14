@@ -144,6 +144,74 @@ describe('Renx Config Loader', () => {
       expect(config.sources.global).toBe(path.join(globalDir, 'config.json'));
       expect(config.sources.project).toBe(path.join(projectConfigDir, 'config.json'));
     });
+
+    it('should merge custom models from global and project config', () => {
+      fs.mkdirSync(globalDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(globalDir, 'config.json'),
+        JSON.stringify({
+          models: {
+            'shared-model': {
+              provider: 'openai',
+              name: 'Shared Model',
+              baseURL: 'https://global.example.com/v1',
+              endpointPath: '/chat/completions',
+              envApiKey: 'SHARED_API_KEY',
+              envBaseURL: 'SHARED_API_BASE',
+              model: 'shared-global',
+              max_tokens: 4096,
+              LLMMAX_TOKENS: 32000,
+              features: ['streaming'],
+            },
+          },
+        })
+      );
+
+      const projectConfigDir = path.join(tmpDir, '.renx');
+      fs.mkdirSync(projectConfigDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(projectConfigDir, 'config.json'),
+        JSON.stringify({
+          models: {
+            'shared-model': {
+              baseURL: 'https://project.example.com/v1',
+              model: 'shared-project',
+            },
+            'project-model': {
+              provider: 'openai',
+              name: 'Project Model',
+              baseURL: 'https://project-only.example.com/v1',
+              endpointPath: '/responses',
+              envApiKey: 'PROJECT_API_KEY',
+              envBaseURL: 'PROJECT_API_BASE',
+              model: 'project-model',
+              max_tokens: 8000,
+              LLMMAX_TOKENS: 128000,
+              features: ['streaming', 'function-calling'],
+            },
+          },
+        })
+      );
+
+      const config = loadConfig({
+        projectRoot: tmpDir,
+        globalDir,
+        loadEnv: false,
+        env: { RENX_HOME: renxHome },
+      });
+
+      expect(config.models['shared-model']).toMatchObject({
+        provider: 'openai',
+        name: 'Shared Model',
+        baseURL: 'https://project.example.com/v1',
+        model: 'shared-project',
+        envApiKey: 'SHARED_API_KEY',
+      });
+      expect(config.models['project-model']).toMatchObject({
+        provider: 'openai',
+        endpointPath: '/responses',
+      });
+    });
   });
 
   describe('loadConfig with env overrides', () => {
@@ -189,6 +257,52 @@ describe('Renx Config Loader', () => {
       expect(config.log.level).toBe(LogLevel.WARN);
       expect(config.log.format).toBe('json');
       expect(config.agent.confirmationMode).toBe('auto-deny');
+    });
+
+    it('should let RENX_CUSTOM_MODELS_JSON override file-based model config', () => {
+      const projectConfigDir = path.join(tmpDir, '.renx');
+      fs.mkdirSync(projectConfigDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(projectConfigDir, 'config.json'),
+        JSON.stringify({
+          models: {
+            'custom-openai': {
+              provider: 'openai',
+              name: 'Custom OpenAI',
+              baseURL: 'https://file.example.com/v1',
+              endpointPath: '/chat/completions',
+              envApiKey: 'CUSTOM_API_KEY',
+              envBaseURL: 'CUSTOM_API_BASE',
+              model: 'file-model',
+              max_tokens: 4096,
+              LLMMAX_TOKENS: 64000,
+              features: ['streaming'],
+            },
+          },
+        })
+      );
+
+      const config = loadConfig({
+        projectRoot: tmpDir,
+        globalDir,
+        env: {
+          RENX_HOME: renxHome,
+          RENX_CUSTOM_MODELS_JSON: JSON.stringify({
+            'custom-openai': {
+              baseURL: 'https://env.example.com/v1',
+              model: 'env-model',
+              features: ['streaming', 'function-calling'],
+            },
+          }),
+        },
+      });
+
+      expect(config.models['custom-openai']).toMatchObject({
+        provider: 'openai',
+        baseURL: 'https://env.example.com/v1',
+        model: 'env-model',
+        features: ['streaming', 'function-calling'],
+      });
     });
   });
 

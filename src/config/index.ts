@@ -19,6 +19,7 @@ export type {
   StorageConfig,
   FileHistoryConfig,
   AgentConfig,
+  ConfigModelDefinition,
 } from './types';
 
 // Config loaders

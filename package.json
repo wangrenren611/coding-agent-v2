@@ -1,19 +1,31 @@
 {
   "name": "coding-agent-v2",
   "version": "1.0.0",
-  "description": "Coding Agent V2 - AI Coding Assistant",
+  "description": "Enterprise-grade AI coding assistant CLI tool with interactive terminal UI",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "coding-agent": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./cli": {
+      "import": "./dist/cli.js"
     }
   },
+  "files": [
+    "README.md",
+    "LICENSE",
+    "dist"
+  ],
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
+    "build:cli": "tsc -p tsconfig.build.json && chmod +x dist/cli.js",
     "start": "node dist/index.js",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -21,15 +33,35 @@
     "format": "prettier --write \"src/**/*.ts\" \"examples/**/*.ts\" \"*.json\"",
     "format:fix": "prettier --write \"src/**/*.ts\" \"examples/**/*.ts\" --end-of-line lf",
     "ci:check": "pnpm format:fix && pnpm typecheck && pnpm lint && pnpm test:run",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "prepublishOnly": "npm run build:cli",
+    "prepack": "npm run build:cli",
+    "publish:patch": "npm version patch && npm run build:cli && npm publish",
+    "publish:minor": "npm version minor && npm run build:cli && npm publish",
+    "publish:major": "npm version major && npm run build:cli && npm publish"
   },
   "keywords": [
     "ai",
     "coding",
-    "agent"
+    "agent",
+    "cli",
+    "terminal",
+    "tui",
+    "react",
+    "assistant",
+    "developer-tools",
+    "productivity"
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/coding-agent-v2.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/coding-agent-v2/issues"
+  },
+  "homepage": "https://github.com/your-username/coding-agent-v2#readme",
   "devDependencies": {
     "@types/diff": "^8.0.0",
     "@types/node": "^20.10.0",
@@ -60,6 +92,8 @@
     ]
   },
   "dependencies": {
+    "@opentui/core": "^0.1.84",
+    "@opentui/react": "^0.1.84",
     "@vscode/ripgrep": "^1.17.0",
     "diff": "^8.0.3",
     "dotenv": "^17.3.1",
@@ -68,6 +102,7 @@
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
     "minimatch": "^10.2.4",
+    "react": "^19.2.4",
     "shell-quote": "^1.8.3",
     "strip-ansi": "^7.2.0",
     "uuid": "^13.0.0",

@@ -2,6 +2,7 @@ import { createCliRenderer } from '@opentui/core';
 import { createRoot } from '@opentui/react';
 
 import { App } from './App';
+import { applyCliArgsToEnv } from './runtime/cli-args';
 import {
   bindExitGuards,
   hardResetTerminal,
@@ -15,6 +16,12 @@ import {
 } from './runtime/terminal-theme';
 import { applyMarkdownThemeMode } from './ui/opencode-markdown';
 import { applyUiThemeMode, uiTheme } from './ui/theme';
+
+const cliArgsResult = applyCliArgsToEnv();
+if (!cliArgsResult.ok) {
+  console.error(cliArgsResult.error);
+  process.exit(1);
+}
 
 bindExitGuards();
 // OpenTUI exposes OPENTUI_FORCE_WCWIDTH for terminals where CJK width handling

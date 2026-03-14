@@ -6,7 +6,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import stripAnsi from 'strip-ansi';
 import { z } from 'zod';
-import { BaseTool, ToolResult } from './base-tool';
+import { BaseTool, type ToolResult } from './base-tool';
 import { ToolExecutionError } from './error';
 import { evaluateBashPolicy, type BashPolicyEffect, type BashPolicyMode } from './bash-policy';
 import type { ToolExecutionContext } from './types';

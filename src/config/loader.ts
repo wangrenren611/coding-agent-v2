@@ -7,10 +7,17 @@ import {
   resolveRenxLogsDir,
   resolveRenxStorageRoot,
 } from './paths';
-import type { LoadConfigOptions, LogConfig, RenxConfig, ResolvedConfig } from './types';
+import type {
+  ConfigModelDefinition,
+  LoadConfigOptions,
+  LogConfig,
+  RenxConfig,
+  ResolvedConfig,
+} from './types';
 
 const PROJECT_DIR_NAME = '.renx';
 const CONFIG_FILENAME = 'config.json';
+const CUSTOM_MODELS_ENV_VAR = 'RENX_CUSTOM_MODELS_JSON';
 
 const DEFAULTS: RenxConfig = {
   log: {
@@ -52,6 +59,37 @@ function readJsonFile<T>(filePath: string): T | null {
   try {
     const content = fs.readFileSync(filePath, 'utf8');
     return JSON.parse(content) as T;
+  } catch {
+    return null;
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseCustomModelsEnv(
+  raw: string | undefined
+): Record<string, ConfigModelDefinition> | null {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isPlainObject(parsed)) {
+      return null;
+    }
+
+    const result: Record<string, ConfigModelDefinition> = {};
+    for (const [modelId, modelConfig] of Object.entries(parsed)) {
+      if (!isPlainObject(modelConfig)) {
+        continue;
+      }
+      result[modelId] = modelConfig as ConfigModelDefinition;
+    }
+
+    return result;
   } catch {
     return null;
   }
@@ -242,6 +280,11 @@ function applyEnvOverrides(config: RenxConfig, env: NodeJS.ProcessEnv): RenxConf
     }
   }
 
+  const customModels = parseCustomModelsEnv(env[CUSTOM_MODELS_ENV_VAR]);
+  if (customModels) {
+    result.models = deepMerge(result.models ?? {}, customModels);
+  }
+
   return result;
 }
 
@@ -281,6 +324,7 @@ function resolveConfig(
       confirmationMode: merged.agent?.confirmationMode ?? 'manual',
       defaultModel: merged.agent?.defaultModel ?? 'qwen3.5-plus',
     },
+    models: merged.models ?? {},
     sources,
   };
 }
@@ -324,25 +368,30 @@ export function loadConfigToEnv(options: LoadConfigOptions = {}): string[] {
   const loadedFiles: string[] = [];
 
   const protectedEnvKeys = new Set(Object.keys(process.env));
+  const protectedCustomModels = parseCustomModelsEnv(process.env[CUSTOM_MODELS_ENV_VAR]) ?? {};
 
   const globalConfigPath = ensureGlobalConfigFile(globalDir);
   const globalConfig = readJsonFile<RenxConfig>(globalConfigPath);
   if (globalConfig) {
-    applyConfigToEnv(globalConfig, protectedEnvKeys);
+    applyConfigToEnv(globalConfig, protectedEnvKeys, protectedCustomModels);
     loadedFiles.push(globalConfigPath);
   }
 
   const projectConfigPath = path.join(projectRoot, PROJECT_DIR_NAME, CONFIG_FILENAME);
   const projectConfig = readJsonFile<RenxConfig>(projectConfigPath);
   if (projectConfig) {
-    applyConfigToEnv(projectConfig, protectedEnvKeys);
+    applyConfigToEnv(projectConfig, protectedEnvKeys, protectedCustomModels);
     loadedFiles.push(projectConfigPath);
   }
 
   return loadedFiles;
 }
 
-function applyConfigToEnv(config: RenxConfig, protectedEnvKeys: Set<string>): void {
+function applyConfigToEnv(
+  config: RenxConfig,
+  protectedEnvKeys: Set<string>,
+  protectedCustomModels: Record<string, ConfigModelDefinition>
+): void {
   const setIfUnset = (key: string, value: string | undefined) => {
     if (value !== undefined && !protectedEnvKeys.has(key)) {
       process.env[key] = value;
@@ -396,6 +445,20 @@ function applyConfigToEnv(config: RenxConfig, protectedEnvKeys: Set<string>): vo
       'AGENT_MAX_STEPS',
       config.agent.maxSteps !== undefined ? String(config.agent.maxSteps) : undefined
     );
+  }
+
+  if (config.models && Object.keys(config.models).length > 0) {
+    const existingModels = parseCustomModelsEnv(process.env[CUSTOM_MODELS_ENV_VAR]) ?? {};
+    const mergedModels = deepMerge(existingModels, config.models);
+
+    if (protectedEnvKeys.has(CUSTOM_MODELS_ENV_VAR)) {
+      process.env[CUSTOM_MODELS_ENV_VAR] = JSON.stringify(
+        deepMerge(mergedModels, protectedCustomModels)
+      );
+      return;
+    }
+
+    process.env[CUSTOM_MODELS_ENV_VAR] = JSON.stringify(mergedModels);
   }
 }
 

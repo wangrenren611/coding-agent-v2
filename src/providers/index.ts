@@ -4,7 +4,7 @@
 
 // Registry 相关
 export { Models, MODEL_CONFIGS, ProviderRegistry } from './registry';
-export type { ProviderType, ModelId } from './registry';
+export type { ProviderType, BuiltinModelId, ModelId } from './registry';
 
 // Provider 相关
 export { LLMProvider } from './types';

@@ -3,9 +3,9 @@ import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { rgPath as vscodeRgPath } from '@vscode/ripgrep';
 import { z } from 'zod';
-import { BaseTool, ToolConfirmDetails, ToolResult } from './base-tool';
+import { BaseTool, type ToolConfirmDetails, type ToolResult } from './base-tool';
 import { ToolExecutionError } from './error';
-import { ToolExecutionContext } from './types';
+import type { ToolExecutionContext } from './types';
 import { DEFAULT_IGNORE_GLOBS, resolveSearchRoot } from './search/common';
 import {
   assessPathAccess,

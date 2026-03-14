@@ -69,4 +69,4 @@ export {
 export type { BackoffConfig } from './errors';
 
 // Registry 相关类型
-export type { ProviderType, ModelId, ModelConfig } from './registry';
+export type { ProviderType, BuiltinModelId, ModelId, ModelConfig } from './registry';

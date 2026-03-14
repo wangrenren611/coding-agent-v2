@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BaseTool, ToolConfirmDetails, ToolResult } from './base-tool';
+import { BaseTool, type ToolConfirmDetails, type ToolResult } from './base-tool';
 import { ToolExecutionError } from './error';
 import { collectFilesByGlob, DEFAULT_IGNORE_GLOBS, resolveSearchRoot } from './search/common';
 import {

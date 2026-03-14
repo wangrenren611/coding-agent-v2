@@ -1,0 +1,65 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Development files
+src/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+*.test.js
+*.spec.js
+
+# Configuration files
+tsconfig.json
+tsconfig.check.json
+tsconfig.build.json
+eslint.config.js
+.prettierrc
+.prettierignore
+.editorconfig
+
+# Git and CI
+.git/
+.github/
+.gitignore
+.husky/
+
+# Documentation
+*.md
+!README.md
+
+# Lock files
+bun.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
