@@ -23,9 +23,28 @@ describe('RunDetail Component', () => {
     { id: 2, step_index: 5, level: 'info', source: 'agent', message: '[Agent] run.finish', error_json: null, created_at_ms: Date.now() - 50000 },
   ];
 
+  const mockMessageRecords = [
+    {
+      message_id: 'msg_001',
+      step_index: 1,
+      role: 'assistant',
+      type: 'message',
+      model: 'gpt-4o-mini',
+      input_tokens: 120,
+      output_tokens: 45,
+      cached_tokens: 20,
+      created_at_ms: Date.now() - 80000,
+    },
+  ];
+
   const mockOnClose = vi.fn();
 
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(global.fetch).mockResolvedValue({
+      json: async () => ({ records: mockMessageRecords }),
+    } as any);
+  });
 
   it('should show loading state initially', () => {
     vi.mocked(global.fetch).mockResolvedValue({ json: async () => ({ run: null, stats: null }) } as any);
@@ -36,7 +55,8 @@ describe('RunDetail Component', () => {
   it('should render run details after loading', async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ json: async () => ({ run: mockRun, stats: mockStats }) } as any)
-      .mockResolvedValueOnce({ json: async () => ({ logs: mockLogs }) } as any);
+      .mockResolvedValueOnce({ json: async () => ({ logs: mockLogs }) } as any)
+      .mockResolvedValueOnce({ json: async () => ({ records: mockMessageRecords }) } as any);
     render(<RunDetail executionId="exec_001" onClose={mockOnClose} />);
     await waitFor(() => { expect(screen.getByText('Run Details')).toBeInTheDocument(); });
     expect(screen.getByText('exec_001')).toBeInTheDocument();
@@ -46,7 +66,8 @@ describe('RunDetail Component', () => {
   it('should display token usage statistics', async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ json: async () => ({ run: mockRun, stats: mockStats }) } as any)
-      .mockResolvedValueOnce({ json: async () => ({ logs: mockLogs }) } as any);
+      .mockResolvedValueOnce({ json: async () => ({ logs: mockLogs }) } as any)
+      .mockResolvedValueOnce({ json: async () => ({ records: mockMessageRecords }) } as any);
     render(<RunDetail executionId="exec_001" onClose={mockOnClose} />);
     await waitFor(() => { expect(screen.getByText('Token Usage')).toBeInTheDocument(); });
     expect(screen.getByText('4,000')).toBeInTheDocument();
@@ -57,7 +78,8 @@ describe('RunDetail Component', () => {
   it('should display duration', async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ json: async () => ({ run: mockRun, stats: mockStats }) } as any)
-      .mockResolvedValueOnce({ json: async () => ({ logs: mockLogs }) } as any);
+      .mockResolvedValueOnce({ json: async () => ({ logs: mockLogs }) } as any)
+      .mockResolvedValueOnce({ json: async () => ({ records: mockMessageRecords }) } as any);
     render(<RunDetail executionId="exec_001" onClose={mockOnClose} />);
     await waitFor(() => { expect(screen.getByText('Duration')).toBeInTheDocument(); });
     expect(screen.getByText('40.0s')).toBeInTheDocument();
@@ -66,7 +88,8 @@ describe('RunDetail Component', () => {
   it('should render logs section', async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ json: async () => ({ run: mockRun, stats: mockStats }) } as any)
-      .mockResolvedValueOnce({ json: async () => ({ logs: mockLogs }) } as any);
+      .mockResolvedValueOnce({ json: async () => ({ logs: mockLogs }) } as any)
+      .mockResolvedValueOnce({ json: async () => ({ records: mockMessageRecords }) } as any);
     render(<RunDetail executionId="exec_001" onClose={mockOnClose} />);
     await waitFor(() => { expect(screen.getByText('[Agent] run.start')).toBeInTheDocument(); });
     expect(screen.getByText('[Agent] run.finish')).toBeInTheDocument();
@@ -79,7 +102,8 @@ describe('RunDetail Component', () => {
     ];
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ json: async () => ({ run: mockRun, stats: mockStats }) } as any)
-      .mockResolvedValueOnce({ json: async () => ({ logs: logsWithLevels }) } as any);
+      .mockResolvedValueOnce({ json: async () => ({ logs: logsWithLevels }) } as any)
+      .mockResolvedValueOnce({ json: async () => ({ records: mockMessageRecords }) } as any);
     render(<RunDetail executionId="exec_001" onClose={mockOnClose} />);
     await waitFor(() => { expect(screen.getByText('Info log message')).toBeInTheDocument(); });
     const errorFilter = screen.getByRole('button', { name: 'Error' });
@@ -91,7 +115,8 @@ describe('RunDetail Component', () => {
   it('should call onClose when close button is clicked', async () => {
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ json: async () => ({ run: mockRun, stats: mockStats }) } as any)
-      .mockResolvedValueOnce({ json: async () => ({ logs: mockLogs }) } as any);
+      .mockResolvedValueOnce({ json: async () => ({ logs: mockLogs }) } as any)
+      .mockResolvedValueOnce({ json: async () => ({ records: mockMessageRecords }) } as any);
     render(<RunDetail executionId="exec_001" onClose={mockOnClose} />);
     await waitFor(() => { expect(screen.getByText('Run Details')).toBeInTheDocument(); });
     const buttons = screen.getAllByRole('button');
@@ -99,11 +124,45 @@ describe('RunDetail Component', () => {
     if (closeButton) { fireEvent.click(closeButton); expect(mockOnClose).toHaveBeenCalled(); }
   });
 
+  it('should display message usage records', async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({ json: async () => ({ run: mockRun, stats: mockStats }) } as any)
+      .mockResolvedValueOnce({ json: async () => ({ logs: mockLogs }) } as any)
+      .mockResolvedValueOnce({ json: async () => ({ records: mockMessageRecords }) } as any);
+
+    render(<RunDetail executionId="exec_001" onClose={mockOnClose} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Message Usage Records (1)')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument();
+    expect(screen.getByText('120')).toBeInTheDocument();
+    expect(screen.getByText('45')).toBeInTheDocument();
+    expect(screen.getByText('20')).toBeInTheDocument();
+  });
+
+  it('should show empty message usage state', async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({ json: async () => ({ run: mockRun, stats: mockStats }) } as any)
+      .mockResolvedValueOnce({ json: async () => ({ logs: mockLogs }) } as any)
+      .mockResolvedValueOnce({ json: async () => ({ records: [] }) } as any);
+
+    render(<RunDetail executionId="exec_001" onClose={mockOnClose} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Message Usage Records (0)')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('No message usage records')).toBeInTheDocument();
+  });
+
   it('should display error message when run has error', async () => {
     const errorRun = { ...mockRun, status: 'FAILED', error_code: 'ERR', error_category: 'agent', error_message: 'Test error message' };
     vi.mocked(global.fetch)
       .mockResolvedValueOnce({ json: async () => ({ run: errorRun, stats: mockStats }) } as any)
-      .mockResolvedValueOnce({ json: async () => ({ logs: mockLogs }) } as any);
+      .mockResolvedValueOnce({ json: async () => ({ logs: mockLogs }) } as any)
+      .mockResolvedValueOnce({ json: async () => ({ records: mockMessageRecords }) } as any);
     render(<RunDetail executionId="exec_001" onClose={mockOnClose} />);
     await waitFor(() => { expect(screen.getByText('Test error message')).toBeInTheDocument(); });
   });

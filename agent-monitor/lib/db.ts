@@ -91,6 +91,20 @@ export interface Message {
   role: string;
   type: string;
   usage_json: string | null;
+  metadata_json: string | null;
+  created_at_ms: number;
+}
+
+export interface MessageUsageRecord {
+  message_id: string;
+  execution_id: string;
+  step_index: number | null;
+  role: string;
+  type: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cached_tokens: number;
   created_at_ms: number;
 }
 
@@ -118,10 +132,114 @@ export function getErrorLogs(limit = 100): RunLog[] {
   );
 }
 
-export function getRunLogs(executionId: string, limit = 100): RunLog[] {
+export function getRunLogs(executionId: string, limit = 100, offset = 0): RunLog[] {
+  const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 100;
+  const safeOffset = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
+
   return query<RunLog>(
-    `SELECT * FROM run_logs WHERE execution_id = '${executionId}' ORDER BY created_at_ms DESC LIMIT ${limit}`
+    `SELECT * FROM run_logs WHERE execution_id = '${executionId}' ORDER BY created_at_ms DESC LIMIT ${safeLimit} OFFSET ${safeOffset}`
   );
+}
+
+function getUsageValue(usage: Record<string, unknown>, key: string): number {
+  const value = usage[key];
+  return typeof value === 'number' ? value : 0;
+}
+
+function getCachedTokens(usage: Record<string, unknown>): number {
+  const directCache = usage['cache_tokens'];
+  if (typeof directCache === 'number') {
+    return directCache;
+  }
+
+  const promptDetails = usage['prompt_tokens_details'];
+  if (typeof promptDetails === 'object' && promptDetails !== null) {
+    const cached = (promptDetails as Record<string, unknown>)['cached_tokens'];
+    if (typeof cached === 'number') {
+      return cached;
+    }
+  }
+
+  return 0;
+}
+
+function getModelLabel(metadata: unknown): string {
+  if (typeof metadata !== 'object' || metadata === null) {
+    return 'unknown';
+  }
+
+  const metadataObj = metadata as Record<string, unknown>;
+  const modelLabel = metadataObj.modelLabel;
+  if (typeof modelLabel === 'string' && modelLabel.trim()) {
+    return modelLabel;
+  }
+
+  const model = metadataObj.model;
+  if (typeof model === 'string' && model.trim()) {
+    return model;
+  }
+
+  return 'unknown';
+}
+
+export function getMessageUsageRecords(executionId: string, limit = 200, offset = 0): MessageUsageRecord[] {
+  const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 200;
+  const safeOffset = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
+  const rows = query<{
+    message_id: string;
+    execution_id: string;
+    step_index: number | null;
+    role: string;
+    type: string;
+    usage_json: string | null;
+    metadata_json: string | null;
+    created_at_ms: number;
+  }>(
+    `SELECT message_id, execution_id, step_index, role, type, usage_json, metadata_json, created_at_ms
+     FROM messages
+     WHERE execution_id = '${executionId}'
+     ORDER BY created_at_ms DESC
+     LIMIT ${safeLimit}
+     OFFSET ${safeOffset}`
+  );
+
+  const records: MessageUsageRecord[] = [];
+
+  for (const row of rows) {
+    let usage: Record<string, unknown> = {};
+    let metadata: Record<string, unknown> | null = null;
+
+    if (row.usage_json) {
+      try {
+        usage = JSON.parse(row.usage_json) as Record<string, unknown>;
+      } catch {
+        usage = {};
+      }
+    }
+
+    if (row.metadata_json) {
+      try {
+        metadata = JSON.parse(row.metadata_json) as Record<string, unknown>;
+      } catch {
+        metadata = null;
+      }
+    }
+
+    records.push({
+      message_id: row.message_id,
+      execution_id: row.execution_id,
+      step_index: row.step_index,
+      role: row.role,
+      type: row.type,
+      model: getModelLabel(metadata),
+      input_tokens: getUsageValue(usage, 'prompt_tokens'),
+      output_tokens: getUsageValue(usage, 'completion_tokens'),
+      cached_tokens: getCachedTokens(usage),
+      created_at_ms: row.created_at_ms,
+    });
+  }
+
+  return records;
 }
 
 export function getRunStats(executionId: string): RunStats | null {
@@ -279,10 +397,8 @@ export interface ModelUsage {
   run_count: number;
 }
 
-export function getLogsByExecution(executionId: string, limit = 200): RunLog[] {
-  return query<RunLog>(
-    `SELECT * FROM run_logs WHERE execution_id = '${executionId}' ORDER BY created_at_ms DESC LIMIT ${limit}`
-  );
+export function getLogsByExecution(executionId: string, limit = 200, offset = 0): RunLog[] {
+  return getRunLogs(executionId, limit, offset);
 }
 
 export interface TokenUsageByDay {
@@ -380,7 +496,7 @@ export function getModelUsage(): ModelUsage[] {
     usage_json: string;
     execution_id: string;
   }>(
-    "SELECT json_extract(metadata_json, '$.modelLabel') as model, usage_json, execution_id FROM messages WHERE role = 'assistant' AND usage_json IS NOT NULL AND metadata_json IS NOT NULL"
+    "SELECT coalesce(json_extract(metadata_json, '$.modelLabel'), json_extract(metadata_json, '$.model'), 'unknown') as model, usage_json, execution_id FROM messages WHERE role = 'assistant' AND usage_json IS NOT NULL"
   );
 
   const modelMap = new Map<string, ModelUsage>();

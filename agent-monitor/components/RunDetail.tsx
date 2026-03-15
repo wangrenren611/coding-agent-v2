@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { format, formatDistanceToNow } from 'date-fns';
-import { X, AlertCircle, Activity } from 'lucide-react';
+import { X, AlertCircle, Activity, ChevronDown } from 'lucide-react';
 
 interface Run {
   execution_id: string;
@@ -40,34 +40,119 @@ interface RunLog {
   created_at_ms: number;
 }
 
+interface MessageUsageRecord {
+  message_id: string;
+  step_index: number | null;
+  role: string;
+  type: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cached_tokens: number;
+  created_at_ms: number;
+}
+
 interface RunDetailProps {
   executionId: string;
   onClose: () => void;
 }
 
+const MESSAGES_PAGE_SIZE = 20;
+const LOGS_PAGE_SIZE = 50;
+
 export function RunDetail({ executionId, onClose }: RunDetailProps) {
   const [run, setRun] = useState<Run | null>(null);
   const [stats, setStats] = useState<RunStats | null>(null);
   const [logs, setLogs] = useState<RunLog[]>([]);
+  const [messageRecords, setMessageRecords] = useState<MessageUsageRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [messageLoading, setMessageLoading] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [messageOffset, setMessageOffset] = useState(0);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [hasMoreLogs, setHasMoreLogs] = useState(false);
+  const [logsOffset, setLogsOffset] = useState(0);
   const [logFilter, setLogFilter] = useState<string>('all');
+
+  async function fetchMessageRecords(offset: number, append: boolean) {
+    setMessageLoading(true);
+    try {
+      const res = await fetch(
+        `/api/messages?execution_id=${executionId}&limit=${MESSAGES_PAGE_SIZE + 1}&offset=${offset}`
+      );
+      const data = await res.json();
+
+      const fetched = Array.isArray(data.records) ? data.records : [];
+      const hasMore = fetched.length > MESSAGES_PAGE_SIZE;
+      const pageData = fetched.slice(0, MESSAGES_PAGE_SIZE);
+
+      setHasMoreMessages(hasMore);
+      setMessageOffset(offset + pageData.length);
+      setMessageRecords(prev => (append ? [...prev, ...pageData] : pageData));
+    } catch (error) {
+      console.error('Error fetching message usage records:', error);
+      if (!append) {
+        setMessageRecords([]);
+      }
+      setHasMoreMessages(false);
+    } finally {
+      setMessageLoading(false);
+    }
+  }
+
+  async function fetchLogs(offset: number, append: boolean) {
+    setLogsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/logs?execution_id=${executionId}&limit=${LOGS_PAGE_SIZE + 1}&offset=${offset}`
+      );
+      const data = await res.json();
+
+      const fetched = Array.isArray(data.logs) ? data.logs : [];
+      const hasMore = fetched.length > LOGS_PAGE_SIZE;
+      const pageData = fetched.slice(0, LOGS_PAGE_SIZE);
+
+      setHasMoreLogs(hasMore);
+      setLogsOffset(offset + pageData.length);
+      setLogs(prev => (append ? [...prev, ...pageData] : pageData));
+    } catch (error) {
+      console.error('Error fetching logs:', error);
+      if (!append) {
+        setLogs([]);
+      }
+      setHasMoreLogs(false);
+    } finally {
+      setLogsLoading(false);
+    }
+  }
 
   useEffect(() => {
     async function fetchRunDetail() {
+      setLoading(true);
+      setRun(null);
+      setStats(null);
+      setLogs([]);
+      setMessageRecords([]);
+      setHasMoreLogs(false);
+      setHasMoreMessages(false);
+      setLogsOffset(0);
+      setMessageOffset(0);
+
       try {
-        const [runRes, logsRes] = await Promise.all([
-          fetch(`/api/runs?execution_id=${executionId}`),
-          fetch(`/api/logs?execution_id=${executionId}&limit=100`),
-        ]);
-
+        const runRes = await fetch(`/api/runs?execution_id=${executionId}`);
         const runData = await runRes.json();
-        const logsData = await logsRes.json();
 
-        setRun(runData.run);
-        setStats(runData.stats);
-        setLogs(logsData.logs);
+        setRun(runData.run || null);
+        setStats(runData.stats || null);
+
+        if (runData.run) {
+          void fetchLogs(0, false);
+          void fetchMessageRecords(0, false);
+        }
       } catch (error) {
         console.error('Error fetching run detail:', error);
+        setRun(null);
+        setStats(null);
       } finally {
         setLoading(false);
       }
@@ -223,6 +308,71 @@ export function RunDetail({ executionId, onClose }: RunDetailProps) {
                 </div>
               )}
 
+              {/* Message Usage Records */}
+              <div className="bg-muted/50 rounded-lg border border-border overflow-hidden">
+                <div className="p-3 border-b border-border">
+                  <p className="text-xs text-muted-foreground font-medium">
+                    Message Usage Records ({messageRecords.length})
+                  </p>
+                </div>
+                <div className="max-h-72 overflow-y-auto text-sm">
+                  {messageRecords.length === 0 ? (
+                    <div className="p-4 text-center text-muted-foreground text-sm">
+                      {messageLoading ? 'Loading message usage records...' : 'No message usage records'}
+                    </div>
+                  ) : (
+                    messageRecords.map(record => (
+                      <div
+                        key={record.message_id}
+                        className="px-4 py-3 border-b border-border last:border-0 hover:bg-muted/50"
+                      >
+                        <div className="flex flex-wrap items-center gap-2 text-xs mb-2">
+                          <span className="font-mono text-muted-foreground">
+                            {format(new Date(record.created_at_ms), 'yyyy-MM-dd HH:mm:ss')}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-muted text-muted-foreground uppercase">
+                            {record.role}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
+                            {record.type}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Model</p>
+                            <p className="text-sm font-mono text-foreground break-all">{record.model}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Input</p>
+                            <p className="text-sm font-mono text-foreground">{record.input_tokens.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Output</p>
+                            <p className="text-sm font-mono text-foreground">{record.output_tokens.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Cached</p>
+                            <p className="text-sm font-mono text-foreground">{record.cached_tokens.toLocaleString()}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {(hasMoreMessages || messageLoading) && (
+                  <div className="p-3 border-t border-border flex justify-center">
+                    <button
+                      className="btn-secondary text-xs"
+                      onClick={() => fetchMessageRecords(messageOffset, true)}
+                      disabled={messageLoading}
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                      {messageLoading ? 'Loading...' : 'Load More'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* Logs */}
               <div className="bg-muted/50 rounded-lg border border-border overflow-hidden">
                 <div className="flex items-center justify-between p-3 border-b border-border">
@@ -275,6 +425,18 @@ export function RunDetail({ executionId, onClose }: RunDetailProps) {
                     ))
                   )}
                 </div>
+                {(hasMoreLogs || logsLoading) && (
+                  <div className="p-3 border-t border-border flex justify-center">
+                    <button
+                      className="btn-secondary text-xs"
+                      onClick={() => fetchLogs(logsOffset, true)}
+                      disabled={logsLoading}
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                      {logsLoading ? 'Loading...' : 'Load More Logs'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ) : (

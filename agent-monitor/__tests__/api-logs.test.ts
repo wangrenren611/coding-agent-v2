@@ -34,7 +34,7 @@ describe('API /api/logs', () => {
       const response = await GET(request);
       const data = await response.json();
 
-      expect(getLogsByExecution).toHaveBeenCalledWith('exec_001', 200);
+      expect(getLogsByExecution).toHaveBeenCalledWith('exec_001', 200, 0);
       expect(response.status).toBe(200);
       expect(data.logs).toHaveLength(3);
     });
@@ -46,7 +46,17 @@ describe('API /api/logs', () => {
       const request = new Request('http://localhost:3888/api/logs?execution_id=exec_001&limit=10');
       await GET(request);
 
-      expect(getLogsByExecution).toHaveBeenCalledWith('exec_001', 10);
+      expect(getLogsByExecution).toHaveBeenCalledWith('exec_001', 10, 0);
+    });
+
+    it('should respect custom offset parameter', async () => {
+      const mockLogs = [{ id: 1, level: 'info', message: 'Log 1', created_at_ms: Date.now() }];
+      vi.mocked(getLogsByExecution).mockReturnValue(mockLogs as any);
+
+      const request = new Request('http://localhost:3888/api/logs?execution_id=exec_001&limit=10&offset=20');
+      await GET(request);
+
+      expect(getLogsByExecution).toHaveBeenCalledWith('exec_001', 10, 20);
     });
 
     it('should filter logs by level', async () => {
